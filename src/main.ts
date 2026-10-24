@@ -5,17 +5,25 @@ canvas.style.border = '2px solid black'
 document.body.appendChild(canvas)
 const ctx = canvas.getContext('2d')!
 
-// The car: a position, a direction it faces (in radians), and a speed
-const car = { x: 400, y: 250, angle: 0, speed: 0 }
+// Where the car starts (on the bottom straight, facing right)
+const START = { x: 400, y: 390, angle: 0 }
+const car = { x: START.x, y: START.y, angle: START.angle, speed: 0 }
 
-// Tuning numbers. Try changing these later and see how the car feels.
-const ACCEL = 0.15 // how fast the gas speeds you up
-const FRICTION = 0.98 // each step, speed is multiplied by this (less than 1 = slows down)
+// The track: an outer wall rectangle and an inner island rectangle
+const outer = { left: 50, top: 50, right: 750, bottom: 450 }
+const inner = { left: 200, top: 170, right: 600, bottom: 330 }
+
+// For crash checking we treat the car as a circle of this size
+const CAR_RADIUS = 12
+
+const ACCEL = 0.15
+const FRICTION = 0.98
 const MAX_SPEED = 6
 const MAX_REVERSE = -2
-const TURN_RATE = 0.008 // how sharply the car turns
+const TURN_RATE = 0.008
 
 let steps = 0
+let crashes = 0
 
 const keys: Record<string, boolean> = {}
 window.addEventListener('keydown', (e) => {
@@ -26,29 +34,48 @@ window.addEventListener('keyup', (e) => {
   keys[e.key] = false
 })
 
+// Is the car touching a wall right now?
+function hitsWall(): boolean {
+  const r = CAR_RADIUS
+  const outsideOuter =
+    car.x - r < outer.left ||
+    car.x + r > outer.right ||
+    car.y - r < outer.top ||
+    car.y + r > outer.bottom
+  const insideInner =
+    car.x + r > inner.left &&
+    car.x - r < inner.right &&
+    car.y + r > inner.top &&
+    car.y - r < inner.bottom
+  return outsideOuter || insideInner
+}
+
+function resetCar() {
+  car.x = START.x
+  car.y = START.y
+  car.angle = START.angle
+  car.speed = 0
+}
+
 function update() {
-  // Read the keys as numbers: +1, -1, or 0
   const throttle = (keys['ArrowUp'] ? 1 : 0) - (keys['ArrowDown'] ? 1 : 0)
   const steer = (keys['ArrowRight'] ? 1 : 0) - (keys['ArrowLeft'] ? 1 : 0)
 
-  // Gas and brake change the speed, friction slowly removes it
   car.speed += throttle * ACCEL
   car.speed *= FRICTION
   if (car.speed > MAX_SPEED) car.speed = MAX_SPEED
   if (car.speed < MAX_REVERSE) car.speed = MAX_REVERSE
 
-  // Steering only works while moving (turning is multiplied by speed)
   car.angle += steer * TURN_RATE * car.speed
 
-  // Move the car in the direction it is facing
   car.x += Math.cos(car.angle) * car.speed
   car.y += Math.sin(car.angle) * car.speed
 
-  // Stop at the canvas edges (we'll replace this with real walls later)
-  if (car.x < 15) { car.x = 15; car.speed = 0 }
-  if (car.x > 785) { car.x = 785; car.speed = 0 }
-  if (car.y < 15) { car.y = 15; car.speed = 0 }
-  if (car.y > 485) { car.y = 485; car.speed = 0 }
+  // Crash check
+  if (hitsWall()) {
+    crashes++
+    resetCar()
+  }
 
   steps++
 }
@@ -56,23 +83,34 @@ function update() {
 function draw() {
   ctx.clearRect(0, 0, 800, 500)
 
-  // Draw the car, rotated to face its direction
+  // The road (outer rectangle), then the island (inner rectangle) on top
+  ctx.fillStyle = '#555'
+  ctx.fillRect(outer.left, outer.top, outer.right - outer.left, outer.bottom - outer.top)
+  ctx.fillStyle = '#9c9'
+  ctx.fillRect(inner.left, inner.top, inner.right - inner.left, inner.bottom - inner.top)
+
+  // Wall outlines
+  ctx.strokeStyle = 'black'
+  ctx.lineWidth = 3
+  ctx.strokeRect(outer.left, outer.top, outer.right - outer.left, outer.bottom - outer.top)
+  ctx.strokeRect(inner.left, inner.top, inner.right - inner.left, inner.bottom - inner.top)
+
+  // The car
   ctx.save()
   ctx.translate(car.x, car.y)
   ctx.rotate(car.angle)
   ctx.fillStyle = 'red'
   ctx.fillRect(-15, -8, 30, 16)
-  ctx.fillStyle = 'white' // a white stripe marks the front
+  ctx.fillStyle = 'white'
   ctx.fillRect(8, -6, 6, 12)
   ctx.restore()
 
   ctx.fillStyle = 'black'
   ctx.font = '16px sans-serif'
-  ctx.fillText('steps: ' + steps, 10, 24)
-  ctx.fillText('speed: ' + car.speed.toFixed(2), 10, 46)
+  ctx.fillText('speed: ' + car.speed.toFixed(2), 10, 24)
+  ctx.fillText('crashes: ' + crashes, 10, 46)
 }
 
-// The fixed-timestep loop (same as before)
 const STEP = 1000 / 60
 let lastTime = performance.now()
 let owed = 0
