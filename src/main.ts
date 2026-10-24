@@ -71,10 +71,30 @@ const TURN_RATE = 0.008
 
 let crashes = 0
 
+// ---------- PROGRESS (this becomes the "fitness score") ----------
+const CHECKPOINT_STRIDE = 6 // one checkpoint every 6 centerline points
+const CHECKPOINTS = POINTS / CHECKPOINT_STRIDE // 20 per lap
+const CHECKPOINT_RADIUS = 50 // how close the car must get to collect one
+let passed = 0 // checkpoints collected since the last crash
+let best = 0 // most checkpoints collected in a single attempt
+
+function checkpointPos(k: number): Point {
+  return centerline[(k % CHECKPOINTS) * CHECKPOINT_STRIDE]
+}
+
+// Collect the next checkpoint(s) if the car is close enough. Must be in order.
+function updateProgress() {
+  for (let k = 0; k < CHECKPOINTS; k++) {
+    const target = checkpointPos(passed + 1)
+    if (Math.hypot(car.x - target.x, car.y - target.y) > CHECKPOINT_RADIUS) break
+    passed++
+  }
+  if (passed > best) best = passed
+}
+
 // ---------- THE CAR'S EYES (RAYS) ----------
-// Angles are relative to the way the car faces: 0 = straight ahead
 const RAY_ANGLES = [-60, -30, 0, 30, 60].map((deg) => (deg * Math.PI) / 180)
-const RAY_RANGE = 200 // rays can't see farther than this
+const RAY_RANGE = 200
 let rayDistances: number[] = RAY_ANGLES.map(() => RAY_RANGE)
 
 function updateRays() {
@@ -89,7 +109,7 @@ type Input = { throttle: number; steer: number }
 let recording: Input[] = []
 let mode: 'live' | 'replay' = 'live'
 let replayIndex = 0
-let savedEnd = { x: 0, y: 0, angle: 0, speed: 0, crashes: 0 }
+let savedEnd = { x: 0, y: 0, angle: 0, speed: 0, crashes: 0, passed: 0, best: 0 }
 let message = 'Drive, then press R to replay. Press Enter for a fresh recording.'
 
 const keys: Record<string, boolean> = {}
@@ -122,6 +142,7 @@ function resetCar() {
   car.y = START.y
   car.angle = START.angle
   car.speed = 0
+  passed = 0
 }
 
 function update(input: Input) {
@@ -140,7 +161,8 @@ function update(input: Input) {
     resetCar()
   }
 
-  updateRays() // look around from wherever the car ended up
+  updateProgress()
+  updateRays()
 }
 
 function startFreshRecording() {
@@ -148,14 +170,16 @@ function startFreshRecording() {
   mode = 'live'
   resetCar()
   crashes = 0
+  best = 0
   message = 'New recording started. Drive, then press R to replay.'
 }
 
 function startReplay() {
   if (recording.length === 0 || mode === 'replay') return
-  savedEnd = { x: car.x, y: car.y, angle: car.angle, speed: car.speed, crashes }
+  savedEnd = { x: car.x, y: car.y, angle: car.angle, speed: car.speed, crashes, passed, best }
   resetCar()
   crashes = 0
+  best = 0
   replayIndex = 0
   mode = 'replay'
   message = 'Replaying...'
@@ -175,7 +199,9 @@ function tick() {
         car.y === savedEnd.y &&
         car.angle === savedEnd.angle &&
         car.speed === savedEnd.speed &&
-        crashes === savedEnd.crashes
+        crashes === savedEnd.crashes &&
+        passed === savedEnd.passed &&
+        best === savedEnd.best
       message = same
         ? 'REPLAY MATCH: identical result. Physics is deterministic!'
         : 'MISMATCH: the replay ended somewhere different.'
@@ -217,7 +243,17 @@ function draw() {
   ctx.lineTo(rightWall[0].x, rightWall[0].y)
   ctx.stroke()
 
-  // The rays: a yellow line from the car, and a dot where it hits a wall
+  // Checkpoints: small white dots, the next one to collect is a big cyan dot
+  for (let k = 0; k < CHECKPOINTS; k++) {
+    const p = checkpointPos(k)
+    const isNext = k === (passed + 1) % CHECKPOINTS
+    ctx.fillStyle = isNext ? 'cyan' : 'rgba(255,255,255,0.5)'
+    ctx.beginPath()
+    ctx.arc(p.x, p.y, isNext ? 7 : 3, 0, Math.PI * 2)
+    ctx.fill()
+  }
+
+  // Rays
   for (let i = 0; i < RAY_ANGLES.length; i++) {
     const a = car.angle + RAY_ANGLES[i]
     const d = rayDistances[i]
@@ -251,6 +287,11 @@ function draw() {
   ctx.fillText('crashes: ' + crashes, 10, 46)
   ctx.fillText('recorded steps: ' + recording.length, 10, 68)
   ctx.fillText('rays: ' + rayDistances.map((d) => Math.round(d)).join(', '), 10, 90)
+  ctx.fillText(
+    'checkpoints: ' + passed + '   laps: ' + Math.floor(passed / CHECKPOINTS) + '   best: ' + best,
+    10,
+    112,
+  )
   ctx.fillText(message, 10, 490)
 }
 
