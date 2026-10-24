@@ -1,11 +1,27 @@
 import { castRay, type Point, type Segment } from './sensors'
+import { starterBrain, think } from './brain'
+import { drawNetwork } from './netview'
+
+// Two canvases side by side (they stack on narrow screens)
+const wrapper = document.createElement('div')
+wrapper.style.display = 'flex'
+wrapper.style.flexWrap = 'wrap'
+wrapper.style.gap = '12px'
+document.body.appendChild(wrapper)
 
 const canvas = document.createElement('canvas')
 canvas.width = 800
 canvas.height = 500
 canvas.style.border = '2px solid black'
-document.body.appendChild(canvas)
+wrapper.appendChild(canvas)
 const ctx = canvas.getContext('2d')!
+
+const netCanvas = document.createElement('canvas')
+netCanvas.width = 420
+netCanvas.height = 500
+netCanvas.style.border = '2px solid black'
+wrapper.appendChild(netCanvas)
+const netCtx = netCanvas.getContext('2d')!
 
 // ---------- THE TRACK ----------
 const POINTS = 120
@@ -71,18 +87,17 @@ const TURN_RATE = 0.008
 
 let crashes = 0
 
-// ---------- PROGRESS (this becomes the "fitness score") ----------
-const CHECKPOINT_STRIDE = 6 // one checkpoint every 6 centerline points
-const CHECKPOINTS = POINTS / CHECKPOINT_STRIDE // 20 per lap
-const CHECKPOINT_RADIUS = 50 // how close the car must get to collect one
-let passed = 0 // checkpoints collected since the last crash
-let best = 0 // most checkpoints collected in a single attempt
+// ---------- PROGRESS (fitness score) ----------
+const CHECKPOINT_STRIDE = 6
+const CHECKPOINTS = POINTS / CHECKPOINT_STRIDE
+const CHECKPOINT_RADIUS = 50
+let passed = 0
+let best = 0
 
 function checkpointPos(k: number): Point {
   return centerline[(k % CHECKPOINTS) * CHECKPOINT_STRIDE]
 }
 
-// Collect the next checkpoint(s) if the car is close enough. Must be in order.
 function updateProgress() {
   for (let k = 0; k < CHECKPOINTS; k++) {
     const target = checkpointPos(passed + 1)
@@ -103,6 +118,20 @@ function updateRays() {
   )
 }
 
+// ---------- THE BRAIN ----------
+const brain = starterBrain()
+let brainOn = false
+
+// What the brain sees: 5 ray distances (0 to 1) and the speed (about -0.3 to 1)
+function getInputs(): number[] {
+  return [...rayDistances.map((d) => d / RAY_RANGE), car.speed / MAX_SPEED]
+}
+
+function brainInput(): Input {
+  const { outputs } = think(brain, getInputs())
+  return { steer: outputs[0], throttle: outputs[1] }
+}
+
 // ---------- RECORDING AND REPLAY ----------
 type Input = { throttle: number; steer: number }
 
@@ -110,7 +139,7 @@ let recording: Input[] = []
 let mode: 'live' | 'replay' = 'live'
 let replayIndex = 0
 let savedEnd = { x: 0, y: 0, angle: 0, speed: 0, crashes: 0, passed: 0, best: 0 }
-let message = 'Drive, then press R to replay. Press Enter for a fresh recording.'
+let message = 'Arrows = drive.  B = brain drives.  R = replay.  Enter = new recording.'
 
 const keys: Record<string, boolean> = {}
 window.addEventListener('keydown', (e) => {
@@ -118,6 +147,7 @@ window.addEventListener('keydown', (e) => {
   if (e.key.startsWith('Arrow')) e.preventDefault()
   if (e.key === 'r' || e.key === 'R') startReplay()
   if (e.key === 'Enter') startFreshRecording()
+  if (e.key === 'b' || e.key === 'B') brainOn = !brainOn
 })
 window.addEventListener('keyup', (e) => {
   keys[e.key] = false
@@ -171,7 +201,7 @@ function startFreshRecording() {
   resetCar()
   crashes = 0
   best = 0
-  message = 'New recording started. Drive, then press R to replay.'
+  message = 'New recording started.'
 }
 
 function startReplay() {
@@ -187,7 +217,7 @@ function startReplay() {
 
 function tick() {
   if (mode === 'live') {
-    const input = readKeys()
+    const input = brainOn ? brainInput() : readKeys()
     recording.push(input)
     update(input)
   } else {
@@ -243,7 +273,6 @@ function draw() {
   ctx.lineTo(rightWall[0].x, rightWall[0].y)
   ctx.stroke()
 
-  // Checkpoints: small white dots, the next one to collect is a big cyan dot
   for (let k = 0; k < CHECKPOINTS; k++) {
     const p = checkpointPos(k)
     const isNext = k === (passed + 1) % CHECKPOINTS
@@ -253,7 +282,6 @@ function draw() {
     ctx.fill()
   }
 
-  // Rays
   for (let i = 0; i < RAY_ANGLES.length; i++) {
     const a = car.angle + RAY_ANGLES[i]
     const d = rayDistances[i]
@@ -271,7 +299,6 @@ function draw() {
     ctx.fill()
   }
 
-  // The car
   ctx.save()
   ctx.translate(car.x, car.y)
   ctx.rotate(car.angle)
@@ -283,7 +310,9 @@ function draw() {
 
   ctx.fillStyle = 'black'
   ctx.font = '16px sans-serif'
-  ctx.fillText('mode: ' + mode, 10, 24)
+  ctx.textAlign = 'left'
+  ctx.textBaseline = 'alphabetic'
+  ctx.fillText('mode: ' + mode + '   driver: ' + (brainOn ? 'BRAIN' : 'you'), 10, 24)
   ctx.fillText('crashes: ' + crashes, 10, 46)
   ctx.fillText('recorded steps: ' + recording.length, 10, 68)
   ctx.fillText('rays: ' + rayDistances.map((d) => Math.round(d)).join(', '), 10, 90)
@@ -293,6 +322,16 @@ function draw() {
     112,
   )
   ctx.fillText(message, 10, 490)
+
+  // The brain panel
+  const inputs = getInputs()
+  drawNetwork(
+    netCtx,
+    brain,
+    inputs,
+    think(brain, inputs),
+    brainOn ? 'The brain (driving)' : 'The brain (watching you)',
+  )
 }
 
 // ---------- THE LOOP ----------
