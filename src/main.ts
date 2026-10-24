@@ -1,3 +1,7 @@
+import { makeRng } from './random'
+
+const rng = makeRng(42)
+const demo = [rng(), rng(), rng()]
 const canvas = document.createElement('canvas')
 canvas.width = 800
 canvas.height = 500
@@ -44,6 +48,7 @@ function draw() {
   ctx.fillStyle = 'black'
   ctx.font = '16px sans-serif'
   ctx.fillText('steps: ' + steps, 10, 24)
+  ctx.fillText('seed 42: ' + demo.map((n) => n.toFixed(4)).join(', '), 10, 46)
 }
 
 // The fixed-timestep loop
