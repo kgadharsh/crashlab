@@ -1,3 +1,5 @@
+import { castRay, type Point, type Segment } from './sensors'
+
 const canvas = document.createElement('canvas')
 canvas.width = 800
 canvas.height = 500
@@ -6,13 +8,9 @@ document.body.appendChild(canvas)
 const ctx = canvas.getContext('2d')!
 
 // ---------- THE TRACK ----------
-type Point = { x: number; y: number }
-type Segment = { a: Point; b: Point }
+const POINTS = 120
+const HALF_WIDTH = 45
 
-const POINTS = 120 // how many points make up the loop
-const HALF_WIDTH = 45 // road is 90 wide
-
-// 1. The centerline: a closed loop with some bends in it
 const centerline: Point[] = []
 for (let i = 0; i < POINTS; i++) {
   const t = (i / POINTS) * Math.PI * 2
@@ -22,31 +20,28 @@ for (let i = 0; i < POINTS; i++) {
   })
 }
 
-// 2. The walls: push each centerline point sideways by half the road width
 const leftWall: Point[] = []
 const rightWall: Point[] = []
 for (let i = 0; i < POINTS; i++) {
   const before = centerline[(i + POINTS - 1) % POINTS]
   const after = centerline[(i + 1) % POINTS]
-  let tx = after.x - before.x // direction the road is heading here
+  let tx = after.x - before.x
   let ty = after.y - before.y
   const len = Math.hypot(tx, ty)
   tx /= len
   ty /= len
-  const nx = -ty // sideways direction (at a right angle to the road)
+  const nx = -ty
   const ny = tx
   const c = centerline[i]
   leftWall.push({ x: c.x + nx * HALF_WIDTH, y: c.y + ny * HALF_WIDTH })
   rightWall.push({ x: c.x - nx * HALF_WIDTH, y: c.y - ny * HALF_WIDTH })
 }
 
-// 3. Turn each wall loop into a list of short line segments
 function loopToSegments(loop: Point[]): Segment[] {
   return loop.map((p, i) => ({ a: p, b: loop[(i + 1) % loop.length] }))
 }
 const walls: Segment[] = [...loopToSegments(leftWall), ...loopToSegments(rightWall)]
 
-// How far is a point from a line segment?
 function distToSegment(px: number, py: number, s: Segment): number {
   const dx = s.b.x - s.a.x
   const dy = s.b.y - s.a.y
@@ -57,7 +52,6 @@ function distToSegment(px: number, py: number, s: Segment): number {
 }
 
 // ---------- THE CAR ----------
-// Start on the centerline, facing the way the road goes
 const START = {
   x: centerline[0].x,
   y: centerline[0].y,
@@ -76,6 +70,18 @@ const MAX_REVERSE = -2
 const TURN_RATE = 0.008
 
 let crashes = 0
+
+// ---------- THE CAR'S EYES (RAYS) ----------
+// Angles are relative to the way the car faces: 0 = straight ahead
+const RAY_ANGLES = [-60, -30, 0, 30, 60].map((deg) => (deg * Math.PI) / 180)
+const RAY_RANGE = 200 // rays can't see farther than this
+let rayDistances: number[] = RAY_ANGLES.map(() => RAY_RANGE)
+
+function updateRays() {
+  rayDistances = RAY_ANGLES.map((a) =>
+    castRay(car.x, car.y, car.angle + a, RAY_RANGE, walls),
+  )
+}
 
 // ---------- RECORDING AND REPLAY ----------
 type Input = { throttle: number; steer: number }
@@ -104,7 +110,6 @@ function readKeys(): Input {
   }
 }
 
-// Crash = the car's circle is touching any wall segment
 function hitsWall(): boolean {
   for (const w of walls) {
     if (distToSegment(car.x, car.y, w) < CAR_RADIUS) return true
@@ -134,6 +139,8 @@ function update(input: Input) {
     crashes++
     resetCar()
   }
+
+  updateRays() // look around from wherever the car ended up
 }
 
 function startFreshRecording() {
@@ -185,18 +192,15 @@ function tracePath(loop: Point[]) {
 }
 
 function draw() {
-  // Grass
   ctx.fillStyle = '#9c9'
   ctx.fillRect(0, 0, 800, 500)
 
-  // Road: both wall loops in one shape, filled so the middle stays empty
   ctx.beginPath()
   tracePath(leftWall)
   tracePath(rightWall)
   ctx.fillStyle = '#555'
   ctx.fill('evenodd')
 
-  // Wall outlines
   ctx.strokeStyle = 'black'
   ctx.lineWidth = 3
   ctx.beginPath()
@@ -206,13 +210,30 @@ function draw() {
   tracePath(rightWall)
   ctx.stroke()
 
-  // Start line
   ctx.strokeStyle = 'white'
   ctx.lineWidth = 4
   ctx.beginPath()
   ctx.moveTo(leftWall[0].x, leftWall[0].y)
   ctx.lineTo(rightWall[0].x, rightWall[0].y)
   ctx.stroke()
+
+  // The rays: a yellow line from the car, and a dot where it hits a wall
+  for (let i = 0; i < RAY_ANGLES.length; i++) {
+    const a = car.angle + RAY_ANGLES[i]
+    const d = rayDistances[i]
+    const hitX = car.x + Math.cos(a) * d
+    const hitY = car.y + Math.sin(a) * d
+    ctx.strokeStyle = 'yellow'
+    ctx.lineWidth = 1.5
+    ctx.beginPath()
+    ctx.moveTo(car.x, car.y)
+    ctx.lineTo(hitX, hitY)
+    ctx.stroke()
+    ctx.fillStyle = 'yellow'
+    ctx.beginPath()
+    ctx.arc(hitX, hitY, 3, 0, Math.PI * 2)
+    ctx.fill()
+  }
 
   // The car
   ctx.save()
@@ -229,6 +250,7 @@ function draw() {
   ctx.fillText('mode: ' + mode, 10, 24)
   ctx.fillText('crashes: ' + crashes, 10, 46)
   ctx.fillText('recorded steps: ' + recording.length, 10, 68)
+  ctx.fillText('rays: ' + rayDistances.map((d) => Math.round(d)).join(', '), 10, 90)
   ctx.fillText(message, 10, 490)
 }
 
