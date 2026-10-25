@@ -354,3 +354,5 @@ function loop(now: number) {
 }
 
 requestAnimationFrame(loop)
+import { train } from './train'
+;(window as any).train = train
