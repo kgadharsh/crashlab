@@ -71,11 +71,11 @@ export const DEFAULT_TRACK: Track = buildTrack(defaultCenterline())
 const MIN_CORNER_RADIUS = 65 // tighter than this and the car cannot physically turn
 const MIN_GAP = 2 * HALF_WIDTH + 30 // two far-apart parts of the road must not touch
 const MIN_LENGTH = 1000
-const MAX_LENGTH = 1500
+const MAX_LENGTH = 1800
 const CANVAS = { w: 800, h: 500, margin: 8 }
 
 // Returns why the track is unusable, or null if it is fine
-export function trackProblem(track: Track): string | null {
+export function trackProblem(track: Track, minRadius: number = MIN_CORNER_RADIUS): string | null {
   const c = track.centerline
   let length = 0
   let tightest = Infinity
@@ -92,7 +92,7 @@ export function trackProblem(track: Track): string | null {
     const radius = cross < 1e-9 ? Infinity : (ab * bd * ad) / (2 * cross)
     tightest = Math.min(tightest, radius)
   }
-  if (tightest < MIN_CORNER_RADIUS) return 'corner too tight (' + tightest.toFixed(0) + ' px)'
+  if (tightest < minRadius) return 'corner too tight (' + tightest.toFixed(0) + ' px)'
   if (length < MIN_LENGTH || length > MAX_LENGTH) return 'length ' + length.toFixed(0) + ' px'
   for (let i = 0; i < POINTS; i++) {
     for (let j = i + 1; j < POINTS; j++) {
@@ -109,30 +109,59 @@ export function trackProblem(track: Track): string | null {
 }
 
 // ---------- THE TRACK GENERATOR ----------
-// Same seed in = same track out. Tries random shapes until one passes the checks.
-export function makeTrack(seed: number): Track {
+// Draws a closed curve whose distance from the centre wobbles by several waves at once.
+// difficulty 0 = gentle rounded loops, 1 = lumpy tracks with tight corners and chicanes.
+// Same seed + difficulty in = same track out. Tries random shapes until one passes the checks.
+export function makeTrack(seed: number, difficulty = 0.5, minRadius: number = MIN_CORNER_RADIUS): Track {
   const rng = makeRng(seed * 7919 + 13)
   const between = (lo: number, hi: number) => lo + rng() * (hi - lo)
-  for (let attempt = 0; attempt < 500; attempt++) {
-    const width = between(235, 270)
-    const height = between(135, 160)
-    const a2 = between(0, 30)
-    const a3 = between(0, 30)
-    const a4 = between(0, 0.07)
-    const p2 = between(0, Math.PI * 2)
-    const p3 = between(0, Math.PI * 2)
-    const p4 = between(0, Math.PI * 2)
+  const FINE = 2400
+  for (let attempt = 0; attempt < 800; attempt++) {
+    const squash = between(0.55, 0.75) // how much flatter than wide
+    const waves: { k: number; amp: number; phase: number }[] = []
+    for (let k = 2; k <= 7; k++) {
+      waves.push({ k, amp: (difficulty * 0.3 * rng()) / Math.pow(k, 0.5), phase: between(0, Math.PI * 2) })
+    }
+    // 1. a finely sampled version of the curve
+    const fine: Point[] = []
+    for (let i = 0; i < FINE; i++) {
+      const t = (i / FINE) * Math.PI * 2
+      let r = 1
+      for (const w of waves) r += w.amp * Math.cos(w.k * t + w.phase)
+      fine.push({ x: r * Math.cos(t), y: r * squash * Math.sin(t) })
+    }
+    // 2. scale and centre it to fill the screen (leaving room for the walls)
+    const xs = fine.map((p) => p.x)
+    const ys = fine.map((p) => p.y)
+    const w = Math.max(...xs) - Math.min(...xs)
+    const h = Math.max(...ys) - Math.min(...ys)
+    const scale = Math.min((CANVAS.w - 2 * (HALF_WIDTH + 14)) / w, (CANVAS.h - 2 * (HALF_WIDTH + 14)) / h)
+    const mx = (Math.max(...xs) + Math.min(...xs)) / 2
+    const my = (Math.max(...ys) + Math.min(...ys)) / 2
+    const placed = fine.map((p) => ({ x: 400 + (p.x - mx) * scale, y: 250 + (p.y - my) * scale }))
+    // 3. keep POINTS points, evenly spaced along the curve (so checkpoints are evenly spaced)
+    let total = 0
+    const cum = [0]
+    for (let i = 1; i <= FINE; i++) {
+      const a = placed[i - 1]
+      const b = placed[i % FINE]
+      total += Math.hypot(b.x - a.x, b.y - a.y)
+      cum.push(total)
+    }
     const pts: Point[] = []
+    let j = 0
     for (let i = 0; i < POINTS; i++) {
-      const t = (i / POINTS) * Math.PI * 2
-      const wobble = 1 + a4 * Math.cos(4 * t + p4)
-      pts.push({
-        x: 400 + (width + a2 * Math.cos(2 * t + p2)) * wobble * Math.cos(t),
-        y: 250 + (height + a3 * Math.sin(3 * t + p3)) * wobble * Math.sin(t),
-      })
+      const target = (i / POINTS) * total
+      while (cum[j + 1] < target) j++
+      const f = (target - cum[j]) / (cum[j + 1] - cum[j])
+      const a = placed[j]
+      const b = placed[(j + 1) % FINE]
+      pts.push({ x: a.x + (b.x - a.x) * f, y: a.y + (b.y - a.y) * f })
     }
     const track = buildTrack(pts)
-    if (trackProblem(track) === null) return track
+    if (trackProblem(track, minRadius) === null) return track
   }
-  throw new Error('could not generate a valid track for seed ' + seed)
+  // Very rarely a seed cannot make a valid shape at this difficulty: ease off and try again
+  if (difficulty < 0.05) throw new Error('could not generate a valid track for seed ' + seed)
+  return makeTrack(seed, difficulty * 0.8, minRadius)
 }

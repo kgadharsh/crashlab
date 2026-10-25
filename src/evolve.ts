@@ -1,4 +1,4 @@
-import { runBrain, type Brain } from './sim'
+import { runBrain, DEFAULT_TRACK, type Brain, type Track } from './sim'
 
 // A genome is just the brain's weights as one flat list of numbers.
 export type Genome = number[]
@@ -46,11 +46,25 @@ export function initialPopulation(settings: Settings, rng: Rng): Genome[] {
   return Array.from({ length: settings.populationSize }, () => randomGenome(settings.genomeLength, rng))
 }
 
-// Drive every genome around the track and return them best first.
-export function scorePopulation(genomes: Genome[], makeBrain: (genome: Genome) => Brain): Individual[] {
+// Drive every genome around the track(s) and return them best first.
+// With several tracks, a genome's score is its average over all of them, so a brain
+// that only works on one track cannot win.
+export function scorePopulation(
+  genomes: Genome[],
+  makeBrain: (genome: Genome) => Brain,
+  tracks: Track[] = [DEFAULT_TRACK],
+): Individual[] {
   const scored = genomes.map((genome) => {
-    const r = runBrain(makeBrain(genome))
-    return { genome, fitness: r.fitness, checkpoints: r.checkpoints, steps: r.steps, crashed: r.crashed }
+    const brain = makeBrain(genome)
+    const runs = tracks.map((track) => runBrain(brain, track))
+    const mean = (f: (r: (typeof runs)[number]) => number) => runs.reduce((sum, r) => sum + f(r), 0) / runs.length
+    return {
+      genome,
+      fitness: mean((r) => r.fitness),
+      checkpoints: Math.round(mean((r) => r.checkpoints)),
+      steps: Math.round(mean((r) => r.steps)),
+      crashed: runs.some((r) => r.crashed),
+    }
   })
   return scored.sort((a, b) => b.fitness - a.fitness)
 }
@@ -101,11 +115,12 @@ export function evolve(
   generations: number,
   settings: Settings = DEFAULT_SETTINGS,
   onGeneration?: (report: GenerationReport) => void,
+  tracks: Track[] = [DEFAULT_TRACK],
 ): Individual {
   let genomes = initialPopulation(settings, rng)
   let best: Individual | undefined
   for (let gen = 0; gen < generations; gen++) {
-    const scored = scorePopulation(genomes, makeBrain)
+    const scored = scorePopulation(genomes, makeBrain, tracks)
     const meanFitness = scored.reduce((sum, s) => sum + s.fitness, 0) / scored.length
     best = scored[0]
     onGeneration?.({ generation: gen, best, meanFitness })

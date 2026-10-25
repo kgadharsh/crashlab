@@ -1,6 +1,6 @@
 import type { Point } from './sensors'
 import { starterBrain, think, type Brain } from './brain'
-import { trainWithHistory, type History } from './train'
+import type { History } from './train'
 import { genomeToBrain } from './genome'
 import { drawNetwork } from './netview'
 import {
@@ -273,19 +273,44 @@ function watch(b: Brain, text: string) {
 
 let trained: Brain | null = null
 let seed = 1
+const GENERATIONS = 40
+let worker: Worker | null = null
 
+function stopTraining(text: string) {
+  worker?.terminate()
+  worker = null
+  trainButton.textContent = 'Train a new brain'
+  message = text
+}
+
+// Training runs in a background worker, so the page keeps working and the graph fills in live
 const trainButton = makeButton('Train a new brain', () => {
-  trainButton.disabled = true
-  message = 'Training... the page freezes for about 30 seconds.'
-  // wait a moment so the message is drawn before the freeze starts
-  setTimeout(() => {
-    const { winner, history } = trainWithHistory(seed, 40)
-    drawGraph(history, seed)
-    trained = genomeToBrain(winner.genome)
-    watch(trained, 'Trained (seed ' + seed + '): ' + winner.checkpoints + ' checkpoints. Watch it drive!')
-    seed++
-    trainButton.disabled = false
-  }, 60)
+  if (worker) {
+    stopTraining('Training stopped.')
+    return
+  }
+  const thisSeed = seed
+  const history: History = []
+  drawGraph(history, thisSeed, GENERATIONS)
+  trainButton.textContent = 'Stop training'
+  message = 'Training (seed ' + thisSeed + ')...'
+
+  worker = new Worker(new URL('./trainWorker.ts', import.meta.url), { type: 'module' })
+  worker.onmessage = (event: MessageEvent) => {
+    const m = event.data
+    if (m.type === 'progress') {
+      history.push({ best: m.best, mean: m.mean })
+      drawGraph(history, thisSeed, GENERATIONS)
+      message = 'Training (seed ' + thisSeed + '): generation ' + (m.generation + 1) + ' of ' + GENERATIONS + ', best so far ' + m.checkpoints + ' checkpoints'
+    } else if (m.type === 'done') {
+      trained = genomeToBrain(m.genome)
+      stopTraining('')
+      watch(trained, 'Trained (seed ' + thisSeed + '): ' + m.checkpoints + ' checkpoints. Watch it drive!')
+      seed++
+    }
+  }
+  worker.onerror = () => stopTraining('Training failed. Check the console for the error.')
+  worker.postMessage({ seed: thisSeed, generations: GENERATIONS })
 })
 
 makeButton('Watch the trained brain', () => {
@@ -316,7 +341,7 @@ function plotSeries(values: number[], color: string, x: (i: number) => number, y
   gctx.stroke()
 }
 
-function drawGraph(history: History | null, seedUsed = 0) {
+function drawGraph(history: History | null, seedUsed = 0, totalGenerations = 40) {
   const W = graphCanvas.width
   const H = graphCanvas.height
   const left = 52
@@ -324,7 +349,7 @@ function drawGraph(history: History | null, seedUsed = 0) {
   const top = 34
   const bottom = H - 36
   const maxY = 110 // a bit above the 105 checkpoints the track allows in 20 seconds
-  const generations = Math.max(history ? history.length : 40, 2)
+  const generations = Math.max(totalGenerations, 2)
   const x = (i: number) => left + (i / (generations - 1)) * (right - left)
   const y = (v: number) => bottom - (v / maxY) * (bottom - top)
 
@@ -372,6 +397,8 @@ function drawGraph(history: History | null, seedUsed = 0) {
     gctx.fillText('Press "Train a new brain" and the curve appears here.', (left + right) / 2, (top + bottom) / 2)
     return
   }
+
+  if (history.length === 0) return
 
   plotSeries(history.map((h) => h.mean), MEAN_COLOR, x, y)
   plotSeries(history.map((h) => h.best), BEST_COLOR, x, y)
