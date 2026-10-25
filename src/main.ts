@@ -22,6 +22,20 @@ wrapper.style.flexWrap = 'wrap'
 wrapper.style.gap = '12px'
 document.body.appendChild(wrapper)
 
+// ---------- MISSION BAR ----------
+const missionBar = document.createElement('div')
+missionBar.style.cssText =
+  'max-width:1240px;min-height:84px;box-sizing:border-box;margin:0 0 12px;padding:10px 14px;border:2px solid black;border-radius:6px;background:#fffbe6;font:16px/1.4 sans-serif'
+document.body.insertBefore(missionBar, wrapper)
+type MissionStage = 'driving' | 'done'
+let missionStage: MissionStage = 'driving'
+let lastMissionHtml = ''
+function setMissionHtml(html: string) {
+  if (html === lastMissionHtml) return
+  lastMissionHtml = html
+  missionBar.innerHTML = html
+}
+
 const canvas = document.createElement('canvas')
 canvas.width = 800
 canvas.height = 500
@@ -79,14 +93,29 @@ function readKeys(): Input {
 
 // One step of the game. In the game a crash sends you back to the start;
 // (evolution will treat a crash as the end of that car instead).
+let lapSeconds = 0
+let lapAttempts = 0
+
 function update(input: Input) {
   step(car, input)
   if (car.passed > best) best = car.passed
+  if (missionStage === 'driving' && mode === 'live' && !brainOn && !car.dead && car.passed >= CHECKPOINTS) {
+    missionStage = 'done'
+    lapSeconds = car.steps / 60
+    lapAttempts = crashes + 1
+  }
   if (car.dead) {
     crashes++
     car = createCar()
   }
 }
+
+function retryMission1() {
+  missionStage = 'driving'
+  startFreshRecording()
+  message = 'Mission 1: drive one lap.'
+}
+;(window as unknown as { retryMission1: () => void }).retryMission1 = retryMission1
 
 function startFreshRecording() {
   recording = []
@@ -232,6 +261,37 @@ function draw() {
     112,
   )
   ctx.fillText(message, 10, 490)
+
+  // Mission 1 text, and what you are doing expressed as numbers
+  if (missionStage === 'driving') {
+    setMissionHtml(
+      '<b>Mission 1 of 3: drive one lap.</b> Arrow keys: up = gas, down = brake, left and right = steer. ' +
+        'Stay off the walls. Checkpoints: <b>' + car.passed + ' / ' + CHECKPOINTS + '</b>' +
+        (crashes > 0 ? ' &nbsp;·&nbsp; crashes so far: ' + crashes : ''),
+    )
+  } else {
+    setMissionHtml(
+      '<b>Mission 1 complete!</b> One lap in <b>' + lapSeconds.toFixed(1) + ' s</b>' +
+        (lapAttempts > 1 ? ' (attempt ' + lapAttempts + ')' : ' on your first attempt') + '.<br>' +
+        'Look at the yellow line of numbers on the track. All the time you were driving, the car saw <b>6 numbers</b> ' +
+        '(5 ray distances and its speed) and you answered with <b>2</b> (steer and gas). ' +
+        'That is exactly the job of the neural network on the right: numbers in, numbers out. ' +
+        'Mission 2 is next: you will set a few of those connections by hand. ' +
+        '<button onclick="retryMission1()" style="margin-left:8px;padding:4px 10px">Drive again</button>',
+    )
+  }
+  if (!brainOn && mode === 'live') {
+    const now = readKeys()
+    const steer = now.steer < 0 ? 'left' : now.steer > 0 ? 'right' : 'straight'
+    const gas = now.throttle > 0 ? 'gas' : now.throttle < 0 ? 'brake' : 'coast'
+    ctx.fillStyle = '#7a5c00'
+    ctx.fillText(
+      'You see: ' + car.rays.map((d) => Math.round(d)).join(' ') + ' | speed ' + car.speed.toFixed(1) +
+        '    You do: steer ' + steer + ', ' + gas,
+      10,
+      468,
+    )
+  }
 
   // The brain panel
   const inputs = getInputs(car)
