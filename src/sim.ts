@@ -96,12 +96,27 @@ function updateProgress(car: Car) {
   else car.sinceProgress++
 }
 
-function updateRays(car: Car) {
-  car.rays = RAY_ANGLES.map((a) => castRay(car.x, car.y, car.angle + a, RAY_RANGE, car.track.walls))
+// Walls too far away to matter are skipped. A wall can only be seen by a ray, or touched
+// by the car, if its middle is within RAY_RANGE plus half a wall segment of the car, so
+// leaving the rest out gives exactly the same answers, just faster.
+function nearbyWalls(car: Car): Segment[] {
+  const reach = RAY_RANGE + car.track.longestWall / 2 + 1
+  const reachSq = reach * reach
+  const near: Segment[] = []
+  for (const w of car.track.walls) {
+    const dx = (w.a.x + w.b.x) / 2 - car.x
+    const dy = (w.a.y + w.b.y) / 2 - car.y
+    if (dx * dx + dy * dy <= reachSq) near.push(w)
+  }
+  return near
 }
 
-function hitsWall(car: Car): boolean {
-  for (const w of car.track.walls) {
+function updateRays(car: Car, near: Segment[] = nearbyWalls(car)) {
+  car.rays = RAY_ANGLES.map((a) => castRay(car.x, car.y, car.angle + a, RAY_RANGE, near))
+}
+
+function hitsWall(near: Segment[], car: Car): boolean {
+  for (const w of near) {
     if (distToSegment(car.x, car.y, w) < CAR_RADIUS) return true
   }
   return false
@@ -122,13 +137,14 @@ export function step(car: Car, input: Input) {
   car.y += Math.sin(car.angle) * car.speed
   car.steps++
 
-  if (hitsWall(car)) {
+  const near = nearbyWalls(car)
+  if (hitsWall(near, car)) {
     car.dead = true
     return
   }
 
   updateProgress(car)
-  updateRays(car)
+  updateRays(car, near)
 }
 
 // What the brain sees: 5 ray distances (0 to 1) and the speed

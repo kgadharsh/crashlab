@@ -20,6 +20,8 @@ export type Settings = {
   tournamentSize: number // how many random cars compete to become a parent
   mutationRate: number // chance that any single weight gets nudged
   mutationSize: number // how big the nudge is
+  goodEnough: number // a best score at or above this counts as "learned"
+  patience: number // stop early after this many generations with no new best, once learned
 }
 
 export const DEFAULT_SETTINGS: Settings = {
@@ -29,6 +31,8 @@ export const DEFAULT_SETTINGS: Settings = {
   tournamentSize: 3,
   mutationRate: 0.1,
   mutationSize: 0.3,
+  goodEnough: 100,
+  patience: 8,
 }
 
 // A bell-curve random number (mostly small, sometimes bigger), built from two uniform ones
@@ -119,11 +123,19 @@ export function evolve(
 ): Individual {
   let genomes = initialPopulation(settings, rng)
   let best: Individual | undefined
+  let topScore = -Infinity
+  let lastImproved = 0
   for (let gen = 0; gen < generations; gen++) {
     const scored = scorePopulation(genomes, makeBrain, tracks)
     const meanFitness = scored.reduce((sum, s) => sum + s.fitness, 0) / scored.length
     best = scored[0]
     onGeneration?.({ generation: gen, best, meanFitness })
+    if (best.fitness > topScore + 1e-9) {
+      topScore = best.fitness
+      lastImproved = gen
+    }
+    // Learned and no longer improving: more generations would only waste time
+    if (topScore >= settings.goodEnough && gen - lastImproved >= settings.patience) break
     genomes = breed(scored, settings, rng)
   }
   return best as Individual

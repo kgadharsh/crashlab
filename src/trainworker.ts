@@ -11,7 +11,7 @@ const worker = self as unknown as {
 
 worker.onmessage = (event) => {
   const { seed, generations } = event.data
-  const { winner } = trainWithHistory(seed, generations, undefined, true, (generation, point, best) => {
+  const { winner, history } = trainWithHistory(seed, generations, undefined, true, (generation, point, best) => {
     worker.postMessage({
       type: 'progress',
       generation,
@@ -20,5 +20,5 @@ worker.onmessage = (event) => {
       checkpoints: best.checkpoints,
     })
   })
-  worker.postMessage({ type: 'done', genome: winner.genome, checkpoints: winner.checkpoints })
+  worker.postMessage({ type: 'done', genome: winner.genome, checkpoints: winner.checkpoints, generations: history.length })
 }

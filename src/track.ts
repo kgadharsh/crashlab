@@ -12,6 +12,7 @@ export type Track = {
   leftWall: Point[]
   rightWall: Point[]
   walls: Segment[]
+  longestWall: number // length of the longest wall segment (used to skip far-away walls)
   start: { x: number; y: number; angle: number }
 }
 
@@ -37,11 +38,13 @@ export function buildTrack(centerline: Point[]): Track {
     leftWall.push({ x: c.x + nx * HALF_WIDTH, y: c.y + ny * HALF_WIDTH })
     rightWall.push({ x: c.x - nx * HALF_WIDTH, y: c.y - ny * HALF_WIDTH })
   }
+  const walls = [...loopToSegments(leftWall), ...loopToSegments(rightWall)]
   return {
     centerline,
     leftWall,
     rightWall,
-    walls: [...loopToSegments(leftWall), ...loopToSegments(rightWall)],
+    walls,
+    longestWall: Math.max(...walls.map((w) => Math.hypot(w.b.x - w.a.x, w.b.y - w.a.y))),
     start: {
       x: centerline[0].x,
       y: centerline[0].y,

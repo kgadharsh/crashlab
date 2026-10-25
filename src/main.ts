@@ -304,6 +304,7 @@ const trainButton = makeButton('Train a new brain', () => {
       message = 'Training (seed ' + thisSeed + '): generation ' + (m.generation + 1) + ' of ' + GENERATIONS + ', best so far ' + m.checkpoints + ' checkpoints'
     } else if (m.type === 'done') {
       trained = genomeToBrain(m.genome)
+      if (m.generations < GENERATIONS) drawGraph(history, thisSeed, m.generations) // stopped early: fit the graph
       stopTraining('')
       watch(trained, 'Trained (seed ' + thisSeed + '): ' + m.checkpoints + ' checkpoints. Watch it drive!')
       seed++
