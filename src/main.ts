@@ -1,6 +1,20 @@
-import { castRay, type Point, type Segment } from './sensors'
-import { starterBrain, think } from './brain'
+import type { Point } from './sensors'
+import { starterBrain, think, type Brain } from './brain'
+import { trainWithHistory, type History } from './train'
+import { genomeToBrain } from './genome'
 import { drawNetwork } from './netview'
+import {
+  type Car,
+  type Input,
+  createCar,
+  step,
+  getInputs,
+  checkpointPos,
+  CHECKPOINTS,
+  RAY_ANGLES,
+  leftWall,
+  rightWall,
+} from './sim'
 
 // Two canvases side by side (they stack on narrow screens)
 const wrapper = document.createElement('div')
@@ -23,118 +37,20 @@ netCanvas.style.border = '2px solid black'
 wrapper.appendChild(netCanvas)
 const netCtx = netCanvas.getContext('2d')!
 
-// ---------- THE TRACK ----------
-const POINTS = 120
-const HALF_WIDTH = 45
-
-const centerline: Point[] = []
-for (let i = 0; i < POINTS; i++) {
-  const t = (i / POINTS) * Math.PI * 2
-  centerline.push({
-    x: 400 + (270 + 15 * Math.cos(2 * t)) * Math.cos(t),
-    y: 250 + (160 + 15 * Math.sin(3 * t)) * Math.sin(t),
-  })
-}
-
-const leftWall: Point[] = []
-const rightWall: Point[] = []
-for (let i = 0; i < POINTS; i++) {
-  const before = centerline[(i + POINTS - 1) % POINTS]
-  const after = centerline[(i + 1) % POINTS]
-  let tx = after.x - before.x
-  let ty = after.y - before.y
-  const len = Math.hypot(tx, ty)
-  tx /= len
-  ty /= len
-  const nx = -ty
-  const ny = tx
-  const c = centerline[i]
-  leftWall.push({ x: c.x + nx * HALF_WIDTH, y: c.y + ny * HALF_WIDTH })
-  rightWall.push({ x: c.x - nx * HALF_WIDTH, y: c.y - ny * HALF_WIDTH })
-}
-
-function loopToSegments(loop: Point[]): Segment[] {
-  return loop.map((p, i) => ({ a: p, b: loop[(i + 1) % loop.length] }))
-}
-const walls: Segment[] = [...loopToSegments(leftWall), ...loopToSegments(rightWall)]
-
-function distToSegment(px: number, py: number, s: Segment): number {
-  const dx = s.b.x - s.a.x
-  const dy = s.b.y - s.a.y
-  const lenSq = dx * dx + dy * dy
-  let t = lenSq === 0 ? 0 : ((px - s.a.x) * dx + (py - s.a.y) * dy) / lenSq
-  t = Math.max(0, Math.min(1, t))
-  return Math.hypot(px - (s.a.x + t * dx), py - (s.a.y + t * dy))
-}
-
-// ---------- THE CAR ----------
-const START = {
-  x: centerline[0].x,
-  y: centerline[0].y,
-  angle: Math.atan2(
-    centerline[1].y - centerline[POINTS - 1].y,
-    centerline[1].x - centerline[POINTS - 1].x,
-  ),
-}
-const car = { x: START.x, y: START.y, angle: START.angle, speed: 0 }
-const CAR_RADIUS = 12
-
-const ACCEL = 0.15
-const FRICTION = 0.98
-const MAX_SPEED = 6
-const MAX_REVERSE = -2
-const TURN_RATE = 0.008
-
+// ---------- GAME STATE (the simulation itself lives in sim.ts) ----------
+let car: Car = createCar()
 let crashes = 0
-
-// ---------- PROGRESS (fitness score) ----------
-const CHECKPOINT_STRIDE = 6
-const CHECKPOINTS = POINTS / CHECKPOINT_STRIDE
-const CHECKPOINT_RADIUS = 50
-let passed = 0
 let best = 0
 
-function checkpointPos(k: number): Point {
-  return centerline[(k % CHECKPOINTS) * CHECKPOINT_STRIDE]
-}
-
-function updateProgress() {
-  for (let k = 0; k < CHECKPOINTS; k++) {
-    const target = checkpointPos(passed + 1)
-    if (Math.hypot(car.x - target.x, car.y - target.y) > CHECKPOINT_RADIUS) break
-    passed++
-  }
-  if (passed > best) best = passed
-}
-
-// ---------- THE CAR'S EYES (RAYS) ----------
-const RAY_ANGLES = [-60, -30, 0, 30, 60].map((deg) => (deg * Math.PI) / 180)
-const RAY_RANGE = 200
-let rayDistances: number[] = RAY_ANGLES.map(() => RAY_RANGE)
-
-function updateRays() {
-  rayDistances = RAY_ANGLES.map((a) =>
-    castRay(car.x, car.y, car.angle + a, RAY_RANGE, walls),
-  )
-}
-
-// ---------- THE BRAIN ----------
-const brain = starterBrain()
+let brain: Brain = starterBrain()
 let brainOn = false
 
-// What the brain sees: 5 ray distances (0 to 1) and the speed (about -0.3 to 1)
-function getInputs(): number[] {
-  return [...rayDistances.map((d) => d / RAY_RANGE), car.speed / MAX_SPEED]
-}
-
 function brainInput(): Input {
-  const { outputs } = think(brain, getInputs())
+  const { outputs } = think(brain, getInputs(car))
   return { steer: outputs[0], throttle: outputs[1] }
 }
 
 // ---------- RECORDING AND REPLAY ----------
-type Input = { throttle: number; steer: number }
-
 let recording: Input[] = []
 let mode: 'live' | 'replay' = 'live'
 let replayIndex = 0
@@ -160,45 +76,21 @@ function readKeys(): Input {
   }
 }
 
-function hitsWall(): boolean {
-  for (const w of walls) {
-    if (distToSegment(car.x, car.y, w) < CAR_RADIUS) return true
-  }
-  return false
-}
-
-function resetCar() {
-  car.x = START.x
-  car.y = START.y
-  car.angle = START.angle
-  car.speed = 0
-  passed = 0
-}
-
+// One step of the game. In the game a crash sends you back to the start;
+// (evolution will treat a crash as the end of that car instead).
 function update(input: Input) {
-  car.speed += input.throttle * ACCEL
-  car.speed *= FRICTION
-  if (car.speed > MAX_SPEED) car.speed = MAX_SPEED
-  if (car.speed < MAX_REVERSE) car.speed = MAX_REVERSE
-
-  car.angle += input.steer * TURN_RATE * car.speed
-
-  car.x += Math.cos(car.angle) * car.speed
-  car.y += Math.sin(car.angle) * car.speed
-
-  if (hitsWall()) {
+  step(car, input)
+  if (car.passed > best) best = car.passed
+  if (car.dead) {
     crashes++
-    resetCar()
+    car = createCar()
   }
-
-  updateProgress()
-  updateRays()
 }
 
 function startFreshRecording() {
   recording = []
   mode = 'live'
-  resetCar()
+  car = createCar()
   crashes = 0
   best = 0
   message = 'New recording started.'
@@ -206,8 +98,16 @@ function startFreshRecording() {
 
 function startReplay() {
   if (recording.length === 0 || mode === 'replay') return
-  savedEnd = { x: car.x, y: car.y, angle: car.angle, speed: car.speed, crashes, passed, best }
-  resetCar()
+  savedEnd = {
+    x: car.x,
+    y: car.y,
+    angle: car.angle,
+    speed: car.speed,
+    crashes,
+    passed: car.passed,
+    best,
+  }
+  car = createCar()
   crashes = 0
   best = 0
   replayIndex = 0
@@ -230,7 +130,7 @@ function tick() {
         car.angle === savedEnd.angle &&
         car.speed === savedEnd.speed &&
         crashes === savedEnd.crashes &&
-        passed === savedEnd.passed &&
+        car.passed === savedEnd.passed &&
         best === savedEnd.best
       message = same
         ? 'REPLAY MATCH: identical result. Physics is deterministic!'
@@ -275,7 +175,7 @@ function draw() {
 
   for (let k = 0; k < CHECKPOINTS; k++) {
     const p = checkpointPos(k)
-    const isNext = k === (passed + 1) % CHECKPOINTS
+    const isNext = k === (car.passed + 1) % CHECKPOINTS
     ctx.fillStyle = isNext ? 'cyan' : 'rgba(255,255,255,0.5)'
     ctx.beginPath()
     ctx.arc(p.x, p.y, isNext ? 7 : 3, 0, Math.PI * 2)
@@ -284,7 +184,7 @@ function draw() {
 
   for (let i = 0; i < RAY_ANGLES.length; i++) {
     const a = car.angle + RAY_ANGLES[i]
-    const d = rayDistances[i]
+    const d = car.rays[i]
     const hitX = car.x + Math.cos(a) * d
     const hitY = car.y + Math.sin(a) * d
     ctx.strokeStyle = 'yellow'
@@ -315,16 +215,25 @@ function draw() {
   ctx.fillText('mode: ' + mode + '   driver: ' + (brainOn ? 'BRAIN' : 'you'), 10, 24)
   ctx.fillText('crashes: ' + crashes, 10, 46)
   ctx.fillText('recorded steps: ' + recording.length, 10, 68)
-  ctx.fillText('rays: ' + rayDistances.map((d) => Math.round(d)).join(', '), 10, 90)
+  ctx.fillText('rays: ' + car.rays.map((d) => Math.round(d)).join(', '), 10, 90)
   ctx.fillText(
-    'checkpoints: ' + passed + '   laps: ' + Math.floor(passed / CHECKPOINTS) + '   best: ' + best,
+    'checkpoints: ' +
+      car.passed +
+      '   lap: ' +
+      (Math.floor(car.passed / CHECKPOINTS) + 1) +
+      '   in lap: ' +
+      (car.passed % CHECKPOINTS) +
+      '/' +
+      CHECKPOINTS +
+      '   best: ' +
+      best,
     10,
     112,
   )
   ctx.fillText(message, 10, 490)
 
   // The brain panel
-  const inputs = getInputs()
+  const inputs = getInputs(car)
   drawNetwork(
     netCtx,
     brain,
@@ -333,6 +242,151 @@ function draw() {
     brainOn ? 'The brain (driving)' : 'The brain (watching you)',
   )
 }
+
+
+// ---------- BUTTONS: TRAIN, THEN WATCH ----------
+const buttons = document.createElement('div')
+buttons.style.margin = '12px 0'
+document.body.appendChild(buttons)
+
+function makeButton(label: string, onClick: () => void): HTMLButtonElement {
+  const b = document.createElement('button')
+  b.textContent = label
+  b.style.marginRight = '8px'
+  b.style.padding = '6px 12px'
+  b.addEventListener('click', () => {
+    b.blur() // so Enter and arrow keys keep controlling the car
+    onClick()
+  })
+  buttons.appendChild(b)
+  return b
+}
+
+// Hand a brain to the car and let it drive from the start
+function watch(b: Brain, text: string) {
+  brain = b
+  startFreshRecording()
+  brainOn = true
+  message = text
+}
+
+let trained: Brain | null = null
+let seed = 1
+
+const trainButton = makeButton('Train a new brain', () => {
+  trainButton.disabled = true
+  message = 'Training... the page freezes for about 30 seconds.'
+  // wait a moment so the message is drawn before the freeze starts
+  setTimeout(() => {
+    const { winner, history } = trainWithHistory(seed, 40)
+    drawGraph(history, seed)
+    trained = genomeToBrain(winner.genome)
+    watch(trained, 'Trained (seed ' + seed + '): ' + winner.checkpoints + ' checkpoints. Watch it drive!')
+    seed++
+    trainButton.disabled = false
+  }, 60)
+})
+
+makeButton('Watch the trained brain', () => {
+  if (trained) watch(trained, 'Watching the trained brain.')
+  else message = 'Nothing trained yet. Press "Train a new brain" first.'
+})
+
+makeButton('Back to the starter brain', () => watch(starterBrain(), 'The hand-written starter brain.'))
+
+// ---------- THE LEARNING GRAPH ----------
+const graphCanvas = document.createElement('canvas')
+graphCanvas.width = 800
+graphCanvas.height = 240
+graphCanvas.style.border = '2px solid black'
+graphCanvas.style.display = 'block'
+document.body.appendChild(graphCanvas)
+const gctx = graphCanvas.getContext('2d')!
+
+const BEST_COLOR = '#0a7'
+const MEAN_COLOR = '#c60'
+
+// One dot-and-line series on the graph
+function plotSeries(values: number[], color: string, x: (i: number) => number, y: (v: number) => number) {
+  gctx.strokeStyle = color
+  gctx.lineWidth = 2.5
+  gctx.beginPath()
+  values.forEach((v, i) => (i === 0 ? gctx.moveTo(x(i), y(v)) : gctx.lineTo(x(i), y(v))))
+  gctx.stroke()
+}
+
+function drawGraph(history: History | null, seedUsed = 0) {
+  const W = graphCanvas.width
+  const H = graphCanvas.height
+  const left = 52
+  const right = W - 20
+  const top = 34
+  const bottom = H - 36
+  const maxY = 110 // a bit above the 105 checkpoints the track allows in 20 seconds
+  const generations = Math.max(history ? history.length : 40, 2)
+  const x = (i: number) => left + (i / (generations - 1)) * (right - left)
+  const y = (v: number) => bottom - (v / maxY) * (bottom - top)
+
+  gctx.fillStyle = '#fff'
+  gctx.fillRect(0, 0, W, H)
+
+  // grid and y labels
+  gctx.font = '12px sans-serif'
+  gctx.textBaseline = 'middle'
+  gctx.textAlign = 'right'
+  for (let v = 0; v <= 100; v += 25) {
+    gctx.strokeStyle = '#e3e3e3'
+    gctx.lineWidth = 1
+    gctx.beginPath()
+    gctx.moveTo(left, y(v))
+    gctx.lineTo(right, y(v))
+    gctx.stroke()
+    gctx.fillStyle = '#555'
+    gctx.fillText(String(v), left - 8, y(v))
+  }
+  // x labels
+  gctx.textAlign = 'center'
+  gctx.textBaseline = 'top'
+  for (let g = 0; g < generations; g += 10) {
+    gctx.fillStyle = '#555'
+    gctx.fillText(String(g + 1), x(g), bottom + 8)
+  }
+  gctx.fillText('generation', (left + right) / 2, bottom + 20)
+
+  // title
+  gctx.textAlign = 'left'
+  gctx.textBaseline = 'alphabetic'
+  gctx.fillStyle = '#111'
+  gctx.font = 'bold 14px sans-serif'
+  gctx.fillText(
+    history ? 'Learning curve (seed ' + seedUsed + '): checkpoints collected' : 'Learning curve',
+    left,
+    20,
+  )
+
+  if (!history) {
+    gctx.fillStyle = '#777'
+    gctx.font = '14px sans-serif'
+    gctx.textAlign = 'center'
+    gctx.fillText('Press "Train a new brain" and the curve appears here.', (left + right) / 2, (top + bottom) / 2)
+    return
+  }
+
+  plotSeries(history.map((h) => h.mean), MEAN_COLOR, x, y)
+  plotSeries(history.map((h) => h.best), BEST_COLOR, x, y)
+
+  // direct labels at the right end of each line
+  const last = history[history.length - 1]
+  gctx.font = '12px sans-serif'
+  gctx.textAlign = 'right'
+  gctx.textBaseline = 'bottom'
+  gctx.fillStyle = BEST_COLOR
+  gctx.fillText('best car: ' + Math.round(last.best), right, y(last.best) - 6)
+  gctx.textBaseline = 'top'
+  gctx.fillStyle = MEAN_COLOR
+  gctx.fillText('average car: ' + Math.round(last.mean), right, y(last.mean) + 6)
+}
+drawGraph(null)
 
 // ---------- THE LOOP ----------
 const STEP = 1000 / 60
@@ -354,5 +408,3 @@ function loop(now: number) {
 }
 
 requestAnimationFrame(loop)
-import { train } from './train'
-;(window as any).train = train
