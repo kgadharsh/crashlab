@@ -1,44 +1,31 @@
 import { castRay, type Point, type Segment } from './sensors'
 import { think } from './brain'
+import { CHECKPOINTS, CHECKPOINT_STRIDE, DEFAULT_TRACK, POINTS, type Track } from './track'
+
+export { CHECKPOINTS, CHECKPOINT_STRIDE, DEFAULT_TRACK }
+export type { Track }
 
 // Whatever shape your brain has, this picks up its type from think()
 export type Brain = Parameters<typeof think>[0]
 export type Input = { throttle: number; steer: number }
 
-// ---------- THE TRACK ----------
-export const POINTS = 120
-export const HALF_WIDTH = 45
+// ---------- CAR SETTINGS ----------
+export const CAR_RADIUS = 12
+export const ACCEL = 0.15
+export const FRICTION = 0.98
+export const MAX_SPEED = 6
+export const MAX_REVERSE = -2
+export const TURN_RATE = 0.008
 
-export const centerline: Point[] = []
-for (let i = 0; i < POINTS; i++) {
-  const t = (i / POINTS) * Math.PI * 2
-  centerline.push({
-    x: 400 + (270 + 15 * Math.cos(2 * t)) * Math.cos(t),
-    y: 250 + (160 + 15 * Math.sin(3 * t)) * Math.sin(t),
-  })
-}
+// ---------- PROGRESS SETTINGS ----------
+export const CHECKPOINT_RADIUS = 50
+const MIN_FORWARD_SPEED = 0.5 // slower than this (or reversing) earns no checkpoints
+export const STALL_STEPS = 300 // 5 seconds without a new checkpoint ends an attempt
+export const MAX_STEPS = 1200 // 20 seconds is the longest attempt
 
-export const leftWall: Point[] = []
-export const rightWall: Point[] = []
-for (let i = 0; i < POINTS; i++) {
-  const before = centerline[(i + POINTS - 1) % POINTS]
-  const after = centerline[(i + 1) % POINTS]
-  let tx = after.x - before.x
-  let ty = after.y - before.y
-  const len = Math.hypot(tx, ty)
-  tx /= len
-  ty /= len
-  const nx = -ty
-  const ny = tx
-  const c = centerline[i]
-  leftWall.push({ x: c.x + nx * HALF_WIDTH, y: c.y + ny * HALF_WIDTH })
-  rightWall.push({ x: c.x - nx * HALF_WIDTH, y: c.y - ny * HALF_WIDTH })
-}
-
-function loopToSegments(loop: Point[]): Segment[] {
-  return loop.map((p, i) => ({ a: p, b: loop[(i + 1) % loop.length] }))
-}
-export const walls: Segment[] = [...loopToSegments(leftWall), ...loopToSegments(rightWall)]
+// ---------- RAY SETTINGS ----------
+export const RAY_ANGLES = [-60, -30, 0, 30, 60].map((deg) => (deg * Math.PI) / 180)
+export const RAY_RANGE = 200
 
 function distToSegment(px: number, py: number, s: Segment): number {
   const dx = s.b.x - s.a.x
@@ -49,36 +36,9 @@ function distToSegment(px: number, py: number, s: Segment): number {
   return Math.hypot(px - (s.a.x + t * dx), py - (s.a.y + t * dy))
 }
 
-// ---------- CAR SETTINGS ----------
-export const START = {
-  x: centerline[0].x,
-  y: centerline[0].y,
-  angle: Math.atan2(
-    centerline[1].y - centerline[POINTS - 1].y,
-    centerline[1].x - centerline[POINTS - 1].x,
-  ),
-}
-export const CAR_RADIUS = 12
-export const ACCEL = 0.15
-export const FRICTION = 0.98
-export const MAX_SPEED = 6
-export const MAX_REVERSE = -2
-export const TURN_RATE = 0.008
-
-// ---------- PROGRESS SETTINGS ----------
-export const CHECKPOINT_STRIDE = 6
-export const CHECKPOINTS = POINTS / CHECKPOINT_STRIDE
-export const CHECKPOINT_RADIUS = 50
-const MIN_FORWARD_SPEED = 0.5 // slower than this (or reversing) earns no checkpoints
-export const STALL_STEPS = 300 // 5 seconds without a new checkpoint ends an attempt
-export const MAX_STEPS = 1200 // 20 seconds is the longest attempt
-
-// ---------- RAY SETTINGS ----------
-export const RAY_ANGLES = [-60, -30, 0, 30, 60].map((deg) => (deg * Math.PI) / 180)
-export const RAY_RANGE = 200
-
 // ---------- ONE CAR ----------
 export type Car = {
+  track: Track // the road this car is driving on
   x: number
   y: number
   angle: number
@@ -90,11 +50,12 @@ export type Car = {
   sinceProgress: number // steps since the last new checkpoint
 }
 
-export function createCar(): Car {
+export function createCar(track: Track = DEFAULT_TRACK): Car {
   const car: Car = {
-    x: START.x,
-    y: START.y,
-    angle: START.angle,
+    track,
+    x: track.start.x,
+    y: track.start.y,
+    angle: track.start.angle,
     speed: 0,
     passed: 0,
     rays: [],
@@ -106,15 +67,16 @@ export function createCar(): Car {
   return car
 }
 
-export function checkpointPos(k: number): Point {
-  return centerline[(k % CHECKPOINTS) * CHECKPOINT_STRIDE]
+export function checkpointPos(track: Track, k: number): Point {
+  return track.centerline[(k % CHECKPOINTS) * CHECKPOINT_STRIDE]
 }
 
 // Is the car heading the same way the road does at this centerline point?
 function movingForward(car: Car, index: number): boolean {
   if (car.speed < MIN_FORWARD_SPEED) return false
-  const before = centerline[(index + POINTS - 1) % POINTS]
-  const after = centerline[(index + 1) % POINTS]
+  const c = car.track.centerline
+  const before = c[(index + POINTS - 1) % POINTS]
+  const after = c[(index + 1) % POINTS]
   const tx = after.x - before.x
   const ty = after.y - before.y
   return Math.cos(car.angle) * tx + Math.sin(car.angle) * ty > 0
@@ -124,7 +86,7 @@ function updateProgress(car: Car) {
   let gained = false
   for (let k = 0; k < CHECKPOINTS; k++) {
     const index = ((car.passed + 1) % CHECKPOINTS) * CHECKPOINT_STRIDE
-    const target = centerline[index]
+    const target = car.track.centerline[index]
     if (Math.hypot(car.x - target.x, car.y - target.y) > CHECKPOINT_RADIUS) break
     if (!movingForward(car, index)) break
     car.passed++
@@ -135,11 +97,11 @@ function updateProgress(car: Car) {
 }
 
 function updateRays(car: Car) {
-  car.rays = RAY_ANGLES.map((a) => castRay(car.x, car.y, car.angle + a, RAY_RANGE, walls))
+  car.rays = RAY_ANGLES.map((a) => castRay(car.x, car.y, car.angle + a, RAY_RANGE, car.track.walls))
 }
 
 function hitsWall(car: Car): boolean {
-  for (const w of walls) {
+  for (const w of car.track.walls) {
     if (distToSegment(car.x, car.y, w) < CAR_RADIUS) return true
   }
   return false
@@ -178,8 +140,8 @@ export function getInputs(car: Car): number[] {
 // for how close the car got to its next checkpoint. This breaks ties early on, when
 // most random brains collect zero checkpoints but some get closer than others.
 export function fitnessOf(car: Car): number {
-  const prev = checkpointPos(car.passed)
-  const next = checkpointPos(car.passed + 1)
+  const prev = checkpointPos(car.track, car.passed)
+  const next = checkpointPos(car.track, car.passed + 1)
   const spacing = Math.hypot(next.x - prev.x, next.y - prev.y)
   const distance = Math.hypot(car.x - next.x, car.y - next.y)
   const closeness = Math.max(0, 1 - distance / spacing)
@@ -187,8 +149,8 @@ export function fitnessOf(car: Car): number {
 }
 
 // Run one brain from the start with no drawing. This is what evolution will call.
-export function runBrain(brain: Brain, maxSteps: number = MAX_STEPS) {
-  const car = createCar()
+export function runBrain(brain: Brain, track: Track = DEFAULT_TRACK, maxSteps: number = MAX_STEPS) {
+  const car = createCar(track)
   while (!car.dead && car.steps < maxSteps && car.sinceProgress < STALL_STEPS) {
     const { outputs } = think(brain, getInputs(car))
     step(car, { steer: outputs[0], throttle: outputs[1] })

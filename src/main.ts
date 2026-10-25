@@ -12,8 +12,7 @@ import {
   checkpointPos,
   CHECKPOINTS,
   RAY_ANGLES,
-  leftWall,
-  rightWall,
+  DEFAULT_TRACK,
 } from './sim'
 
 // Two canvases side by side (they stack on narrow screens)
@@ -38,6 +37,8 @@ wrapper.appendChild(netCanvas)
 const netCtx = netCanvas.getContext('2d')!
 
 // ---------- GAME STATE (the simulation itself lives in sim.ts) ----------
+const track = DEFAULT_TRACK // the road being driven and drawn
+const { leftWall, rightWall } = track
 let car: Car = createCar()
 let crashes = 0
 let best = 0
@@ -174,7 +175,7 @@ function draw() {
   ctx.stroke()
 
   for (let k = 0; k < CHECKPOINTS; k++) {
-    const p = checkpointPos(k)
+    const p = checkpointPos(track, k)
     const isNext = k === (car.passed + 1) % CHECKPOINTS
     ctx.fillStyle = isNext ? 'cyan' : 'rgba(255,255,255,0.5)'
     ctx.beginPath()
