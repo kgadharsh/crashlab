@@ -1,0 +1,4 @@
+// A ready-made brain, evolved ahead of time (seed 2, 59 checkpoints in 20 s, lap 6.8 s,
+// 37 of 40 unseen tracks finished). Used as a fallback if training is slow or fails.
+// Regenerate by training and pasting the winning genome here.
+export const PRETRAINED_GENOME: number[] = [-0.2222, -0.1636, 1.2983, -1.7193, -0.7329, 0.257, 0.3487, -0.0395, 1.927, -0.3615, 1.3111, -0.9181, -0.0822, -0.3618, 1.6682, -0.9237, -0.811, 0.1608, -0.9915, -0.2546, 0.0104, 0.2475, 0.0146, -0.1166, 0.1958, 0.2258, 0.1571, -0.31, -0.1091, 1.3768, -0.4415, -0.5437, 0.2782, 0.1151, -0.8372, -2.4012, -0.6065, -1.1676, 0.0552, -0.5896, 0.3269, 0.445, 0.0593, 0.3703, -0.8984, 0.9155, 0.4617]

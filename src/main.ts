@@ -1,7 +1,9 @@
 import type { Point } from './sensors'
 import { starterBrain, think, type Brain } from './brain'
 import type { History } from './train'
-import { genomeToBrain } from './genome'
+import { genomeToBrain, brainToGenome } from './genome'
+import { brainToJson, brainFromJson } from './brainFile'
+import { PRETRAINED_GENOME } from './pretrained'
 import { drawNetwork } from './netview'
 import {
   type Car,
@@ -424,7 +426,9 @@ function watch(b: Brain, text: string) {
 }
 
 let trained: Brain | null = null
+let trainedSource: 'evolved' | 'pretrained' | 'file' = 'evolved'
 let seed = 1
+const SAVE_KEY = 'crashlab.brain'
 const GENERATIONS = 40
 let worker: Worker | null = null
 let watchAll = true // watch every generation (slower) instead of only the newest one
@@ -452,6 +456,8 @@ function stopTraining(text: string) {
 function finishTraining(f: Finish) {
   const r = run!
   trained = genomeToBrain(f.genome)
+  trainedSource = 'evolved'
+  rememberBrain(f.genome)
   if (f.generations < GENERATIONS) drawGraph(r.history, r.seed, f.generations) // stopped early: fit the graph
   const used = r.seed
   stopTraining('')
@@ -488,7 +494,7 @@ const trainButton = makeButton('Train a new brain', () => {
       if (!run.watching) finishTraining(run.finish)
     }
   }
-  worker.onerror = () => stopTraining('Training failed. Check the console for the error.')
+  worker.onerror = () => stopTraining('Training failed. Try "Load a pre-trained brain" instead.')
   worker.postMessage({ type: 'start', seed: run.seed, generations: GENERATIONS, watch: watchAll })
 })
 
@@ -512,6 +518,68 @@ makeButton('Watch the trained brain', () => {
 })
 
 makeButton('Back to the starter brain', () => watch(starterBrain(), 'The hand-written starter brain.'))
+
+// ---------- SAVING AND LOADING A BRAIN ----------
+// The brain is also kept in the browser, so a refresh does not lose it (the browser can still clear it).
+function rememberBrain(genome: number[]) {
+  try {
+    localStorage.setItem(SAVE_KEY, JSON.stringify(genome))
+  } catch {
+    /* storage can be blocked or full; saving to a file still works */
+  }
+}
+function useBrain(genome: number[], source: 'pretrained' | 'file', text: string) {
+  trained = genomeToBrain(genome)
+  trainedSource = source
+  rememberBrain(genome)
+  watch(trained, text)
+}
+
+makeButton('Load a pre-trained brain', () => {
+  if (worker) stopTraining('')
+  useBrain(PRETRAINED_GENOME, 'pretrained', 'Watching a pre-trained brain.')
+})
+
+makeButton('Save brain to file', () => {
+  if (!trained) {
+    message = 'Nothing to save yet. Train a brain first.'
+    return
+  }
+  const url = URL.createObjectURL(new Blob([brainToJson(brainToGenome(trained))], { type: 'application/json' }))
+  const a = document.createElement('a')
+  a.href = url
+  a.download = 'my-brain.json'
+  a.click()
+  URL.revokeObjectURL(url)
+  message = 'Saved my-brain.json. Use "Load brain from file" to bring it back.'
+})
+
+const fileInput = document.createElement('input')
+fileInput.type = 'file'
+fileInput.accept = '.json,application/json'
+fileInput.style.display = 'none'
+fileInput.addEventListener('change', async () => {
+  const file = fileInput.files?.[0]
+  fileInput.value = '' // so the same file can be picked again
+  if (!file) return
+  const result = brainFromJson(await file.text())
+  if ('error' in result) message = result.error
+  else {
+    if (worker) stopTraining('')
+    useBrain(result.genome, 'file', 'Watching the brain from ' + file.name + '.')
+  }
+})
+buttons.appendChild(fileInput)
+makeButton('Load brain from file', () => fileInput.click())
+
+// bring back the brain from the last visit, if there is one
+try {
+  const saved = localStorage.getItem(SAVE_KEY)
+  const parsed = saved ? brainFromJson(JSON.stringify({ format: 'crashlab-brain', inputs: 6, hidden: 5, outputs: 2, genome: JSON.parse(saved) })) : null
+  if (parsed && 'genome' in parsed) trained = genomeToBrain(parsed.genome)
+} catch {
+  /* nothing saved, or storage is blocked */
+}
 
 // ---------- THE LEARNING GRAPH ----------
 const graphCanvas = document.createElement('canvas')
@@ -951,7 +1019,9 @@ function missionHtml(): string {
       )
     case 'm3done':
       return (
-        '<b>Mission 3 complete!</b> Evolution found all 47 weights with no help: ' +
+        (trainedSource === 'evolved'
+          ? '<b>Mission 3 complete!</b> Evolution found all 47 weights with no help: '
+          : '<b>Mission 3 complete!</b> This brain was ' + (trainedSource === 'pretrained' ? 'evolved ahead of time' : 'loaded from a file') + '; it makes ') +
         (m3Score ? describe(m3Score) : '') + '.<br>' +
         (m2Score ? 'Your 3 hand-set weights managed ' + describe(m2Score) + '. ' : '') +
         'Press "Train a new brain" again for a different run: evolution starts from random every time, so each brain ends up different.'
