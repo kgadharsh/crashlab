@@ -47,7 +47,11 @@ const canvas = document.createElement('canvas')
 canvas.width = 800
 canvas.height = 500
 canvas.style.cssText = 'border:2px solid black;max-width:100%;height:auto;box-sizing:border-box;touch-action:none'
-wrapper.appendChild(canvas)
+// the track and its touch buttons live in one column, so the buttons sit right under the track
+const trackColumn = document.createElement('div')
+trackColumn.style.cssText = 'max-width:100%;min-width:0'
+wrapper.appendChild(trackColumn)
+trackColumn.appendChild(canvas)
 const ctx = canvas.getContext('2d')!
 
 const netCanvas = document.createElement('canvas')
@@ -101,7 +105,8 @@ function readKeys(): Input {
 }
 
 // ---------- TOUCH CONTROLS (shown only on touch screens) ----------
-const touchScreen = window.matchMedia('(pointer: coarse)').matches
+const touchScreen =
+  window.matchMedia('(pointer: coarse)').matches || window.matchMedia('(hover: none)').matches || navigator.maxTouchPoints > 0
 const pad = document.createElement('div')
 pad.style.cssText =
   'display:' + (touchScreen ? 'flex' : 'none') + ';justify-content:space-between;gap:12px;margin:10px 0;max-width:800px;user-select:none;-webkit-user-select:none;touch-action:none'
@@ -130,7 +135,7 @@ const pedalSide = document.createElement('div')
 pedalSide.style.cssText = 'display:flex;gap:8px;flex:1'
 pedalSide.append(padButton('Brake', 'ArrowDown'), padButton('Gas', 'ArrowUp'))
 pad.append(steerSide, pedalSide)
-wrapper.after(pad)
+trackColumn.appendChild(pad)
 
 // One step of the game. In the game a crash sends you back to the start;
 // (evolution will treat a crash as the end of that car instead).

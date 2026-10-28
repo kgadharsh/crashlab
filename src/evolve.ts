@@ -30,8 +30,8 @@ export const DEFAULT_SETTINGS: Settings = {
   populationSize: 100,
   eliteCount: 10,
   tournamentSize: 3,
-  mutationRate: 0.1,
-  mutationSize: 0.3,
+  mutationRate: 0.2,
+  mutationSize: 0.5,
   goodEnough: 52,
   patience: 8,
 }
