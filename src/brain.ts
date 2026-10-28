@@ -36,8 +36,8 @@ export function starterBrain(): Brain {
     ],
     b1: [0, 1.5, 0, 0, 0],
     w2: [
-      [3, 0, 0, 0, 0], // steering follows neuron 0
-      [0, -1.5, -0.8, 0, 0], // throttle: ease off for a wall ahead or high speed
+      [4, 0, 0, 0, 0], // steering follows neuron 0
+      [0, -1.5, -2, 0, 0], // throttle: ease off for a wall ahead, and brake hard when fast (tyres have limited grip)
     ],
     b2: [0, 1.2], // a steady urge to accelerate
   }

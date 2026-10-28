@@ -1,7 +1,7 @@
 import { evolve, DEFAULT_SETTINGS, type Individual } from './evolve'
 import { genomeToBrain, GENOME_LENGTH } from './genome'
 import { makeRng } from './random'
-import { CHECKPOINTS, type Track } from './sim'
+import { CHECKPOINTS, USE_GRIP, type Track } from './sim'
 
 export type History = { best: number; mean: number }[]
 
@@ -15,7 +15,7 @@ export function trainWithHistory(
   onProgress?: (generation: number, point: History[number], best: Individual) => void,
 ): { winner: Individual; history: History } {
   const rng = makeRng(seed)
-  const settings = { ...DEFAULT_SETTINGS, genomeLength: GENOME_LENGTH }
+  const settings = { ...DEFAULT_SETTINGS, genomeLength: GENOME_LENGTH, grip: USE_GRIP }
   const history: History = []
   const winner = evolve(genomeToBrain, rng, generations, settings, (r) => {
     history.push({ best: r.best.fitness, mean: r.meanFitness })

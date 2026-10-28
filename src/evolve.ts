@@ -1,4 +1,4 @@
-import { runBrain, DEFAULT_TRACK, type Brain, type Track } from './sim'
+import { runBrain, DEFAULT_TRACK, USE_GRIP, type Brain, type Track } from './sim'
 
 // A genome is just the brain's weights as one flat list of numbers.
 export type Genome = number[]
@@ -22,6 +22,7 @@ export type Settings = {
   mutationSize: number // how big the nudge is
   goodEnough: number // a best score at or above this counts as "learned"
   patience: number // stop early after this many generations with no new best, once learned
+  grip?: boolean // true = cars drive with grip physics
 }
 
 export const DEFAULT_SETTINGS: Settings = {
@@ -31,7 +32,7 @@ export const DEFAULT_SETTINGS: Settings = {
   tournamentSize: 3,
   mutationRate: 0.1,
   mutationSize: 0.3,
-  goodEnough: 100,
+  goodEnough: 52,
   patience: 8,
 }
 
@@ -57,10 +58,11 @@ export function scorePopulation(
   genomes: Genome[],
   makeBrain: (genome: Genome) => Brain,
   tracks: Track[] = [DEFAULT_TRACK],
+  grip = USE_GRIP,
 ): Individual[] {
   const scored = genomes.map((genome) => {
     const brain = makeBrain(genome)
-    const runs = tracks.map((track) => runBrain(brain, track))
+    const runs = tracks.map((track) => runBrain(brain, track, undefined, grip))
     const mean = (f: (r: (typeof runs)[number]) => number) => runs.reduce((sum, r) => sum + f(r), 0) / runs.length
     return {
       genome,
@@ -110,6 +112,40 @@ export type GenerationReport = {
   generation: number
   best: Individual
   meanFitness: number
+  population: Genome[] // every car of this generation, best first
+}
+
+// An evolution you can advance one generation at a time (so a viewer can watch each one).
+export function createEvolution(
+  makeBrain: (genome: Genome) => Brain,
+  rng: Rng,
+  generations: number,
+  settings: Settings = DEFAULT_SETTINGS,
+  tracks: Track[] = [DEFAULT_TRACK],
+) {
+  let genomes = initialPopulation(settings, rng)
+  let gen = 0
+  let topScore = -Infinity
+  let lastImproved = 0
+  return {
+    // Score the current generation, report it, and (unless finished) breed the next one.
+    step(): { report: GenerationReport; finished: boolean } {
+      const scored = scorePopulation(genomes, makeBrain, tracks, !!settings.grip)
+      const meanFitness = scored.reduce((sum, x) => sum + x.fitness, 0) / scored.length
+      const best = scored[0]
+      const report: GenerationReport = { generation: gen, best, meanFitness, population: scored.map((x) => x.genome) }
+      if (best.fitness > topScore + 1e-9) {
+        topScore = best.fitness
+        lastImproved = gen
+      }
+      // Learned and no longer improving: more generations would only waste time
+      const finished =
+        gen + 1 >= generations || (topScore >= settings.goodEnough && gen - lastImproved >= settings.patience)
+      if (!finished) genomes = breed(scored, settings, rng)
+      gen++
+      return { report, finished }
+    },
+  }
 }
 
 // Run the whole thing. onGeneration lets you print progress or draw it.
@@ -121,22 +157,13 @@ export function evolve(
   onGeneration?: (report: GenerationReport) => void,
   tracks: Track[] = [DEFAULT_TRACK],
 ): Individual {
-  let genomes = initialPopulation(settings, rng)
+  const evolution = createEvolution(makeBrain, rng, generations, settings, tracks)
   let best: Individual | undefined
-  let topScore = -Infinity
-  let lastImproved = 0
-  for (let gen = 0; gen < generations; gen++) {
-    const scored = scorePopulation(genomes, makeBrain, tracks)
-    const meanFitness = scored.reduce((sum, s) => sum + s.fitness, 0) / scored.length
-    best = scored[0]
-    onGeneration?.({ generation: gen, best, meanFitness })
-    if (best.fitness > topScore + 1e-9) {
-      topScore = best.fitness
-      lastImproved = gen
-    }
-    // Learned and no longer improving: more generations would only waste time
-    if (topScore >= settings.goodEnough && gen - lastImproved >= settings.patience) break
-    genomes = breed(scored, settings, rng)
+  for (;;) {
+    const { report, finished } = evolution.step()
+    best = report.best
+    onGeneration?.(report)
+    if (finished) break
   }
-  return best as Individual
+  return best
 }

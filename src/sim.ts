@@ -17,6 +17,15 @@ export const MAX_SPEED = 6
 export const MAX_REVERSE = -2
 export const TURN_RATE = 0.008
 
+// ---------- GRIP (cars use it by default, following USE_GRIP below) ----------
+// With grip on, the tyres can only turn the car so hard. Above GRIP_SPEED the turning
+// weakens as the car speeds up, so you must brake before a bend. With grip off, the
+// turning radius is the same at every speed and braking never helps.
+export const GRIP_SPEED = 3
+export const GRIP_POWER = 2
+// ONE switch for the whole app (missions, training, swarm, scores): every function defaults to it. false = the old physics.
+export const USE_GRIP = true
+
 // ---------- PROGRESS SETTINGS ----------
 export const CHECKPOINT_RADIUS = 50
 const MIN_FORWARD_SPEED = 0.5 // slower than this (or reversing) earns no checkpoints
@@ -48,9 +57,10 @@ export type Car = {
   dead: boolean // true once the car has crashed
   steps: number // how many steps this attempt has lasted
   sinceProgress: number // steps since the last new checkpoint
+  grip: boolean // true = turning weakens above GRIP_SPEED
 }
 
-export function createCar(track: Track = DEFAULT_TRACK): Car {
+export function createCar(track: Track = DEFAULT_TRACK, grip = USE_GRIP): Car {
   const car: Car = {
     track,
     x: track.start.x,
@@ -62,6 +72,7 @@ export function createCar(track: Track = DEFAULT_TRACK): Car {
     dead: false,
     steps: 0,
     sinceProgress: 0,
+    grip,
   }
   updateRays(car)
   return car
@@ -131,7 +142,8 @@ export function step(car: Car, input: Input) {
   if (car.speed > MAX_SPEED) car.speed = MAX_SPEED
   if (car.speed < MAX_REVERSE) car.speed = MAX_REVERSE
 
-  car.angle += input.steer * TURN_RATE * car.speed
+  const turnScale = car.grip && car.speed > GRIP_SPEED ? Math.pow(GRIP_SPEED / car.speed, GRIP_POWER) : 1
+  car.angle += input.steer * TURN_RATE * car.speed * turnScale
 
   car.x += Math.cos(car.angle) * car.speed
   car.y += Math.sin(car.angle) * car.speed
@@ -165,8 +177,8 @@ export function fitnessOf(car: Car): number {
 }
 
 // Run one brain from the start with no drawing. This is what evolution will call.
-export function runBrain(brain: Brain, track: Track = DEFAULT_TRACK, maxSteps: number = MAX_STEPS) {
-  const car = createCar(track)
+export function runBrain(brain: Brain, track: Track = DEFAULT_TRACK, maxSteps: number = MAX_STEPS, grip = USE_GRIP) {
+  const car = createCar(track, grip)
   while (!car.dead && car.steps < maxSteps && car.sinceProgress < STALL_STEPS) {
     const { outputs } = think(brain, getInputs(car))
     step(car, { steer: outputs[0], throttle: outputs[1] })
@@ -177,4 +189,14 @@ export function runBrain(brain: Brain, track: Track = DEFAULT_TRACK, maxSteps: n
     steps: car.steps,
     crashed: car.dead,
   }
+}
+
+// How many steps a brain needs to collect one full lap of checkpoints (null if it never does).
+export function lapSteps(brain: Brain, track: Track = DEFAULT_TRACK, grip = USE_GRIP): number | null {
+  const car = createCar(track, grip)
+  while (!car.dead && car.steps < 3000 && car.sinceProgress < STALL_STEPS && car.passed < CHECKPOINTS) {
+    const { outputs } = think(brain, getInputs(car))
+    step(car, { steer: outputs[0], throttle: outputs[1] })
+  }
+  return car.passed >= CHECKPOINTS ? car.steps : null
 }
