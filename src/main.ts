@@ -44,14 +44,14 @@ function setMissionHtml(html: string) {
 const canvas = document.createElement('canvas')
 canvas.width = 800
 canvas.height = 500
-canvas.style.border = '2px solid black'
+canvas.style.cssText = 'border:2px solid black;max-width:100%;height:auto;box-sizing:border-box;touch-action:none'
 wrapper.appendChild(canvas)
 const ctx = canvas.getContext('2d')!
 
 const netCanvas = document.createElement('canvas')
 netCanvas.width = 420
 netCanvas.height = 500
-netCanvas.style.border = '2px solid black'
+netCanvas.style.cssText = 'border:2px solid black;max-width:100%;height:auto;box-sizing:border-box'
 wrapper.appendChild(netCanvas)
 const netCtx = netCanvas.getContext('2d')!
 
@@ -97,6 +97,38 @@ function readKeys(): Input {
     steer: (keys['ArrowRight'] ? 1 : 0) - (keys['ArrowLeft'] ? 1 : 0),
   }
 }
+
+// ---------- TOUCH CONTROLS (shown only on touch screens) ----------
+const touchScreen = window.matchMedia('(pointer: coarse)').matches
+const pad = document.createElement('div')
+pad.style.cssText =
+  'display:' + (touchScreen ? 'flex' : 'none') + ';justify-content:space-between;gap:12px;margin:10px 0;max-width:800px;user-select:none;-webkit-user-select:none;touch-action:none'
+function padButton(label: string, key: string): HTMLButtonElement {
+  const b = document.createElement('button')
+  b.textContent = label
+  b.style.cssText =
+    'flex:1;height:72px;font-size:28px;border:2px solid black;border-radius:10px;background:#eee;touch-action:none;user-select:none;-webkit-user-select:none'
+  const press = (down: boolean) => {
+    keys[key] = down
+    b.style.background = down ? '#bcd' : '#eee'
+  }
+  b.addEventListener('pointerdown', (e) => {
+    e.preventDefault()
+    b.setPointerCapture(e.pointerId)
+    press(true)
+  })
+  for (const ev of ['pointerup', 'pointercancel', 'lostpointercapture']) b.addEventListener(ev, () => press(false))
+  b.addEventListener('contextmenu', (e) => e.preventDefault())
+  return b
+}
+const steerSide = document.createElement('div')
+steerSide.style.cssText = 'display:flex;gap:8px;flex:1'
+steerSide.append(padButton('◀', 'ArrowLeft'), padButton('▶', 'ArrowRight'))
+const pedalSide = document.createElement('div')
+pedalSide.style.cssText = 'display:flex;gap:8px;flex:1'
+pedalSide.append(padButton('Brake', 'ArrowDown'), padButton('Gas', 'ArrowUp'))
+pad.append(steerSide, pedalSide)
+wrapper.after(pad)
 
 // One step of the game. In the game a crash sends you back to the start;
 // (evolution will treat a crash as the end of that car instead).
@@ -485,8 +517,7 @@ makeButton('Back to the starter brain', () => watch(starterBrain(), 'The hand-wr
 const graphCanvas = document.createElement('canvas')
 graphCanvas.width = 800
 graphCanvas.height = 240
-graphCanvas.style.border = '2px solid black'
-graphCanvas.style.display = 'block'
+graphCanvas.style.cssText = 'border:2px solid black;display:block;max-width:100%;height:auto;box-sizing:border-box'
 document.body.appendChild(graphCanvas)
 const gctx = graphCanvas.getContext('2d')!
 
@@ -883,7 +914,7 @@ function missionHtml(): string {
   switch (missionStage) {
     case 'm1':
       return (
-        '<b>Mission 1 of 3: drive one lap.</b> Arrow keys: up = gas, down = brake, left and right = steer. ' +
+        '<b>Mission 1 of 3: drive one lap.</b> ' + (touchScreen ? 'Use the buttons under the track: Gas, Brake, and the two steering arrows. ' : 'Arrow keys: up = gas, down = brake, left and right = steer. ') +
         'Stay off the walls. Lap progress: <b>' + Math.round((100 * car.passed) / CHECKPOINTS) + '%</b>' +
         (crashes > 0 ? ' &nbsp;·&nbsp; crashes so far: ' + crashes : '')
       )
