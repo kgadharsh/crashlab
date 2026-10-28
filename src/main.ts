@@ -4,6 +4,7 @@ import type { History } from './train'
 import { genomeToBrain, brainToGenome } from './genome'
 import { brainToJson, brainFromJson } from './brainFile'
 import { PRETRAINED_GENOME } from './pretrained'
+import { prepareHiddenTracks, testOnHiddenTracks, hiddenVerdict, HIDDEN_COUNT } from './hidden'
 import { drawNetwork } from './netview'
 import {
   type Car,
@@ -577,6 +578,31 @@ fileInput.addEventListener('change', async () => {
 buttons.appendChild(fileInput)
 makeButton('Load brain from file', () => fileInput.click())
 
+// ---------- THE HIDDEN-TRACK TEST ----------
+// The brain on screen is sent round 20 tracks it has never driven on (the same 20 for everyone).
+const hiddenPanel = document.createElement('div')
+hiddenPanel.style.cssText =
+  'max-width:1240px;box-sizing:border-box;margin:0 0 12px;padding:10px 14px;border:2px solid black;border-radius:6px;background:#f4f0ff;font:15px/1.5 sans-serif;display:none'
+buttons.after(hiddenPanel)
+let hiddenBusy = false
+makeButton('Test on ' + HIDDEN_COUNT + ' hidden tracks', async () => {
+  if (hiddenBusy) return
+  hiddenBusy = true
+  hiddenPanel.style.display = 'block'
+  hiddenPanel.textContent = 'Testing the brain on ' + HIDDEN_COUNT + ' tracks it has never seen...'
+  const r = await testOnHiddenTracks(brain)
+  const dots = r.finished
+    .map((ok, i) => '<span title="track ' + (i + 1) + (ok ? ': lapped' : ': failed') + '" style="display:inline-block;width:16px;height:16px;margin:2px;border-radius:50%;background:' + (ok ? '#2a9d4b' : '#d33') + '"></span>')
+    .join('')
+  hiddenPanel.innerHTML =
+    '<b>Hidden-track test: ' + r.count + ' of ' + HIDDEN_COUNT + ' tracks lapped</b>' +
+    (r.avgLap !== null ? ' (average lap ' + r.avgLap.toFixed(1) + ' s)' : '') +
+    '. Practice track: ' + (r.practiceLap !== null ? 'lapped in ' + r.practiceLap.toFixed(1) + ' s' : 'not lapped') + '.<br>' +
+    dots + '<br>' + hiddenVerdict(r) + ' <span style="color:#666">(green = lapped, red = crashed or stuck)</span>'
+  hiddenBusy = false
+})
+void prepareHiddenTracks() // build the 20 tracks quietly in the background
+
 // bring back the brain from the last visit, if there is one
 try {
   const saved = localStorage.getItem(SAVE_KEY)
@@ -955,6 +981,7 @@ function applyM2() {
 function applyStageVisibility() {
   const sandbox = missionStage === 'm3' || missionStage === 'm3done'
   buttons.style.display = sandbox ? '' : 'none'
+  if (!sandbox) hiddenPanel.style.display = 'none'
   graphCanvas.style.display = sandbox ? 'block' : 'none'
   m2Panel.style.display = missionStage === 'm2' || missionStage === 'm2done' ? 'block' : 'none'
 }
