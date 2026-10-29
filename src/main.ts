@@ -516,7 +516,7 @@ const skipButton = makeButton('Skip to the end', () => {
 })
 skipButton.style.display = 'none'
 
-const watchButton = makeButton('Watch every generation: OFF', () => {
+const watchButton = makeButton('Watch every generation: ON', () => {
   watchAll = !watchAll
   watchButton.textContent = 'Watch every generation: ' + (watchAll ? 'ON' : 'OFF')
 })

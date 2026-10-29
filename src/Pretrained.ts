@@ -1,4 +1,5 @@
-// A ready-made brain, evolved ahead of time (seed 2, 59 checkpoints in 20 s, lap 6.8 s,
-// 37 of 40 unseen tracks finished). Used as a fallback if training is slow or fails.
-// Regenerate by training and pasting the winning genome here.
-export const PRETRAINED_GENOME: number[] = [-0.2222, -0.1636, 1.2983, -1.7193, -0.7329, 0.257, 0.3487, -0.0395, 1.927, -0.3615, 1.3111, -0.9181, -0.0822, -0.3618, 1.6682, -0.9237, -0.811, 0.1608, -0.9915, -0.2546, 0.0104, 0.2475, 0.0146, -0.1166, 0.1958, 0.2258, 0.1571, -0.31, -0.1091, 1.3768, -0.4415, -0.5437, 0.2782, 0.1151, -0.8372, -2.4012, -0.6065, -1.1676, 0.0552, -0.5896, 0.3269, 0.445, 0.0593, 0.3703, -0.8984, 0.9155, 0.4617]
+// A ready-made brain, evolved ahead of time on 5 tracks for up to 80 generations
+// (seed 4, best of 8 seeds: 40 of 40 unseen tracks lapped,
+// practice lap 5.9 s). Used as a fallback if training is slow or fails.
+// Regenerate with: npx tsx scripts/makePretrained.ts
+export const PRETRAINED_GENOME: number[] = [-0.5411,2.2189,0.1529,-2.694,0.44,1.2737,1.7971,1.9909,1.025,-3.0809,-1.7933,-0.2425,2.0809,1.1663,0.0877,1.3572,0.3013,-5.5024,0.1997,1.4976,-3.6526,0.132,-0.6321,2.469,0.1286,1.5424,1.3469,-4.2055,-0.3937,1.3781,0.7084,-1.7095,0.3977,0.188,-0.3481,-0.819,1.3938,0.3069,-0.1037,-3.3285,-1.2616,0.2937,1.2599,-4.7526,1.9597,1.8397,1.6312]
