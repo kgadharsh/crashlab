@@ -1,7 +1,7 @@
-import { lapSteps, runBrain } from './sim'
-import { DEFAULT_TRACK, makeTrack } from './track'
-import { trainWithHistory } from './train'
-import { genomeToBrain } from './genome'
+import { lapSteps } from '../src/sim'
+import { DEFAULT_TRACK, makeTrack } from '../src/track'
+import { trainWithHistory } from '../src/train'
+import { genomeToBrain } from '../src/genome'
 const [from,to]=[+process.argv[2],+process.argv[3]]
 const hidden = Array.from({length:40},(_,i)=>makeTrack(5000+i,1))
 for (let seed=from; seed<=to; seed++) {
