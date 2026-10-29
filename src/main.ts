@@ -435,7 +435,7 @@ let trained: Brain | null = null
 let trainedSource: 'evolved' | 'pretrained' | 'file' = 'evolved'
 let seed = 1
 const SAVE_KEY = 'crashlab.brain'
-const GENERATIONS = 40
+const GENERATIONS = 80
 let worker: Worker | null = null
 let watchAll = true // watch every generation (slower) instead of only the newest one
 
@@ -513,7 +513,7 @@ const skipButton = makeButton('Skip to the end', () => {
 })
 skipButton.style.display = 'none'
 
-const watchButton = makeButton('Watch every generation: ON', () => {
+const watchButton = makeButton('Watch every generation: OFF', () => {
   watchAll = !watchAll
   watchButton.textContent = 'Watch every generation: ' + (watchAll ? 'ON' : 'OFF')
 })

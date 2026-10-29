@@ -6,7 +6,12 @@
 import { createEvolution, DEFAULT_SETTINGS } from './evolve'
 import { genomeToBrain, GENOME_LENGTH } from './genome'
 import { makeRng } from './random'
-import { USE_GRIP } from './sim'
+import { USE_GRIP, DEFAULT_TRACK } from './sim'
+import { makeTrack } from './track'
+
+// The cars now learn on 5 tracks (the practice track plus 4 generated ones),
+// so a brain that only works on one track cannot win.
+const TRAIN_TRACKS = [DEFAULT_TRACK, ...Array.from({ length: 4 }, (_, i) => makeTrack(100 + i, 1))]
 
 type Message =
   | { type: 'start'; seed: number; generations: number; watch: boolean }
@@ -51,7 +56,7 @@ worker.onmessage = (event) => {
   const m = event.data
   if (m.type === 'start') {
     const settings = { ...DEFAULT_SETTINGS, genomeLength: GENOME_LENGTH, grip: USE_GRIP }
-    evolution = createEvolution(genomeToBrain, makeRng(m.seed), m.generations, settings)
+    evolution = createEvolution(genomeToBrain, makeRng(m.seed), m.generations, settings, TRAIN_TRACKS)
     generationsRun = 0
     watching = m.watch
     if (watching) runOne()
