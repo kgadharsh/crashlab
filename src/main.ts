@@ -489,7 +489,7 @@ const trainButton = makeButton('Train a new brain', () => {
     if (!run) return
     if (m.type === 'progress') {
       run.history.push({ best: m.best, mean: m.mean })
-      waiting = { gen: m.generation, genomes: m.population }
+      if (run.watching) waiting = { gen: m.generation, genomes: m.population }
       if (!run.watching) {
         run.shown = run.history.length
         showGraph()
@@ -508,6 +508,9 @@ const skipButton = makeButton('Skip to the end', () => {
   if (!worker || !run || !run.watching) return
   run.watching = false
   skipButton.style.display = 'none'
+  swarm = null // stop showing the old generation
+  waiting = null
+  message = 'Skipping ahead: training the remaining generations...'
   worker.postMessage({ type: 'free' })
   if (run.finish) finishTraining(run.finish)
 })
