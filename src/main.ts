@@ -1043,7 +1043,7 @@ function missionHtml(): string {
       return (
         '<b>Mission 2 complete!</b> You tuned 3 numbers by hand and the car drives itself. ' +
         'Your brain makes ' + (m2Score ? describe(m2Score) : '') + '.<br>' +
-        'That was easy because only 3 of the 47 weights were yours and I wired the rest. ' +
+        'That took trial and error with just 3 weights, and the other 44 were already set for you. ' +
         'A real network has thousands to billions, and nobody can tune those by hand. ' +
         'So how does a network find its own weights?' +
         '<button onclick="missions.start3()" style="' + BTN + '">Start Mission 3</button>'
