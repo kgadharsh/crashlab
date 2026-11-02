@@ -23,7 +23,7 @@ Decided 2 Nov 2026 after ten chat prototypes. This order replaces the phase orde
 - [x] **B1. Tug-of-war and predicted path.** Replaces the neuron table. All six weights plus Reset. The path comes from a copy of the real car simulated ahead. Fixes the rest of F10.
 - [x] **B2. Read the brain.** A few guessing rounds using real track positions. Also the start of the quiz in F15.
 - [x] **B3. Edit the network directly.** Drag connections, click rays to blind them, cut connections, link rays on the track to inputs in the panel. Fixes F11, F13 and F14.
-- [ ] **B4. Road detector.** Hover a neuron and the real road lights up. Fixes F24, or record why it was dropped.
+- [x] **B4. Road detector.** Hover a neuron and the real road lights up. Fixes F24, or record why it was dropped.
 - [ ] **Checkpoint: test Chapters 1 and 2 with 3 to 5 non-ML friends (F15).** Results can reorder everything below.
 - [ ] **B5. You are evolution and Downhill.** Pick-a-parent before the 100-car run, then the slope lesson. Fixes F16.
 - [ ] **B6. Memorise vs learn.** Real brains trained on one track and on five, across at least 10 seeds. Fixes F17 and supports F30.
@@ -100,7 +100,7 @@ Bias is editable in the neuron list from B3, but nothing explains it yet.
   Done when: hidden size can change, with retraining or pre-trained swaps, and a warning that old weights no longer fit.
 - [ ] **F23 [S2] Two hidden layers are untested on the car.**
   Done when: measured, needs F22.
-- [ ] **F24 [S2] Hidden neurons remain unexplained black boxes.**
+- [x] **F24 [S2] Hidden neurons remain unexplained black boxes.**
   Done when: the road-heatmap prototype shows where a neuron fires. If it is not readable, drop it and record why.
 - [ ] **F25 [S2] The project file has false or outdated claims.** "Shrink to 2 neurons and watch it fail" (sections 10.1 and 16.4), fresh tracks every generation (section 24), and the old schedule.
   Done when: the project document matches reality.

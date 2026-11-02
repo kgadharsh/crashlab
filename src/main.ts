@@ -10,6 +10,7 @@ import { drawNetwork, hitTest, hiddenName, sameEdge, INPUT_LABELS, OUTPUT_LABELS
 import { blindBrain, cloneBrain } from './editor'
 import { findMoment, runNeuronLab, NEURON } from './neuronMission'
 import { pickRounds, runReadGame } from './readBrain'
+import { traceNeuron, type HeatPoint } from './roadMap'
 import {
   type Car,
   type Input,
@@ -43,7 +44,7 @@ stepList.innerHTML = STEP_NAMES.map((name, i) => '<li><b>' + (i + 1) + '</b><spa
 const missionBar = document.createElement('div')
 missionBar.className = 'panel mission'
 rail.appendChild(missionBar)
-type MissionStage = 'm1' | 'm1done' | 'neuron' | 'neurondone' | 'read' | 'readdone' | 'm2' | 'm2done' | 'm3' | 'm3done'
+type MissionStage = 'm1' | 'm1done' | 'neuron' | 'neurondone' | 'read' | 'readdone' | 'detect' | 'detectdone' | 'm2' | 'm2done' | 'm3' | 'm3done'
 let missionStage: MissionStage = 'm1'
 let lastMissionHtml = ''
 function setMissionHtml(html: string) {
@@ -449,6 +450,23 @@ function paintTrack(): HTMLCanvasElement {
 }
 const trackLayer = paintTrack()
 
+// While a hidden neuron is selected, the road shows where it fires on a lap
+let heat: { brain: Brain; neuron: number; points: HeatPoint[] } | null = null
+function drawHeat() {
+  const frozen = missionStage === 'neuron' || missionStage === 'read'
+  if (swarm || frozen || selection?.kind !== 'node' || selection.layer !== 'hidden') return
+  const neuron = selection.index
+  if (!heat || heat.brain !== brain || heat.neuron !== neuron) heat = { brain, neuron, points: traceNeuron(brain, neuron) }
+  for (const p of heat.points) {
+    ctx.fillStyle = p.value >= 0 ? C.positive : C.negative
+    ctx.globalAlpha = Math.abs(p.value) * 0.9
+    ctx.beginPath()
+    ctx.arc(p.x, p.y, 7, 0, Math.PI * 2)
+    ctx.fill()
+  }
+  ctx.globalAlpha = 1
+}
+
 function drawPrediction(path: { points: Point[]; crashed: boolean }) {
   ctx.strokeStyle = path.crashed ? C.negative : C.accent
   ctx.lineWidth = 3
@@ -515,6 +533,7 @@ function draw() {
     ctx.fill()
   }
 
+  drawHeat()
   if (selection && brainOn && canEdit() && !paused) {
     if (frame++ % 8 === 0) predicted = predictPath(car, brain)
   } else if (canEdit()) predicted = null
@@ -1218,7 +1237,7 @@ const neuronPanel = document.createElement('div')
 neuronPanel.className = 'panel neuron'
 rail.appendChild(neuronPanel)
 
-const STAGE_STEP: Record<MissionStage, number> = { m1: 0, m1done: 0, neuron: 1, neurondone: 1, read: 1, readdone: 1, m2: 2, m2done: 2, m3: 3, m3done: 3 }
+const STAGE_STEP: Record<MissionStage, number> = { m1: 0, m1done: 0, neuron: 1, neurondone: 1, read: 1, readdone: 1, detect: 2, detectdone: 2, m2: 2, m2done: 2, m3: 3, m3done: 3 }
 
 // ---------- EDITING THE NETWORK ----------
 const THREE_EDGES: Edge[] = [
@@ -1243,6 +1262,7 @@ function changeBrain(fn: (b: Brain) => void) {
     edited = true
   }
   fn(workingBrain)
+  heat = null
   brain = blinded.some(Boolean) ? blindBrain(workingBrain, blinded) : workingBrain
 }
 
@@ -1262,6 +1282,27 @@ function setEdge(e: Edge, value: number) {
 function select(s: Selection) {
   selection = s
   renderEditor()
+  if (missionStage === 'detect') showDetector()
+}
+
+// The road detector step: three neurons, three things they notice
+const NOTICES = [
+  'It fires blue when the right side is more open, and red when the left is.',
+  'It fires blue when a wall is close ahead, and red while the road ahead is clear.',
+  'It fires harder the faster the car goes.',
+]
+const seenNeurons = new Set<number>()
+function showDetector() {
+  const current = selection?.kind === 'node' && selection.layer === 'hidden' ? selection.index : -1
+  if (current >= 0 && current < NOTICES.length) seenNeurons.add(current)
+  neuronPanel.innerHTML =
+    '<p class="goal">Pick a neuron and see where it fires on the road.</p>' +
+    '<div class="actions">' + NOTICES.map((_, i) => '<button class="btn' + (i === current ? ' primary' : '') + '" data-neuron="' + i + '">Neuron ' + (i + 1) + '</button>').join('') + '</div>' +
+    '<p class="note">' + (current >= 0 ? NOTICES[current] ?? 'This neuron is unused, so it does nothing.' : 'Blue fires, red pushes against, faint does nothing.') + '</p>'
+  neuronPanel.querySelectorAll('button').forEach((b) =>
+    b.addEventListener('click', () => select({ kind: 'node', layer: 'hidden', index: Number(b.dataset.neuron) })),
+  )
+  if (seenNeurons.size === NOTICES.length) setStage('detectdone')
 }
 
 function weightRow(label: string, value: number, onInput: (v: number) => void): HTMLElement {
@@ -1359,7 +1400,7 @@ function applyStageVisibility() {
   graphCanvas.style.display = sandbox ? 'block' : 'none'
   m2Panel.style.display = missionStage === 'm2' || missionStage === 'm2done' ? 'block' : 'none'
   const frozen = missionStage === 'neuron' || missionStage === 'read'
-  neuronPanel.style.display = frozen ? 'block' : 'none'
+  neuronPanel.style.display = frozen || missionStage === 'detect' || missionStage === 'detectdone' ? 'block' : 'none'
   pauseRow.style.display = frozen ? 'none' : 'flex'
   renderEditor()
   pad.style.display = frozen ? 'none' : ''
@@ -1425,6 +1466,13 @@ const missions = {
       },
     )
   },
+  startDetect() {
+    seenNeurons.clear()
+    selection = null
+    setStage('detect')
+    watch(starterBrain(), '')
+    showDetector()
+  },
   start2() {
     selection = null
     setStage('m2')
@@ -1472,7 +1520,15 @@ function missionHtml(): string {
       return card(
         readScore + ' of 5 correct',
         (readScore >= 4 ? 'You can read this neuron without seeing a single number.' : 'The side with longer rays wins. Try watching the rays as the car drives.'),
-        missionButton('start2', 'Next: set the weights') + missionButton('startRead', 'Play again', false),
+        missionButton('startDetect', 'Next: what neurons notice') + missionButton('startRead', 'Play again', false),
+      )
+    case 'detect':
+      return card('What neurons notice', 'Each neuron watches for one thing. The road shows where it fires on a lap.')
+    case 'detectdone':
+      return card(
+        'Neurons are detectors',
+        'Nobody needs to explain these to the car. Each one is only weights, and the weights decide what it notices.',
+        missionButton('start2', 'Next: set the weights'),
       )
     case 'm2':
       return card('Set three weights', (touchScreen ? 'Tap a neuron with a dashed connection and set its weight' : 'Click a dashed connection and set its weight, or drag it up and down,') + ' until the car laps by itself. The line shows where it will go.<br>' + progress())
