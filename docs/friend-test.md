@@ -23,36 +23,36 @@ A pilot for Chapters 1 and 2 (Drive, Neuron, Read the brain, What neurons notice
 Give the same five questions before and after. Do not show the answers.
 
 **1. What does a neuron do with its inputs?**
-- A. Stores them for later
-- B. Multiplies each by a weight, adds them up, and squashes the result
-- C. Picks the largest one
-- D. Sends them on unchanged
+- A. Picks the strongest input and passes only that one on
+- B. Averages all its inputs equally and passes on the result
+- C. Weighs each input, adds them up, and squeezes the total
+- D. Compares its inputs to a stored example and picks the closest
 
-**2. A weight of 0 on a connection means:**
-- A. The neuron is broken
-- B. That input gets stronger
-- C. The neuron ignores that input
-- D. The output is always 0
+**2. The weight between an input and a neuron is set to 0. What happens?**
+- A. That input stops affecting that neuron
+- B. That neuron's output becomes 0
+- C. That input now pushes the neuron down
+- D. That input now counts as a medium value
 
-**3. What decides what a neuron "notices"?**
-- A. Its weights
-- B. Its name
-- C. The colour of the track
-- D. Nothing, it is random each moment
+**3. Two neurons receive the same six inputs, but they fire at different moments. Why?**
+- A. They sit at different heights in the layer
+- B. Their weights are different
+- C. One of them runs slightly later than the other
+- D. Each remembers different moments from earlier laps
 
-**4. A car's right-side sensors stop working, and its brain treats that side as wide open. What is most likely?**
-- A. It drives better
-- B. Nothing changes
-- C. It crashes because it cannot see that wall
-- D. It grows new sensors
+**4. A car's two right-side rays are blinded, so they always report "nothing there". It was steering toward the side that looks more open. What is most likely?**
+- A. It steers right and hits the wall
+- B. It steers left to stay away from the blind side
+- C. It stops, because two inputs are missing
+- D. It drives as before, because the other rays cover for them
 
-**5. A bank's model decides who gets a loan, but it is never given anyone's income. What follows?** (not about cars)
-- A. It will work out income perfectly anyway
-- B. It cannot use income, because it only knows its inputs
-- C. It will refuse every loan
-- D. It will ask the applicant
+**5. A bank's model decides who gets a loan, but it is never given anyone's income. Which is true?** (not about cars)
+- A. Enough training will let it work out the exact income
+- B. It can only use its inputs, so income can only matter through clues in them
+- C. Adding more hidden neurons will supply the missing income
+- D. Training for longer will add income as a new input
 
-**Answers (keep hidden):** 1 B, 2 C, 3 A, 4 C, 5 B.
+**Answers (keep hidden):** 1 C, 2 A, 3 B, 4 A, 5 B.
 
 ## Afterwards
 

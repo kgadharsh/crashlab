@@ -1242,7 +1242,7 @@ const neuronPanel = document.createElement('div')
 neuronPanel.className = 'panel neuron'
 rail.appendChild(neuronPanel)
 
-const STAGE_STEP: Record<MissionStage, number> = { m1: 0, m1done: 0, neuron: 1, neurondone: 1, read: 1, readdone: 1, detect: 2, detectdone: 2, m2: 2, m2done: 2, m3: 3, m3done: 3 }
+const STAGE_STEP: Record<MissionStage, number> = { m1: 0, m1done: 0, neuron: 1, neurondone: 1, detect: 1, detectdone: 1, read: 1, readdone: 1, m2: 2, m2done: 2, m3: 3, m3done: 3 }
 
 // ---------- EDITING THE NETWORK ----------
 const THREE_EDGES: Edge[] = [
@@ -1531,7 +1531,7 @@ function missionHtml(): string {
       return card(
         'That is all a neuron does',
         'Multiply, add, squash. This car has 7 neurons, and large networks have billions.',
-        missionButton('startRead', 'Next: read the brain'),
+        missionButton('startDetect', 'Next: what neurons notice'),
       )
     case 'read':
       return card('Read the brain', 'Look at the rays and predict what the network will do.')
@@ -1539,7 +1539,7 @@ function missionHtml(): string {
       return card(
         readScore + ' of ' + readTotal + ' correct',
         (readScore >= readTotal - 1 ? 'You can read this brain without seeing a single number.' : 'Rays and speed decide everything. Try watching them as the car drives.'),
-        missionButton('startDetect', 'Next: what neurons notice') + missionButton('startRead', 'Play again', false),
+        missionButton('start2', 'Next: set the weights') + missionButton('startRead', 'Play again', false),
       )
     case 'detect':
       return card('What neurons notice', 'Each neuron watches for one thing. The road shows where it fires on a lap.')
@@ -1547,7 +1547,7 @@ function missionHtml(): string {
       return card(
         'Neurons are detectors',
         'Nobody needs to explain these to the car. Each one is only weights, and the weights decide what it notices.',
-        missionButton('start2', 'Next: set the weights'),
+        missionButton('startRead', 'Next: read the brain'),
       )
     case 'm2':
       return card('Set three weights', 'Move the sliders until the car laps by itself. The line shows where it will go. Negative throttle brakes.<br>' + progress())
