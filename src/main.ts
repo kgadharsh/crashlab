@@ -8,6 +8,7 @@ import { PRETRAINED_GENOME } from './pretrained'
 import { prepareHiddenTracks, testOnHiddenTracks, hiddenVerdict, HIDDEN_COUNT, type BrainOrigin } from './hidden'
 import { drawNetwork, hitTest, type Selection } from './netview'
 import { findMoment, runNeuronLab, NEURON } from './neuronMission'
+import { pickRounds, runReadGame } from './readBrain'
 import {
   type Car,
   type Input,
@@ -41,7 +42,7 @@ stepList.innerHTML = STEP_NAMES.map((name, i) => '<li><b>' + (i + 1) + '</b><spa
 const missionBar = document.createElement('div')
 missionBar.className = 'panel mission'
 rail.appendChild(missionBar)
-type MissionStage = 'm1' | 'm1done' | 'neuron' | 'neurondone' | 'm2' | 'm2done' | 'm3' | 'm3done'
+type MissionStage = 'm1' | 'm1done' | 'neuron' | 'neurondone' | 'read' | 'readdone' | 'm2' | 'm2done' | 'm3' | 'm3done'
 let missionStage: MissionStage = 'm1'
 let lastMissionHtml = ''
 function setMissionHtml(html: string) {
@@ -139,7 +140,7 @@ const keys: Record<string, boolean> = {}
 window.addEventListener('keydown', (e) => {
   keys[e.key] = true
   if (e.key.startsWith('Arrow')) e.preventDefault()
-  if (e.key === ' ' && missionStage !== 'neuron') {
+  if (e.key === ' ' && missionStage !== 'neuron' && missionStage !== 'read') {
     e.preventDefault()
     setPaused(!paused)
   }
@@ -558,6 +559,14 @@ function draw() {
     brainOn && mode === 'live' ? 'The brain (driving)' : 'The brain (not driving: only what it would do)',
     selection,
   )
+  if (hideAnswer) {
+    netCtx.fillStyle = C.ground
+    netCtx.fillRect(165, 60, 255, 355)
+    netCtx.fillStyle = C.muted
+    netCtx.font = '14px sans-serif'
+    netCtx.textAlign = 'center'
+    netCtx.fillText('Hidden until you answer', 292, 240)
+  }
 }
 
 
@@ -1086,6 +1095,8 @@ function describe(sc: Score): string {
 
 let m3Score: Score | null = null
 let m2Score: Score | null = null
+let readScore = 0
+let hideAnswer = false // the game covers the network's decision until the player guesses
 
 // Mission 2's brain: the parts that look at the road are pre-wired; you set three connections
 const m2 = { steer: 0, wall: 0, speed: 0 }
@@ -1163,7 +1174,7 @@ const neuronPanel = document.createElement('div')
 neuronPanel.className = 'panel neuron'
 rail.appendChild(neuronPanel)
 
-const STAGE_STEP: Record<MissionStage, number> = { m1: 0, m1done: 0, neuron: 1, neurondone: 1, m2: 2, m2done: 2, m3: 3, m3done: 3 }
+const STAGE_STEP: Record<MissionStage, number> = { m1: 0, m1done: 0, neuron: 1, neurondone: 1, read: 1, readdone: 1, m2: 2, m2done: 2, m3: 3, m3done: 3 }
 
 function applyStageVisibility() {
   const sandbox = missionStage === 'm3' || missionStage === 'm3done'
@@ -1171,8 +1182,10 @@ function applyStageVisibility() {
   if (!sandbox) hiddenPanel.style.display = 'none'
   graphCanvas.style.display = sandbox ? 'block' : 'none'
   m2Panel.style.display = missionStage === 'm2' || missionStage === 'm2done' ? 'block' : 'none'
-  neuronPanel.style.display = missionStage === 'neuron' ? 'block' : 'none'
-  pauseRow.style.display = missionStage === 'neuron' ? 'none' : 'flex'
+  const frozen = missionStage === 'neuron' || missionStage === 'read'
+  neuronPanel.style.display = frozen ? 'block' : 'none'
+  pauseRow.style.display = frozen ? 'none' : 'flex'
+  pad.style.display = frozen ? 'none' : ''
   document.body.classList.toggle('sandbox', sandbox)
   const current = STAGE_STEP[missionStage]
   ;[...stepList.children].forEach((li, i) => {
@@ -1208,6 +1221,32 @@ const missions = {
       message = 'The car uses that same sum at every moment of the lap.'
       setStage('neurondone')
     })
+  },
+  startRead() {
+    selection = null
+    setStage('read')
+    runReadGame(
+      neuronPanel,
+      pickRounds(),
+      (round) => {
+        watch(round.brain, 'Frozen mid-lap.')
+        car = round.car
+        predicted = null
+        hideAnswer = true
+        setPaused(true)
+      },
+      (round) => {
+        hideAnswer = false
+        predicted = predictPath(round.car, round.brain)
+      },
+      (score) => {
+        readScore = score
+        predicted = null
+        setPaused(false)
+        message = ''
+        setStage('readdone')
+      },
+    )
   },
   start2() {
     selection = null
@@ -1248,7 +1287,15 @@ function missionHtml(): string {
       return card(
         'That is all a neuron does',
         'Multiply, add, squash. This car has 7 neurons, and large networks have billions.',
-        missionButton('start2', 'Next: set the weights'),
+        missionButton('startRead', 'Next: read the brain'),
+      )
+    case 'read':
+      return card('Read the brain', 'Look at the rays and predict what the network will do.')
+    case 'readdone':
+      return card(
+        readScore + ' of 5 correct',
+        (readScore >= 4 ? 'You can read this neuron without seeing a single number.' : 'The side with longer rays wins. Try watching the rays as the car drives.'),
+        missionButton('start2', 'Next: set the weights') + missionButton('startRead', 'Play again', false),
       )
     case 'm2':
       return card('Set three weights', 'Move the sliders until the car drives a lap by itself.<br>' + progress())

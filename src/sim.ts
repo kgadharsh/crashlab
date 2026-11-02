@@ -191,6 +191,13 @@ export function runBrain(brain: Brain, track: Track = DEFAULT_TRACK, maxSteps: n
   }
 }
 
+// A copy of the car turned to face another way, with its rays updated to match
+export function faceAngle(car: Car, angle: number): Car {
+  const copy: Car = { ...car, angle }
+  updateRays(copy)
+  return copy
+}
+
 // Where a brain would take this car next, run on a copy so the real car does not move.
 export function predictPath(car: Car, brain: Brain, steps = 150): { points: Point[]; crashed: boolean } {
   const ghost: Car = { ...car, rays: [...car.rays] }
