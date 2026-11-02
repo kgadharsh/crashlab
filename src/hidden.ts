@@ -44,10 +44,17 @@ export async function testOnHiddenTracks(brain: Brain): Promise<HiddenResult> {
   }
 }
 
+// Where the brain being tested came from. Only an evolved brain can be said to have learned.
+export type BrainOrigin = 'learned' | 'handwritten' | 'unknown'
+
 // One plain-words reading of the result
-export function hiddenVerdict(r: HiddenResult): string {
+export function hiddenVerdict(r: HiddenResult, origin: BrainOrigin): string {
   const failed = HIDDEN_COUNT - r.count
   if (r.practiceLap === null) return 'This brain cannot even lap the practice track yet.'
+  if (origin === 'handwritten') {
+    return 'Nothing was trained here: a person wrote this brain by hand, so this score shows how well those rules fit these tracks, not learning.'
+  }
+  if (origin === 'unknown') return 'It lapped ' + r.count + ' of ' + HIDDEN_COUNT + ' tracks it has never driven. This brain came from a file, so it may not have been trained.'
   if (r.count >= 18) return 'It learned to drive, not just one track: it laps nearly every track it has never seen.'
   if (r.count >= 12) return 'Mostly good, but ' + failed + ' unseen tracks beat it. Some shapes were not covered by the practice track.'
   return (

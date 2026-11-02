@@ -4,7 +4,7 @@ import type { History } from './train'
 import { genomeToBrain, brainToGenome } from './genome'
 import { brainToJson, brainFromJson } from './brainFile'
 import { PRETRAINED_GENOME } from './pretrained'
-import { prepareHiddenTracks, testOnHiddenTracks, hiddenVerdict, HIDDEN_COUNT } from './hidden'
+import { prepareHiddenTracks, testOnHiddenTracks, hiddenVerdict, HIDDEN_COUNT, type BrainOrigin } from './hidden'
 import { drawNetwork } from './netview'
 import {
   type Car,
@@ -593,7 +593,9 @@ makeButton('Test on ' + HIDDEN_COUNT + ' hidden tracks', async () => {
   hiddenBusy = true
   hiddenPanel.style.display = 'block'
   hiddenPanel.textContent = 'Testing the brain on ' + HIDDEN_COUNT + ' tracks it has never seen...'
-  const r = await testOnHiddenTracks(brain)
+  const tested = brain
+  const origin: BrainOrigin = tested !== trained ? 'handwritten' : trainedSource === 'file' ? 'unknown' : 'learned'
+  const r = await testOnHiddenTracks(tested)
   const dots = r.finished
     .map((ok, i) => '<span title="track ' + (i + 1) + (ok ? ': lapped' : ': failed') + '" style="display:inline-block;width:16px;height:16px;margin:2px;border-radius:50%;background:' + (ok ? '#2a9d4b' : '#d33') + '"></span>')
     .join('')
@@ -601,7 +603,7 @@ makeButton('Test on ' + HIDDEN_COUNT + ' hidden tracks', async () => {
     '<b>Hidden-track test: ' + r.count + ' of ' + HIDDEN_COUNT + ' tracks lapped</b>' +
     (r.avgLap !== null ? ' (average lap ' + r.avgLap.toFixed(1) + ' s)' : '') +
     '. Practice track: ' + (r.practiceLap !== null ? 'lapped in ' + r.practiceLap.toFixed(1) + ' s' : 'not lapped') + '.<br>' +
-    dots + '<br>' + hiddenVerdict(r) + ' <span style="color:#666">(green = lapped, red = crashed or stuck)</span>'
+    dots + '<br>' + hiddenVerdict(r, origin) + ' <span style="color:#666">(green = lapped, red = crashed or stuck)</span>'
   hiddenBusy = false
 })
 void prepareHiddenTracks() // build the 20 tracks quietly in the background
