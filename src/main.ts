@@ -1634,7 +1634,10 @@ function missionHtml(): string {
       return card(
         trainedSource === 'evolved' ? 'Evolution found all 47 weights' : 'This brain drives',
         (trainedSource === 'evolved' ? 'No help needed: it makes ' : (trainedSource === 'pretrained' ? 'Evolved ahead of time: it makes ' : 'Loaded from a file: it makes ')) +
-          (m3Score ? describe(m3Score) : '') + '.' + (m2Score ? '<br>Your 3 weights made ' + describe(m2Score) + '.' : ''),
+          (m3Score ? describe(m3Score) : '') + '.' + (m2Score ? '<br>Your 3 weights made ' + describe(m2Score) + '.' : '') +
+          (trainedSource === 'evolved' && m3Score && m3Score.unseen < 8
+            ? '<br>It learned its practice tracks better than new ones. This is called overfitting. Every run turns out differently, so you can press Train a new brain and compare.'
+            : ''),
       )
   }
 }

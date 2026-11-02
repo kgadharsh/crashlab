@@ -3,7 +3,7 @@ import { createCar, faceAngle, getInputs, predictPath, step, USE_GRIP, type Car 
 
 const TILT = 0.4 // how far the car is turned off its line, so both answers come up
 const HARD_TILT = 1.2 // turned hard at a wall, where some cars cannot recover
-const NEURONS = ['Right is open', 'Wall ahead', 'Going fast']
+const NEURONS = ['Which side is more open', 'A wall ahead', 'Its speed']
 
 export type Round = {
   car: Car
@@ -25,29 +25,29 @@ const round = (m: Moment, question: string, hint: string, options: string[], ans
 const steering: Question = (m) => {
   if (Math.abs(m.hidden[0]) < 0.4) return null
   const right = m.outputs[0] > 0
-  return round(m, 'Which way will the brain steer?', 'Compare the rays on each side of the car.', ['Left', 'Right'], right ? 1 : 0,
-    'The ' + (right ? 'right' : 'left') + ' rays reach further, so the neuron pulls that way.')
+  return round(m, 'The car is paused here. Which way will it turn next?', 'Longer lines mean more open space, and the car turns towards the open side.', ['Left', 'Right'], right ? 1 : 0,
+    'The lines on the ' + (right ? 'right' : 'left') + ' are longer, so the car turns that way.')
 }
 
 const pedal: Question = (m) => {
   if (Math.abs(m.outputs[1]) < 0.3) return null
   const gas = m.outputs[1] > 0
-  return round(m, 'Will the brain press the gas or the brake?', 'Check for anything close ahead, and the speed.', ['Brake', 'Gas'], gas ? 1 : 0,
-    gas ? 'The way ahead is clear enough and the car is not too fast.' : 'Something close ahead or high speed pushes the throttle negative.')
+  return round(m, 'What will the car do next: speed up or brake?', 'A short line ahead or a high speed means brake.', ['Brake', 'Speed up'], gas ? 1 : 0,
+    gas ? 'There is enough space ahead and the car is not going too fast.' : 'Something is close ahead, or the car is going too fast.')
 }
 
 const crash: Question = (m) => {
   const crashed = predictPath(m.car, m.brain).crashed
-  return round(m, 'Will this car crash in the next few seconds?', 'Think about how sharply it would need to turn.', ['No', 'Yes'], crashed ? 1 : 0,
-    crashed ? 'It is pointed too far at the wall to turn away in time.' : 'The brain has room to steer back onto the road.')
+  return round(m, 'The car has been turned to face this way. If it drives on from here, will it crash?', 'Look at where its nose points and how much space its lines show.', ['No, it recovers', 'Yes, it crashes'], crashed ? 1 : 0,
+    crashed ? 'It is pointing too far towards the wall to turn away in time.' : 'It has enough room to steer back onto the road.')
 }
 
 const strongest: Question = (m) => {
   const size = m.hidden.slice(0, NEURONS.length).map(Math.abs)
   const top = size.indexOf(Math.max(...size))
   if (size[top] - [...size].sort((a, b) => b - a)[1] < 0.15) return null
-  return round(m, 'Which neuron is firing hardest right now?', 'Look at the rays and the speed.', NEURONS, top,
-    '"' + NEURONS[top] + '" has the strongest signal at this moment.')
+  return round(m, 'At this moment, what is the car paying the most attention to?', 'Look at the lines and the speed. What stands out most?', NEURONS, top,
+    NEURONS[top] + ' gives the strongest signal at this moment.')
 }
 
 // Real moments from a lap of the starter brain, each turned a little so the answer is clear

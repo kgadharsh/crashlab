@@ -106,7 +106,7 @@ let curveTried = false
 const CHECKS: [string, string[], string][] = [
   ['Which weight makes the car ignore left space?', ['0', '1', '-2'], '0'],
   ['Which weight makes left space count the most?', ['0', '-0.5', '-2'], '-2'],
-  ['What is different between the two cars?', ['Their sensors', 'Only their weights', 'Their speed'], 'Only their weights'],
+  ['What is the difference between the two cars?', ['Their sensors', 'Their weights', 'Their speed'], 'Their weights'],
 ]
 const checkAnswers: Record<number, string> = {}
 
@@ -210,15 +210,15 @@ const steerSum = 4 * n1
 const pedalSum = 1.2 - 1.5 * n2 - 2 * n3
 const PREDICTIONS: { ask: string; options: string[]; answer: string; hint: string; sum: string }[] = [
   { ask: 'Neuron 1 asks: is the right side more open than the left?', options: ['Yes', 'No'], answer: 'No', hint: 'Compare the two sides: the left lines are long and the right lines are short.',
-    sum: '(0.9 × -3) + (0.7 × -3) + (0.2 × 3) + (0.1 × 3) = ' + fmt(sum1, 2) + '. The curve makes it ' + fmt(n1, 2) + ', a firm no.' },
+    sum: 'There is much more space on the left, so the answer is a firm no (' + fmt(n1, 2) + ').' },
   { ask: 'Neuron 2 asks: is a wall close ahead?', options: ['Yes', 'No'], answer: 'Yes', hint: 'Look at the line straight ahead.',
-    sum: '(0.3 × -3) + bias 1.5 = ' + fmt(sum2, 2) + '. The curve makes it ' + fmt(n2, 2) + ', a fairly clear yes.' },
+    sum: 'The line ahead is short, so the answer is a fairly clear yes (' + fmt(n2, 2) + ').' },
   { ask: 'Neuron 3 asks: am I going fast?', options: ['Yes', 'No'], answer: 'Yes', hint: 'The speed is 0.6 out of 1.',
-    sum: '0.6 × 3 = ' + fmt(sum3, 2) + '. The curve makes it ' + fmt(n3, 2) + ', a yes.' },
+    sum: '0.6 is more than halfway to top speed, so the answer is yes (' + fmt(n3, 2) + ').' },
   { ask: 'Steering listens to neuron 1. Which way does the car steer?', options: ['Left', 'Right'], answer: 'Left', hint: 'Neuron 1 said the right side is not more open.',
-    sum: fmt(n1, 2) + ' × 4 = ' + fmt(steerSum, 2) + '. The curve makes it ' + fmt(T(steerSum), 2) + ', full left.' },
-  { ask: 'The pedal listens to neurons 2 and 3. Gas or brake?', options: ['Gas', 'Brake'], answer: 'Brake', hint: 'A wall is close and the car is fast, and both weights are negative.',
-    sum: 'Bias 1.2, then ' + fmt(n2, 2) + ' × -1.5, then ' + fmt(n3, 2) + ' × -2 = ' + fmt(pedalSum, 2) + '. The curve makes it ' + fmt(T(pedalSum), 2) + ', braking.' },
+    sum: 'Neuron 1 said no, and no means turn left. The steering output is ' + fmt(T(steerSum), 2) + ', which is full left.' },
+  { ask: 'The pedal listens to neurons 2 and 3. Gas or brake?', options: ['Gas', 'Brake'], answer: 'Brake', hint: 'A wall is close and the car is fast.',
+    sum: 'A close wall and high speed both push towards the brake. The pedal output is ' + fmt(T(pedalSum), 2) + ', which is braking.' },
 ]
 const predicted: Record<number, string> = {}
 
@@ -246,7 +246,7 @@ const LESSONS: Record<LessonId, { start: string; slides: Slide[] }> = {
       },
       {
         title: 'The car cannot see',
-        body: 'This car has no eyes. It has sensors that measure open space: <b>0</b> means touching a wall and <b>1</b> means wide open. <b>Your job:</b> using only the two numbers, pick a direction. Keep the car away from the walls in all three moments.',
+        body: 'This car has no eyes. It has sensors that measure open space: <b>0</b> means touching a wall and <b>1</b> means wide open. <b>Your job:</b> you decide for the car. In each box, read the two numbers and press <b>Left</b> or <b>Right</b> to choose which way it should turn. Keep it away from the walls in all three moments.',
         render() {
           ctl('<div class="lesson-grid">' + SPACE.map((m, k) => '<div>Left space <b>' + m[0] + '</b><br>Right space <b>' + m[1] + '</b><div id="pick' + k + '"></div><button class="btn" data-k="' + k + '" data-v="Left">Left</button> <button class="btn" data-k="' + k + '" data-v="Right">Right</button></div>').join('') + '</div>')
           onClicks('[data-k]', (b) => (picks[Number(b.dataset.k)] = b.dataset.v!))
@@ -269,7 +269,7 @@ const LESSONS: Record<LessonId, { start: string; slides: Slide[] }> = {
           onClicks('[data-a]', (b) => (coneAnswer = b.dataset.a!))
         },
         update() {
-          if (coneAnswer) $('cone').innerHTML = coneAnswer === 'no' ? reveal('Inputs', 'The numbers a network receives. They are all it knows about the world. What it cannot sense does not exist for it.') : '<p class="bad">Look again. Nothing in the two numbers shows the cone.</p>'
+          if (coneAnswer) $('cone').innerHTML = coneAnswer === 'no' ? '<p class="good">Correct! The car cannot know about the cone.</p>' + reveal('Inputs', 'The numbers a network receives. They are all it knows about the world. What it cannot sense does not exist for it.') : '<p class="bad">Look again. Nothing in the two numbers shows the cone.</p>'
         },
         gate: () => coneAnswer === 'no' || 'Choose the right answer first.',
       },
@@ -284,7 +284,7 @@ const LESSONS: Record<LessonId, { start: string; slides: Slide[] }> = {
     slides: [
       {
         title: 'Turn your thinking into a sum',
-        body: 'You judged the road in your head, but the car can only do arithmetic. Each number gets a <b>multiplier</b>, which decides how much it counts and which way it pulls. Bigger counts more. Negative pulls the other way. Both results are added into one total. <b>Above 0 steers right, below 0 steers left.</b> <b>Your job:</b> left space should pull left and right space should pull right. Get all three moments correct.',
+        body: 'You looked at the two numbers and chose the side with more space. The car cannot think like that. It can only multiply and add, so we give it a recipe:<br><br>1. Multiply the left space by the left slider.<br>2. Multiply the right space by the right slider.<br>3. Add the two results.<br>4. <b>If the answer is above 0, turn right. If it is below 0, turn left.</b><br><br><b>Your job:</b> move the sliders until all three boxes below turn green. A slider can be negative, which pushes the answer below 0.',
         render() {
           ctl(slider('wl', 'Left multiplier', -2, 2, 0.5, leftW) + slider('wr', 'Right multiplier', -2, 2, 0.5, rightW) + '<div class="lesson-grid" id="out"></div>')
           bind('wl', (v) => (leftW = v))
@@ -305,7 +305,7 @@ const LESSONS: Record<LessonId, { start: string; slides: Slide[] }> = {
       },
       {
         title: 'What does a multiplier of 0 do?',
-        body: 'Your rule works. <b>Your job:</b> slide the left multiplier to 0 and see which moment breaks.',
+        body: 'Your recipe works. Now watch what happens when the left slider is 0. Anything multiplied by 0 is 0, so the left space no longer changes the answer at all, however big it is. Only the right side still counts. <b>Your job:</b> slide the left multiplier to 0 and see which box turns red.',
         render() {
           ctl(slider('z', 'Left multiplier', -2, 2, 0.5, zeroTest) + '<div class="lesson-grid" id="out"></div><p id="zero"></p>')
           bind('z', (v) => {
@@ -316,19 +316,19 @@ const LESSONS: Record<LessonId, { start: string; slides: Slide[] }> = {
         update() {
           $('out').innerHTML = SPACE.map((m) => {
             const d = way(zeroTest * m[0] + chosen[1] * m[1])
-            return '<div>Left ' + m[0] + ', right ' + m[1] + '<br><span class="' + (d === m[2] ? 'good' : 'bad') + '">' + d + ', wanted ' + m[2] + '</span></div>'
+            return '<div>(' + m[0] + ' × ' + fmt(zeroTest) + ') + (' + m[1] + ' × ' + fmt(chosen[1]) + ') = <b>' + fmt(zeroTest * m[0] + chosen[1] * m[1], 2) + '</b><br><span class="' + (d === m[2] ? 'good' : 'bad') + '">' + d + ', wanted ' + m[2] + '</span></div>'
           }).join('')
-          $('zero').textContent = zeroTried ? 'At 0, the left number is multiplied away, so the car ignores it.' : 'Slide it all the way to 0.'
+          $('zero').textContent = zeroTried ? 'Look at the first box: there is lots of space on the left, but 0.9 × 0 = 0, so the car ignores it and turns the wrong way. A slider of 0 means "do not care about this number".' : 'Slide it all the way to 0.'
         },
         gate: () => zeroTried || 'Slide the left multiplier to 0 first.',
       },
       {
         title: 'You just set weights',
-        body: 'This is the most important idea in neural networks. The car has no rules written inside it. <b>Everything it knows how to do is stored in its weights.</b> Change the weights and the same car drives differently.',
+        body: 'The sliders you just moved have a proper name: <b>weights</b>. Below are two identical cars, on the same road, getting the same numbers. The only difference is their weights, and one of them crashes. That is why weights matter: <b>everything the car knows how to do is stored in these numbers.</b>',
         render() {
           const m = SPACE[0]
           ctl(
-            reveal('Weights', 'Numbers that decide how much each input matters and which way it pulls. Yours are ' + fmt(chosen[0]) + ' and ' + fmt(chosen[1]) + '.') +
+            reveal('Weights', 'A weight says how much the car should care about a number, and which way that number pushes it. Big means care a lot, 0 means ignore it, and negative means push the other way. Yours are ' + fmt(chosen[0]) + ' and ' + fmt(chosen[1]) + '.') +
               '<div class="lesson-grid"><div><b>Your car</b><br>Weights ' + fmt(chosen[0]) + ' and ' + fmt(chosen[1]) + sideView(m[0], m[1]) + '<span class="good">Steers ' + way(chosen[0] * m[0] + chosen[1] * m[1]) + ', away from the wall</span></div>' +
               '<div><b>Same car, flipped weights</b><br>Weights ' + fmt(-chosen[0]) + ' and ' + fmt(-chosen[1]) + sideView(m[0], m[1]) + '<span class="bad">Steers ' + way(-chosen[0] * m[0] - chosen[1] * m[1]) + ', into the wall</span></div></div>' +
               CHECKS.map((q, k) => '<div class="lesson-question"><b>' + q[0] + '</b><br>' + q[1].map((o) => '<button class="btn" data-c="' + k + '" data-v="' + o + '">' + o + '</button>').join(' ') + ' <span id="check' + k + '"></span></div>').join(''),
@@ -344,7 +344,7 @@ const LESSONS: Record<LessonId, { start: string; slides: Slide[] }> = {
       },
       {
         title: 'A new job: the pedal',
-        body: 'Steering is done. Now use one new number, the <b>space ahead</b>, to control the pedal. <b>Above 0 means gas, below 0 means brake.</b> Space is never negative, and neither is this weight, so the total can never go below 0 and the car can never brake. To fix that, add a <b>starting number</b> to the total. <b>Your job:</b> brake when the space is 0.1 and accelerate when it is 0.9.',
+        body: 'Steering is done. Now for the pedal, using one number: the <b>space ahead</b>. <b>A total above 0 means gas, and below 0 means brake.</b><br><br>There is a problem. Space is never negative, so with only a multiplier the total stays above 0: the car would never brake, even right at a wall. The fix is to add one extra number to the total. A negative number here lowers every total, so small spaces drop below 0.<br><br><b>Your job:</b> move the sliders until the car brakes at 0.1 and accelerates at 0.9.',
         render() {
           ctl('<div id="idea"></div>' + slider('sw', 'Weight on space', 0, 2, 0.5, spaceW) + slider('sb', 'Starting number', -2, 2, 0.1, bias) + '<div class="lesson-grid" id="out"></div>')
           bind('sw', (v) => (spaceW = v))
@@ -356,13 +356,13 @@ const LESSONS: Record<LessonId, { start: string; slides: Slide[] }> = {
             const d = total > 0 ? 'Gas' : total < 0 ? 'Brake' : 'Undecided'
             return '<div>(' + m[0] + ' × ' + fmt(spaceW) + ') + ' + fmt(bias) + ' = <b>' + fmt(total, 2) + '</b><br><span class="' + (d === m[1] ? 'good' : 'bad') + '">' + d + ', wanted ' + m[1] + '</span></div>'
           }).join('')
-          $('idea').innerHTML = pedalWorks() ? reveal('Bias', 'A number added to every total, so the neuron has a starting lean. Yours leans towards braking until there is enough space.') : ''
+          $('idea').innerHTML = pedalWorks() ? reveal('Bias', 'One extra number added to every total. It sets what the car leans towards before it looks at anything. Yours leans towards braking until there is enough space.') : ''
         },
         gate: () => pedalWorks() || 'Make it brake at 0.1 and accelerate at 0.9. Try a negative starting number.',
       },
       {
         title: 'A steering wheel has limits',
-        body: 'Back to steering, with left space 0.2 and right space 0.9. Make both weights stronger: the left becomes negative that amount and the right positive. The total keeps growing, but the wheel can only turn from <b>-1</b> (full left) to <b>+1</b> (full right). <b>Your job:</b> turn up the strength, then switch the curve off and on.',
+        body: 'Totals can get huge, like 14 or 300, but a steering wheel only understands <b>-1</b> (full left) to <b>+1</b> (full right). So we convert any total into that small, easy range. Small totals stay small, big totals become almost +1, and big negative totals become almost -1. It works like a volume bar: past the maximum, it stays at the maximum.<br><br><b>Your job:</b> turn up the strength and watch the wheel stay inside the limit. Then switch the conversion off and see what goes wrong.',
         render() {
           ctl(
             '<div id="idea"></div>' + slider('st', 'Strength of both weights', 1, 40, 1, strength) +
@@ -379,25 +379,25 @@ const LESSONS: Record<LessonId, { start: string; slides: Slide[] }> = {
           const total = strength * 0.7
           const out = curveOn ? T(total) : total
           $('sum').textContent = '(0.2 × -' + strength + ') + (0.9 × ' + strength + ')'
-          $('toggle').textContent = curveOn ? 'Turn the curve off' : 'Turn the curve on'
+          $('toggle').textContent = curveOn ? 'Turn the conversion off' : 'Turn the conversion on'
           $('total').textContent = fmt(total)
           $('wheel').innerHTML = fmt(out, 2) + (out > 1.001 ? ' <span class="bad">not possible</span>' : '')
           let path = ''
           for (let u = -6; u <= 6; u += 0.2) path += (path ? 'L' : 'M') + (320 + u * 45) + ' ' + (70 - T(u) * 55) + ' '
           const dot = Math.min(total, 6)
           $('curve').innerHTML = '<line x1="50" y1="70" x2="590" y2="70" stroke="' + C.wall + '"/><path d="' + path + '" fill="none" stroke="' + C.positive + '" stroke-width="2.5"/><circle cx="' + (320 + dot * 45) + '" cy="' + (70 - T(dot) * 55) + '" r="7" fill="' + C.accent + '"/>'
-          $('idea').innerHTML = curveTried ? reveal('Activation function', 'A curve that turns any total into a limited answer. It is nearly straight in the middle and flat at both ends. This one is called tanh.') : ''
+          $('idea').innerHTML = curveTried ? reveal('Activation function', 'The step that converts any total into an easy range, here -1 to +1. On a graph it makes this S-shaped curve. The one used here is called tanh.') : ''
         },
-        gate: () => curveTried || 'Switch the curve off once to see what it does.',
+        gate: () => curveTried || 'Switch the conversion off once to see what it does.',
       },
       {
         title: 'You just built a neuron',
-        body: 'Here is your steering rule on the moment with left 0.3 and right 0.8. Your weights are what make it ask this question. Different weights would make it ask something else. The name comes loosely from brain cells, but nothing inside it is alive.',
+        body: 'You have now made every part of a neuron yourself. Read the boxes from left to right to follow your steering recipe on one moment. The name comes loosely from brain cells, but nothing inside it is alive.',
         render() {
           const total = chosen[0] * 0.3 + chosen[1] * 0.8
           ctl(
-            reveal('Neuron', 'One small question answered with a number. Yours asks, "Is the right side more open?"') +
-              '<div class="lesson-flow"><div>Inputs<br>0.3, 0.8</div><span>×</span><div>Weights<br>' + fmt(chosen[0]) + ', ' + fmt(chosen[1]) + '</div><span>+</span><div>Bias<br>0.0</div><span>=</span><div>Total<br>' + fmt(total, 2) + '</div><span>→</span><div>Curve<br>' + fmt(T(total), 2) + '</div></div>',
+            reveal('Neuron', 'A tiny calculator: numbers go in, one answer comes out. Your weights make yours answer the question "Is the right side more open?"') +
+              '<div class="lesson-flow"><div>Numbers in<br>0.3, 0.8</div><span>×</span><div>Weights<br>' + fmt(chosen[0]) + ', ' + fmt(chosen[1]) + '</div><span>+</span><div>Bias<br>0.0</div><span>=</span><div>Total<br>' + fmt(total, 2) + '</div><span>→</span><div>Converted<br>' + fmt(T(total), 2) + '</div></div>',
           )
         },
       },
@@ -425,7 +425,7 @@ const LESSONS: Record<LessonId, { start: string; slides: Slide[] }> = {
           $('out').innerHTML =
             '<div><b>Road A: block ahead</b><br>Wanted: swerve' + roadView(true, out) + '<span class="' + (swerves ? 'good' : 'bad') + '">' + (swerves ? 'Misses the block' : 'Hits the block') + '</span></div>' +
             '<div><b>Road B: clear</b><br>Wanted: straight' + roadView(false, out) + '<span class="' + (swerves ? 'bad' : 'good') + '">' + (swerves ? 'Swerves for nothing' : 'Stays straight') + '</span></div>' +
-            '<div><b>The sum, same on both roads</b><br>0.6 × ' + fmt(gapW) + ' = ' + fmt(total, 2) + '<br>Curve: ' + fmt(out, 2) + '<br>' + (swerves ? 'Swerve' : 'Straight') + '</div>'
+            '<div><b>The sum, same on both roads</b><br>0.6 × ' + fmt(gapW) + ' = ' + fmt(total, 2) + '<br>Converted: ' + fmt(out, 2) + '<br>' + (swerves ? 'Swerve' : 'Straight') + '</div>'
           $('lesson').textContent = swerved ? 'The car gets the same number on both roads, so it cannot tell them apart. It needs more inputs.' : ''
         },
         gate: () => swerved || 'Raise the weight until the car swerves on Road A.',
@@ -475,7 +475,7 @@ const LESSONS: Record<LessonId, { start: string; slides: Slide[] }> = {
       },
       {
         title: 'What the extra neurons do',
-        body: 'The two lines are two questions. Neuron A asks, "Is there at least one block?" Neuron B asks, "Are there two blocks?" A final neuron combines them: <b>swerve if A says yes and B says no</b>. Their weights are what make them ask this. The curve matters too: it makes each answer close to yes or no. Without it, everything would merge into one big sum, and you would be back to one line.',
+        body: 'The two lines are really two questions. Neuron A asks, "Is there at least one block?" Neuron B asks, "Are there two blocks?" A final neuron reads both answers: <b>swerve if A says yes and B says no.</b> So three simple neurons solve what one could not. The converting step helps here too, because it turns each answer into a clear yes or no.',
         render() {
           const answer = (c: Case) => [T(6 * c.left + 6 * c.right - 3), T(6 * c.left + 6 * c.right - 9)]
           ctl(
@@ -483,7 +483,7 @@ const LESSONS: Record<LessonId, { start: string; slides: Slide[] }> = {
               '<div class="lesson-grid">' + CASES.map((c) => {
                 const [a, b] = answer(c)
                 return '<div><b>' + c.label + '</b><br>A: ' + (a > 0 ? 'Yes' : 'No') + '<br>B: ' + (b > 0 ? 'Yes' : 'No') + '<br><span class="good">' + (c.want > 0 ? 'Swerve' : c.left ? 'Brake' : 'Keep going') + '</span></div>'
-              }).join('') + '</div><div class="lesson-grid"><div><b>Neuron A</b><br>Each block × 6, bias -3</div><div><b>Neuron B</b><br>Each block × 6, bias -9</div><div><b>Final neuron</b><br>A × 3, B × -3, bias -3</div></div>',
+              }).join('') + '</div><div class="lesson-grid"><div><b>Neuron A</b><br>Says yes if it sees one block or more</div><div><b>Neuron B</b><br>Says yes only if it sees both blocks</div><div><b>Final neuron</b><br>Swerves only when A says yes and B says no</div></div>',
           )
         },
       },
@@ -501,17 +501,17 @@ const LESSONS: Record<LessonId, { start: string; slides: Slide[] }> = {
     slides: [
       {
         title: 'Meet the real car',
-        body: 'The real car has the same parts with more of them: <b>6 inputs</b> (five sensors and speed), <b>5 hidden neurons</b>, and <b>2 outputs</b>. Its starter network was written by hand and uses three of the five hidden neurons. Read the weights below: they are what make each neuron ask its question.',
+        body: 'The real car has the same parts, just more of them: <b>6 inputs</b> (five sensors and its speed), <b>5 hidden neurons</b>, and <b>2 outputs</b>. Its starter brain was written by hand and uses three hidden neurons. Here is what its weights make each part do.',
         render() {
           ctl(
             reveal('Outputs', 'The final neurons, whose answers become actions: here, steering and the pedal.') +
-              '<div class="lesson-grid"><div><b>Neuron 1: is the right more open?</b><br>Left sensors × -3, right sensors × 3</div><div><b>Neuron 2: is a wall close ahead?</b><br>Ahead sensor × -3, bias 1.5</div><div><b>Neuron 3: am I going fast?</b><br>Speed × 3</div><div><b>Steering output</b><br>Neuron 1 × 4</div><div><b>Pedal output</b><br>Neuron 2 × -1.5, neuron 3 × -2, bias 1.2</div></div>',
+              '<div class="lesson-grid"><div><b>Neuron 1: is the right more open?</b><br>Compares the left sensors with the right ones</div><div><b>Neuron 2: is a wall close ahead?</b><br>Says yes when the sensor ahead is short</div><div><b>Neuron 3: am I going fast?</b><br>Says yes when the speed is high</div><div><b>Steering output</b><br>Follows neuron 1: yes turns right, no turns left</div><div><b>Pedal output</b><br>Wants gas, but a close wall or high speed pushes it to brake</div></div>',
           )
         },
       },
       {
         title: 'Predict the car',
-        body: 'This is one frozen moment. The lines show the five sensors, and a longer line means more open space. <b>Your job:</b> use the picture to answer each question. Guessing wrong is fine, because each answer shows the sum behind it.',
+        body: 'This is one frozen moment. The lines show the five sensors, and a longer line means more open space. <b>Your job:</b> use the picture to answer each question. Guessing wrong is fine, because each answer explains itself.',
         render() {
           ctl(carMoment() + '<div id="predictions"></div>')
         },
