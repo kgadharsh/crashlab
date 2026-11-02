@@ -400,7 +400,7 @@ function draw() {
     brain,
     inputs,
     think(brain, inputs),
-    brainOn ? 'The brain (driving)' : 'The brain (watching you)',
+    brainOn && mode === 'live' ? 'The brain (driving)' : 'The brain (not driving: only what it would do)',
   )
 }
 
