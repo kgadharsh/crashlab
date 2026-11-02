@@ -15,7 +15,7 @@ Severity: **[S1]** blocks the teaching goal, **[S2]** a real bug or misleading r
   Done when: the panel shows what is really driving, or plainly says it is only suggesting.
 - [x] **F04 [S2] Mission 2's "That was easy" is untrue.** Its old answer (3, 1.5, 0.8) now reaches 45% of a lap. Only 132 of 648 positive-steering settings lap, and the ones tried take 14.7 to 19.4 s.
   Done when: the wording is honest. The real fix is F13.
-- [ ] **F05 [S3] Developer text on screen.** `mode: live`, `recorded steps`, raw checkpoint counts and "R = replay" are all visible, and those keys do not exist on a phone.
+- [x] **F05 [S3] Developer text on screen.** `mode: live`, `recorded steps`, raw checkpoint counts and "R = replay" are all visible, and those keys do not exist on a phone.
   Done when: players see only what the current mission needs.
 - [ ] **F06 [S3] Wrong or missing identity.** The page title is "crashlab", the project has no chosen name, and there is no meta description.
   Done when: a name is chosen and used everywhere.

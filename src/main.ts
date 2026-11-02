@@ -82,13 +82,16 @@ let recording: Input[] = []
 let mode: 'live' | 'replay' = 'live'
 let replayIndex = 0
 let savedEnd = { x: 0, y: 0, angle: 0, speed: 0, crashes: 0, passed: 0, best: 0 }
-let message = 'Arrows = drive.  B = brain drives.  R = replay.  Enter = new recording.'
+let message = ''
 
 let showCheckpoints = false // press C to show the invisible checkpoints the score is built on
+let debug = false // press D for the developer readouts and keys (B, R, Enter, C)
 const keys: Record<string, boolean> = {}
 window.addEventListener('keydown', (e) => {
   keys[e.key] = true
   if (e.key.startsWith('Arrow')) e.preventDefault()
+  if (e.key === 'd' || e.key === 'D') debug = !debug
+  if (!debug) return
   if (e.key === 'r' || e.key === 'R') startReplay()
   if (e.key === 'Enter') startFreshRecording()
   if (e.key === 'b' || e.key === 'B') brainOn = !brainOn
@@ -351,6 +354,7 @@ function draw() {
   } else {
   ctx.textAlign = 'left'
   ctx.textBaseline = 'alphabetic'
+  if (debug) {
   ctx.fillText('mode: ' + mode + '   driver: ' + (brainOn ? 'BRAIN' : 'you'), 10, 24)
   ctx.fillText('crashes: ' + crashes, 10, 46)
   ctx.fillText('recorded steps: ' + recording.length, 10, 68)
@@ -369,12 +373,13 @@ function draw() {
     10,
     112,
   )
+  }
   ctx.fillText(message, 10, 490)
   }
 
   // Mission text, and (when you drive) what you are doing expressed as numbers
   setMissionHtml(missionHtml())
-  if (!brainOn && mode === 'live' && !swarm) {
+  if (!brainOn && mode === 'live' && !swarm && (missionStage === 'm1' || missionStage === 'm1done')) {
     const now = readKeys()
     const steer = now.steer < 0 ? 'left' : now.steer > 0 ? 'right' : 'straight'
     const gas = now.throttle > 0 ? 'gas' : now.throttle < 0 ? 'brake' : 'coast'
@@ -444,7 +449,7 @@ type Run = { seed: number; history: History; shown: number; watching: boolean; f
 let run: Run | null = null
 
 function showGraph() {
-  if (run) drawGraph(run.history.slice(0, run.shown), run.seed, GENERATIONS)
+  if (run) drawGraph(run.history.slice(0, run.shown), GENERATIONS)
 }
 
 function stopTraining(text: string) {
@@ -464,10 +469,9 @@ function finishTraining(f: Finish) {
   trained = genomeToBrain(f.genome)
   trainedSource = 'evolved'
   rememberBrain(f.genome)
-  if (f.generations < GENERATIONS) drawGraph(r.history, r.seed, f.generations) // stopped early: fit the graph
-  const used = r.seed
+  if (f.generations < GENERATIONS) drawGraph(r.history, f.generations) // stopped early: fit the graph
   stopTraining('')
-  watch(trained, 'Trained (seed ' + used + '): ' + f.checkpoints + ' checkpoints. Watch it drive!')
+  watch(trained, 'Training finished. Watch it drive!')
   seed++
 }
 
@@ -481,7 +485,7 @@ const trainButton = makeButton('Train a new brain', () => {
   showGraph()
   trainButton.textContent = 'Stop training'
   skipButton.style.display = watchAll ? '' : 'none'
-  message = 'Training (seed ' + run.seed + ')...'
+  message = 'Training...'
 
   worker = new Worker(new URL('./trainWorker.ts', import.meta.url), { type: 'module' })
   worker.onmessage = (event: MessageEvent) => {
@@ -494,7 +498,7 @@ const trainButton = makeButton('Train a new brain', () => {
         run.shown = run.history.length
         showGraph()
       }
-      if (!run.watching) message = 'Training (seed ' + run.seed + '): generation ' + (m.generation + 1) + ' of up to ' + GENERATIONS + ', best so far ' + m.checkpoints + ' checkpoints'
+      if (!run.watching) message = 'Training: generation ' + (m.generation + 1) + ' of up to ' + GENERATIONS
     } else if (m.type === 'done') {
       run.finish = { genome: m.genome, checkpoints: m.checkpoints, generations: m.generations }
       if (!run.watching) finishTraining(run.finish)
@@ -637,7 +641,7 @@ function plotSeries(values: number[], color: string, x: (i: number) => number, y
   gctx.stroke()
 }
 
-function drawGraph(history: History | null, seedUsed = 0, totalGenerations = 40) {
+function drawGraph(history: History | null, totalGenerations = 40) {
   const W = graphCanvas.width
   const H = graphCanvas.height
   const left = 52
@@ -681,7 +685,7 @@ function drawGraph(history: History | null, seedUsed = 0, totalGenerations = 40)
   gctx.fillStyle = '#111'
   gctx.font = 'bold 14px sans-serif'
   gctx.fillText(
-    history ? 'Learning curve (seed ' + seedUsed + '): checkpoints collected' : 'Learning curve',
+    history ? 'Learning curve: progress in 20 seconds (20 = one lap)' : 'Learning curve',
     left,
     20,
   )
@@ -752,7 +756,7 @@ function stepSwarm() {
       if (run.watching) {
         run.shown = swarm.gen + 1 // the graph follows what you are watching
         showGraph()
-        message = 'Training (seed ' + run.seed + '): generation ' + (swarm.gen + 1) + ' of up to ' + GENERATIONS + '. Each generation is shown for 10 s of driving.'
+        message = 'Training: generation ' + (swarm.gen + 1) + ' of up to ' + GENERATIONS + '. Each generation is shown for 10 s of driving.'
         if (!run.finish) worker.postMessage({ type: 'next' }) // compute the next one while this plays
       }
     } else if (run.watching && run.finish) {
