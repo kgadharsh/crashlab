@@ -534,7 +534,8 @@ function draw() {
   }
 
   drawHeat()
-  if (selection && brainOn && canEdit() && !paused) {
+  const stageM2 = missionStage === 'm2' || missionStage === 'm2done'
+  if ((selection || stageM2) && brainOn && canEdit() && !paused) {
     if (frame++ % 8 === 0) predicted = predictPath(car, brain)
   } else if (canEdit()) predicted = null
   if (predicted) drawPrediction(predicted)
@@ -1212,7 +1213,8 @@ rail.appendChild(m2Panel)
 const m2Result = document.createElement('div')
 m2Result.style.marginTop = '6px'
 
-m2Panel.innerHTML = '<p class="note">Hidden neuron 1 means "right is open", 2 means "wall ahead", 3 means "going fast". Negative weights on throttle brake the car.</p>'
+const m2Sliders = document.createElement('div')
+m2Panel.appendChild(m2Sliders)
 m2Panel.appendChild(m2Result)
 
 // Re-test the brain whenever a slider moves (several moves in one frame count once)
@@ -1327,9 +1329,32 @@ function weightRow(label: string, value: number, onInput: (v: number) => void): 
   return row
 }
 
+// Mission 3's sliders are always on show. Moving one lights up its connection in the network.
+function renderM2Sliders() {
+  const rows: [string, Edge, number][] = [
+    ['Right is open → steer', THREE_EDGES[0], m2.steer],
+    ['Wall ahead → throttle', THREE_EDGES[1], -m2.wall],
+    ['Going fast → throttle', THREE_EDGES[2], -m2.speed],
+  ]
+  m2Sliders.innerHTML = ''
+  for (const [label, edge, value] of rows) {
+    m2Sliders.appendChild(
+      weightRow(label, value, (v) => {
+        selection = { kind: 'edge', ...edge }
+        setEdge(edge, v)
+      }),
+    )
+  }
+}
+
 // The panel under the network: what the selected thing is, and what can be done to it
 function renderEditor() {
   editor.innerHTML = ''
+  if (missionStage === 'm2' || missionStage === 'm2done') {
+    editor.style.display = 'none'
+    renderM2Sliders()
+    return
+  }
   const show = canEdit() && !swarm && selection !== null
   editor.style.display = show ? 'block' : 'none'
   if (!show || !selection) return
@@ -1349,10 +1374,6 @@ function renderEditor() {
     })
     editor.appendChild(cut)
   } else if (sel.layer === 'input') {
-    if (missionStage === 'm2' || missionStage === 'm2done') {
-      editor.innerHTML = '<p class="note">' + INPUT_LABELS[sel.index] + ' is locked here.</p>'
-      return
-    }
     const off = blinded[sel.index]
     const toggle = document.createElement('button')
     toggle.className = 'btn'
@@ -1364,12 +1385,6 @@ function renderEditor() {
     })
     editor.appendChild(toggle)
   } else if (sel.layer === 'hidden' || sel.layer === 'output') {
-    if (missionStage === 'm2' || missionStage === 'm2done') {
-      THREE_EDGES.filter((e) => (sel.layer === 'hidden' ? e.from === sel.index : e.to === sel.index)).forEach((e) =>
-        editor.appendChild(weightRow(edgeName(e), edgeWeight(e), (v) => setEdge(e, v))),
-      )
-      return
-    }
     const hiddenLayer = sel.layer === 'hidden'
     const count = hiddenLayer ? INPUT_LABELS.length : workingBrain.w1.length
     for (let i = 0; i < count; i++) {
@@ -1531,7 +1546,7 @@ function missionHtml(): string {
         missionButton('start2', 'Next: set the weights'),
       )
     case 'm2':
-      return card('Set three weights', (touchScreen ? 'Tap a neuron with a dashed connection and set its weight' : 'Click a dashed connection and set its weight, or drag it up and down,') + ' until the car laps by itself. The line shows where it will go.<br>' + progress())
+      return card('Set three weights', 'Move the sliders until the car laps by itself. The line shows where it will go. Negative throttle brakes.<br>' + progress())
     case 'm2done':
       return card(
         'It drives itself',
