@@ -116,6 +116,8 @@ canvas {
 .editor .btn { display: block; width: 100%; margin-top: 8px; }
 .editor p { margin: 0; }
 .editor .slider { margin-bottom: 6px; font-size: 13px; }
+.goal.right { color: #3fb56b; }
+.goal.wrong { color: #ff5d5d; }
 .note { color: var(--muted); }
 
 .slider { display: grid; grid-template-columns: minmax(0, 1fr) 44px; gap: 2px 8px; margin-bottom: 10px; align-items: center; }

@@ -53,7 +53,7 @@ export function runReadGame(
       reveal(round)
       const side = round.steersRight ? 'right' : 'left'
       panel.innerHTML =
-        '<p class="goal">' + (correct ? 'Yes: ' : 'Not this time: ') + 'it steers ' + side + '</p>' +
+        '<p class="goal ' + (correct ? 'right' : 'wrong') + '">' + (correct ? 'Correct: ' : 'Wrong: ') + 'it steers ' + side + '</p>' +
         '<p class="note">The ' + side + ' rays reach further, so the neuron pulls that way. The line shows where it goes.</p>' +
         '<div class="actions"><button class="btn primary" id="r-next">' + (index + 1 < rounds.length ? 'Next car' : 'See your score') + '</button></div>'
       panel.querySelector('#r-next')!.addEventListener('click', () => {
