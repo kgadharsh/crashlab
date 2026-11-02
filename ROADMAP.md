@@ -5,6 +5,34 @@ Work top to bottom, one item at a time. Tick an item only when its "done when" i
 
 Severity: **[S1]** blocks the teaching goal, **[S2]** a real bug or misleading result, **[S3]** rough edge, **[S4]** cleanup.
 
+## Build plan: from prototypes to the real app
+
+Decided 2 Nov 2026 after ten chat prototypes. This order replaces the phase order below wherever they differ. The F numbers stay as the record of each flaw. Prototypes were sketches: each one must be rebuilt on the real car physics, and any number it shows must be measured.
+
+### The journey: four chapters in the top bar
+
+| Chapter | Steps | The sentence a user can say back |
+|---|---|---|
+| 1. Inside | Drive, tug-of-war neuron, Read the brain | "A neuron weighs its inputs and decides." |
+| 2. Wiring | Road detector, edit the network, Blind the rays | "Weights decide what it notices, and it only knows what it can sense." |
+| 3. Learning | You are evolution, 100-car training, Downhill, Reward design | "Learning means finding weights, and the score decides what gets learned." |
+| 4. Trust | Memorise vs learn, Hidden layers, Crash detective | "Passing the practice track proves little, and I can explain why it failed." |
+
+### Build order
+
+- [ ] **B1. Tug-of-war and predicted path.** Replaces the neuron table. All six weights plus Reset. The path comes from a copy of the real car simulated ahead. Fixes the rest of F10.
+- [ ] **B2. Read the brain.** A few guessing rounds using real track positions. Also the start of the quiz in F15.
+- [ ] **B3. Edit the network directly.** Drag connections, click rays to blind them, cut connections, link rays on the track to inputs in the panel. Fixes F11, F13 and F14.
+- [ ] **B4. Road detector.** Hover a neuron and the real road lights up. Fixes F24, or record why it was dropped.
+- [ ] **Checkpoint: test Chapters 1 and 2 with 3 to 5 non-ML friends (F15).** Results can reorder everything below.
+- [ ] **B5. You are evolution and Downhill.** Pick-a-parent before the 100-car run, then the slope lesson. Fixes F16.
+- [ ] **B6. Memorise vs learn.** Real brains trained on one track and on five, across at least 10 seeds. Fixes F17 and supports F30.
+- [ ] **B7. Hidden layers.** Fixes F21 and needs F22. Measure two hidden layers on the car (F23).
+- [ ] **B8. Reward design.** Real training with fixed reward terms and never user code. Needs a fast small run. Fixes F27.
+- [ ] **B9. Crash detective.** Starts as chosen crashes with known causes, then grows into automatic diagnosis (F26).
+
+Bias still needs a home, most likely in B1 or the Road detector.
+
 ## Phase 0: Quick fixes (one sitting)
 
 - [ ] **F01 [S2] Deploy not confirmed.** The filename fix is pushed, but no Netlify build from GitHub has been seen working.
@@ -29,7 +57,7 @@ Severity: **[S1]** blocks the teaching goal, **[S2]** a real bug or misleading r
 - [x] **F09 [S1] Nobody can interact with the network.** The panel is display-only.
   Done when: it has click targets, and pausing and stepping the car work.
 - [x] **F10 [S1] The app never shows what a neuron computes.** Weighted sum, bias, tanh and "hidden" are never explained.
-  Done when: a new "inside one neuron" mission walks through ray x weight, the sum, the squash and the output, and the player works one out.
+  Done when: a new "inside one neuron" mission walks through ray x weight, the sum, the squash and the output, and the player drags a real weight to change the decision. Bias is not shown yet, because this neuron's bias is 0.
 - [ ] **F11 [S1] No way to break things.** Blind-a-ray and cut-a-connection do not exist.
   Done when: both work live and visibly change the driving.
 - [ ] **F12 [S2] Numbers do not match.** The yellow line says 106 while the network says 0.53, with no explanation.
@@ -110,7 +138,7 @@ Severity: **[S1]** blocks the teaching goal, **[S2]** a real bug or misleading r
   Done when: a small test suite runs from one command.
 - [ ] **F39 [S3] No README, write-up or demo.**
   Done when: the repo has a README with a GIF, results table and short write-up, including negative results.
-- [ ] **F40 [S4] Polish deferred.** Car sprites and road texture. The page layout and theme were done in F42.
+- [x] **F40 [S4] Plain car and track.** The car is now a drawn top-down race car, and the track has kerbs, a chequered start line and a centre line.
   Done when: done last. An optional 3D view stays a bonus and changes drawing only.
 
 ## Parked on purpose

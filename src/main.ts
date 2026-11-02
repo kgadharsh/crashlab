@@ -7,7 +7,7 @@ import { brainToJson, brainFromJson } from './brainFile'
 import { PRETRAINED_GENOME } from './pretrained'
 import { prepareHiddenTracks, testOnHiddenTracks, hiddenVerdict, HIDDEN_COUNT, type BrainOrigin } from './hidden'
 import { drawNetwork, hitTest, type Selection } from './netview'
-import { findMoment, runNeuronSteps, NEURON } from './neuronMission'
+import { findMoment, runNeuronLab, NEURON } from './neuronMission'
 import {
   type Car,
   type Input,
@@ -109,9 +109,11 @@ stepButton.disabled = true
 
 // ---------- GAME STATE (the simulation itself lives in sim.ts) ----------
 const track = DEFAULT_TRACK // the road being driven and drawn
+const KERB_BEND = 0.075 // bends sharper than this per point get striped kerbs
 const { leftWall, rightWall } = track
 let car: Car = createCar(undefined, USE_GRIP)
 let crashes = 0
+let lastCrash: { x: number; y: number; frames: number } | null = null // fades out after a crash
 let best = 0
 
 let brain: Brain = starterBrain()
@@ -212,6 +214,7 @@ function update(input: Input) {
   }
   if (car.dead) {
     crashes++
+    lastCrash = { x: car.x, y: car.y, frames: 120 }
     car = createCar(undefined, USE_GRIP)
   }
 }
@@ -270,69 +273,143 @@ function tick() {
 }
 
 // ---------- DRAWING ----------
-function tracePath(loop: Point[]) {
-  ctx.moveTo(loop[0].x, loop[0].y)
-  for (let i = 1; i < loop.length; i++) ctx.lineTo(loop[i].x, loop[i].y)
-  ctx.closePath()
+function tracePath(g: CanvasRenderingContext2D, loop: Point[]) {
+  g.moveTo(loop[0].x, loop[0].y)
+  for (let i = 1; i < loop.length; i++) g.lineTo(loop[i].x, loop[i].y)
+  g.closePath()
 }
 
-// Small arrows along the road show which way the lap goes, and a label marks the start line
-function drawDirectionArrows() {
+// How sharply a loop of points turns at point i (radians)
+function bendAt(loop: Point[], i: number): number {
+  const a = loop[(i + loop.length - 1) % loop.length]
+  const b = loop[i]
+  const c = loop[(i + 1) % loop.length]
+  const turn = Math.atan2(c.y - b.y, c.x - b.x) - Math.atan2(b.y - a.y, b.x - a.x)
+  return Math.abs(Math.atan2(Math.sin(turn), Math.cos(turn)))
+}
+
+// Striped kerbs on the tighter bends, a thin edge line everywhere else
+function drawEdge(g: CanvasRenderingContext2D, loop: Point[]) {
+  g.strokeStyle = C.wall
+  g.lineWidth = 2
+  g.beginPath()
+  tracePath(g, loop)
+  g.stroke()
+  const tight = KERB_BEND
+  g.lineWidth = 6
+  g.lineCap = 'butt'
+  loop.forEach((p, i) => {
+    if (bendAt(loop, i) < tight) return
+    const next = loop[(i + 1) % loop.length]
+    const steps = Math.max(1, Math.round(Math.hypot(next.x - p.x, next.y - p.y) / 10))
+    for (let k = 0; k < steps; k++) {
+      g.strokeStyle = (i + k) % 2 === 0 ? '#d8dde3' : '#4a5360'
+      g.beginPath()
+      g.moveTo(p.x + ((next.x - p.x) * k) / steps, p.y + ((next.y - p.y) * k) / steps)
+      g.lineTo(p.x + ((next.x - p.x) * (k + 1)) / steps, p.y + ((next.y - p.y) * (k + 1)) / steps)
+      g.stroke()
+    }
+  })
+}
+
+// Small arrows along the road show which way the lap goes
+function drawDirectionArrows(g: CanvasRenderingContext2D) {
   const c = track.centerline
-  ctx.strokeStyle = 'rgba(255,255,255,0.16)'
-  ctx.lineWidth = 3
-  ctx.lineCap = 'round'
-  ctx.lineJoin = 'round'
+  g.strokeStyle = 'rgba(255,255,255,0.16)'
+  g.lineWidth = 3
+  g.lineCap = 'round'
+  g.lineJoin = 'round'
   for (let i = 5; i < c.length; i += 10) {
     const before = c[(i + c.length - 1) % c.length]
     const after = c[(i + 1) % c.length]
     const a = Math.atan2(after.y - before.y, after.x - before.x)
     const tipX = c[i].x + Math.cos(a) * 7
     const tipY = c[i].y + Math.sin(a) * 7
-    ctx.beginPath()
-    ctx.moveTo(tipX - Math.cos(a - 0.7) * 12, tipY - Math.sin(a - 0.7) * 12)
-    ctx.lineTo(tipX, tipY)
-    ctx.lineTo(tipX - Math.cos(a + 0.7) * 12, tipY - Math.sin(a + 0.7) * 12)
-    ctx.stroke()
+    g.beginPath()
+    g.moveTo(tipX - Math.cos(a - 0.7) * 12, tipY - Math.sin(a - 0.7) * 12)
+    g.lineTo(tipX, tipY)
+    g.lineTo(tipX - Math.cos(a + 0.7) * 12, tipY - Math.sin(a + 0.7) * 12)
+    g.stroke()
   }
+  g.lineCap = 'butt'
+  g.lineJoin = 'miter'
+}
+
+// A chequered start line across the road
+function drawStartLine(g: CanvasRenderingContext2D) {
+  const a = leftWall[0]
+  const b = rightWall[0]
+  const across = Math.hypot(b.x - a.x, b.y - a.y)
+  const SQUARE = 6
+  g.save()
+  g.translate(a.x, a.y)
+  g.rotate(Math.atan2(b.y - a.y, b.x - a.x))
+  for (let row = 0; row < 2; row++) {
+    for (let i = 0; i * SQUARE < across; i++) {
+      g.fillStyle = (i + row) % 2 === 0 ? '#d8dde3' : '#14181e'
+      g.fillRect(i * SQUARE, row * SQUARE - SQUARE, Math.min(SQUARE, across - i * SQUARE), SQUARE)
+    }
+  }
+  g.restore()
+  g.fillStyle = C.muted
+  g.font = '500 12px sans-serif'
+  g.textAlign = 'center'
+  g.textBaseline = 'bottom'
+  g.fillText('START', (a.x + b.x) / 2, a.y - 10)
+}
+
+// The track never changes, so it is painted once and copied to the screen every frame
+function paintTrack(): HTMLCanvasElement {
+  const layer = document.createElement('canvas')
+  layer.width = canvas.width
+  layer.height = canvas.height
+  const g = layer.getContext('2d')!
+  g.fillStyle = C.ground
+  g.fillRect(0, 0, layer.width, layer.height)
+  g.fillStyle = 'rgba(255,255,255,0.05)'
+  for (let x = 20; x < layer.width; x += 40) for (let y = 20; y < layer.height; y += 40) g.fillRect(x, y, 2, 2)
+
+  g.beginPath()
+  tracePath(g, leftWall)
+  tracePath(g, rightWall)
+  g.fillStyle = C.road
+  g.fill('evenodd')
+
+  g.strokeStyle = 'rgba(255,255,255,0.07)'
+  g.lineWidth = 2
+  g.setLineDash([16, 20])
+  g.beginPath()
+  tracePath(g, track.centerline)
+  g.stroke()
+  g.setLineDash([])
+
+  drawEdge(g, leftWall)
+  drawEdge(g, rightWall)
+  drawDirectionArrows(g)
+  drawStartLine(g)
+  return layer
+}
+const trackLayer = paintTrack()
+
+function drawCrash(x: number, y: number) {
+  ctx.lineCap = 'round'
+  ctx.strokeStyle = C.ground
+  ctx.lineWidth = 5
+  ctx.beginPath()
+  ctx.moveTo(x - 5, y - 5)
+  ctx.lineTo(x + 5, y + 5)
+  ctx.moveTo(x + 5, y - 5)
+  ctx.lineTo(x - 5, y + 5)
+  ctx.stroke()
+  ctx.strokeStyle = C.negative
+  ctx.lineWidth = 2.5
+  ctx.stroke()
   ctx.lineCap = 'butt'
-  ctx.lineJoin = 'miter'
-  ctx.fillStyle = C.muted
-  ctx.font = '500 12px sans-serif'
-  ctx.textAlign = 'center'
-  ctx.textBaseline = 'bottom'
-  ctx.fillText('START', (leftWall[0].x + rightWall[0].x) / 2, leftWall[0].y - 4)
-  ctx.textAlign = 'left'
-  ctx.textBaseline = 'alphabetic'
 }
 
 function draw() {
-  ctx.fillStyle = C.ground
-  ctx.fillRect(0, 0, 800, 500)
+  ctx.drawImage(trackLayer, 0, 0)
 
-  ctx.beginPath()
-  tracePath(leftWall)
-  tracePath(rightWall)
-  ctx.fillStyle = C.road
-  ctx.fill('evenodd')
-
-  ctx.strokeStyle = C.wall
-  ctx.lineWidth = 2
-  ctx.beginPath()
-  tracePath(leftWall)
-  ctx.stroke()
-  ctx.beginPath()
-  tracePath(rightWall)
-  ctx.stroke()
-
-  ctx.strokeStyle = C.text
-  ctx.lineWidth = 3
-  ctx.beginPath()
-  ctx.moveTo(leftWall[0].x, leftWall[0].y)
-  ctx.lineTo(rightWall[0].x, rightWall[0].y)
-  ctx.stroke()
-
-  drawDirectionArrows()
   if (showCheckpoints) {
   for (let k = 0; k < CHECKPOINTS; k++) {
     const p = checkpointPos(track, k)
@@ -363,14 +440,13 @@ function draw() {
     ctx.fill()
   }
 
-  ctx.save()
-  ctx.translate(car.x, car.y)
-  ctx.rotate(car.angle)
-  ctx.fillStyle = mode === 'replay' ? C.positive : C.text
-  ctx.fillRect(-15, -8, 30, 16)
-  ctx.fillStyle = C.road
-  ctx.fillRect(8, -6, 6, 12)
-  ctx.restore()
+  drawCarShape(car, 34, 18, mode === 'replay' ? C.positive : C.text)
+  if (lastCrash && lastCrash.frames > 0) {
+    ctx.globalAlpha = Math.min(1, lastCrash.frames / 30)
+    drawCrash(lastCrash.x, lastCrash.y)
+    ctx.globalAlpha = 1
+    lastCrash.frames--
+  }
   }
 
   if (paused) {
@@ -764,6 +840,15 @@ function drawGraph(history: History | null, totalGenerations = 40) {
 
   if (history.length === 0) return
 
+  // a soft fill under the best car's line
+  gctx.fillStyle = 'rgba(242,184,75,0.1)'
+  gctx.beginPath()
+  gctx.moveTo(x(0), bottom)
+  history.forEach((h, i) => gctx.lineTo(x(i), y(h.best)))
+  gctx.lineTo(x(history.length - 1), bottom)
+  gctx.closePath()
+  gctx.fill()
+
   plotSeries(history.map((h) => h.mean), MEAN_COLOR, x, y)
   plotSeries(history.map((h) => h.best), BEST_COLOR, x, y)
 
@@ -872,14 +957,36 @@ function swarmCaption(sw: Swarm): string {
   return crashed.length + ' crashed so far, ' + lasting + ' still driving.' + hotspot
 }
 
+// A top-down race car: tyres, a tapered body, wings front and back, a dark cockpit
 function drawCarShape(c: Car, length: number, width: number, body: string) {
+  const L = length / 2
+  const W = width / 2
+  const tyre = Math.max(2, width * 0.2)
   ctx.save()
   ctx.translate(c.x, c.y)
   ctx.rotate(c.angle)
+  ctx.fillStyle = '#05070a'
+  for (const x of [L * 0.3, -L * 0.8]) {
+    ctx.fillRect(x, -W, L * 0.42, tyre)
+    ctx.fillRect(x, W - tyre, L * 0.42, tyre)
+  }
   ctx.fillStyle = body
-  ctx.fillRect(-length / 2, -width / 2, length, width)
-  ctx.fillStyle = 'rgba(255,255,255,0.9)' // the windscreen marks the front
-  ctx.fillRect(length / 2 - length * 0.35, -width / 2 + 2, length * 0.22, width - 4)
+  ctx.fillRect(L * 0.72, -W * 0.8, L * 0.16, W * 1.6) // front wing
+  ctx.fillRect(-L, -W * 0.85, L * 0.2, W * 1.7) // rear wing
+  ctx.beginPath()
+  ctx.moveTo(L, 0)
+  ctx.lineTo(L * 0.2, -W * 0.34)
+  ctx.lineTo(-L * 0.1, -W * 0.72)
+  ctx.lineTo(-L * 0.85, -W * 0.5)
+  ctx.lineTo(-L * 0.85, W * 0.5)
+  ctx.lineTo(-L * 0.1, W * 0.72)
+  ctx.lineTo(L * 0.2, W * 0.34)
+  ctx.closePath()
+  ctx.fill()
+  ctx.fillStyle = C.ground
+  ctx.beginPath()
+  ctx.ellipse(-L * 0.12, 0, L * 0.24, W * 0.3, 0, 0, Math.PI * 2)
+  ctx.fill()
   ctx.restore()
 }
 
@@ -898,26 +1005,13 @@ function drawSwarm() {
   })
   // a cross marks every crash and stays for the whole generation
   swarm.cars.forEach((c) => {
-    if (!c.dead) return
-    ctx.lineCap = 'round'
-    ctx.strokeStyle = C.ground
-    ctx.lineWidth = 5
-    ctx.beginPath()
-    ctx.moveTo(c.x - 5, c.y - 5)
-    ctx.lineTo(c.x + 5, c.y + 5)
-    ctx.moveTo(c.x + 5, c.y - 5)
-    ctx.lineTo(c.x - 5, c.y + 5)
-    ctx.stroke()
-    ctx.strokeStyle = C.negative
-    ctx.lineWidth = 2.5
-    ctx.stroke()
-    ctx.lineCap = 'butt'
+    if (c.dead) drawCrash(c.x, c.y)
   })
   // cars still driving; the best car of the generation is drawn last, in red, on top
   for (let i = swarm.cars.length - 1; i >= 0; i--) {
     const c = swarm.cars[i]
     if (c.dead) continue
-    drawCarShape(c, i === 0 ? 26 : 20, i === 0 ? 14 : 11, i === 0 ? C.accent : 'rgba(90,162,255,0.8)')
+    drawCarShape(c, i === 0 ? 34 : 26, i === 0 ? 18 : 14, i === 0 ? C.accent : 'rgba(90,162,255,0.8)')
   }
 }
 
@@ -1087,7 +1181,7 @@ const missions = {
     car = moment.car
     setPaused(true)
     selection = { kind: 'node', layer: 'hidden', index: NEURON }
-    runNeuronSteps(neuronPanel, moment, () => {
+    runNeuronLab(neuronPanel, moment, () => {
       setPaused(false)
       message = 'The car uses that same sum at every moment of the lap.'
       setStage('neurondone')
@@ -1106,64 +1200,52 @@ const missions = {
 }
 ;(window as unknown as { missions: typeof missions }).missions = missions
 
+const card = (title: string, body: string, actions = '') =>
+  '<h2>' + title + '</h2><p>' + body + '</p>' + (actions ? '<div class="actions">' + actions + '</div>' : '')
+const missionButton = (call: string, label: string, primary = true) =>
+  '<button class="btn' + (primary ? ' primary' : '') + '" onclick="missions.' + call + '()">' + label + '</button>'
+const progress = () => 'Lap progress: <b>' + Math.round((100 * car.passed) / CHECKPOINTS) + '%</b>'
+
 function missionHtml(): string {
   switch (missionStage) {
     case 'm1':
-      return (
-        '<b>Mission 1 of 4: drive one lap.</b> ' + (touchScreen ? 'Use the buttons under the track: Gas, Brake, and the two steering arrows. ' : 'Arrow keys: up = gas, down = brake, left and right = steer. ') +
-        'Stay off the walls. Lap progress: <b>' + Math.round((100 * car.passed) / CHECKPOINTS) + '%</b>' +
-        (crashes > 0 ? ' &nbsp;·&nbsp; crashes so far: ' + crashes : '')
+      return card(
+        'Drive one lap',
+        (touchScreen ? 'Use the buttons under the track.' : 'Arrow keys: up = gas, down = brake, left and right = steer.') +
+          '<br>' + progress() + (crashes > 0 ? ' · crashes: ' + crashes : ''),
       )
     case 'm1done':
-      return (
-        '<b>Mission 1 complete!</b> One lap in <b>' + lapSeconds.toFixed(1) + ' s</b>' +
-        (lapAttempts > 1 ? ' (attempt ' + lapAttempts + ')' : ' on your first attempt') + '.<br>' +
-        'Look at the line of numbers on the track. While you drove, the car saw <b>6 numbers</b> ' +
-        '(5 ray distances and its speed) and you answered with <b>2</b> (steer and gas). ' +
-        'That is exactly the job of a neural network: numbers in, numbers out.' +
-        '<button class="btn" onclick="missions.startNeuron()">Start Mission 2</button>' +
-        '<button class="btn" onclick="missions.retry1()">Drive again</button>'
+      return card(
+        'Lap complete: ' + lapSeconds.toFixed(1) + ' s' + (lapAttempts > 1 ? ', attempt ' + lapAttempts : ''),
+        'You saw <b>6 numbers</b> (5 rays and speed) and answered with <b>2</b> (steer and gas). A neural network does the same job.',
+        missionButton('startNeuron', 'Look inside the network') + missionButton('retry1', 'Drive again', false),
       )
     case 'neuron':
-      return (
-        '<b>Mission 2 of 4: look inside one neuron.</b> The car is frozen mid-lap, and the outlined neuron in the network asks ' +
-        '"is the right side more open than the left?" A neuron only does three things: multiply, add and squash. Do them yourself.'
-      )
+      return card('Inside one neuron', 'The car is frozen. The outlined neuron asks: is the right side more open than the left?')
     case 'neurondone':
-      return (
-        '<b>Mission 2 complete!</b> You just did by hand what every neuron does at every moment: multiply, add, squash. ' +
-        'This car has 7 of them, and large networks have billions. The steering output is one more neuron, fed by this one.' +
-        '<button class="btn" onclick="missions.start2()">Start Mission 3</button>'
+      return card(
+        'That is all a neuron does',
+        'Multiply, add, squash. This car has 7 neurons, and large networks have billions.',
+        missionButton('start2', 'Next: set the weights'),
       )
     case 'm2':
-      return (
-        '<b>Mission 3 of 4: set three weights.</b> A weight is how strongly one neuron pushes on another. ' +
-        'The network has 47; the parts that judge the road are already wired up. ' +
-        'Move the three sliders until the car drives a lap on its own. Lap progress: <b>' + Math.round((100 * car.passed) / CHECKPOINTS) + '%</b>'
-      )
+      return card('Set three weights', 'Move the sliders until the car drives a lap by itself.<br>' + progress())
     case 'm2done':
-      return (
-        '<b>Mission 3 complete!</b> You tuned 3 numbers by hand and the car drives itself. ' +
-        'Your brain makes ' + (m2Score ? describe(m2Score) : '') + '.<br>' +
-        'That took trial and error with just 3 weights, and the other 44 were already set for you. ' +
-        'A real network has thousands to billions, and nobody can tune those by hand. ' +
-        'So how does a network find its own weights?' +
-        '<button class="btn" onclick="missions.start3()">Start Mission 4</button>'
+      return card(
+        'It drives itself',
+        'Your car makes ' + (m2Score ? describe(m2Score) : '') + '. That took trial and error with just 3 of 47 weights. Real networks have billions, so how do they find theirs?',
+        missionButton('start3', 'Next: let evolution try'),
       )
     case 'm3':
-      return (
-        '<b>Mission 4 of 4: let evolution find all 47 weights.</b> Press <b>Train a new brain</b>. ' +
-        '100 cars start with random brains and nearly all crash at once. The best ones pass on their weights, ' +
-        'with small random changes, and the curve shows the whole population getting better.'
+      return card(
+        'Let evolution find all 47 weights',
+        '100 random brains drive and most crash. The best pass on their weights with small changes, and the curve shows them improving.',
       )
     case 'm3done':
-      return (
-        (trainedSource === 'evolved'
-          ? '<b>Mission 4 complete!</b> Evolution found all 47 weights with no help: '
-          : '<b>Mission 4 complete!</b> This brain was ' + (trainedSource === 'pretrained' ? 'evolved ahead of time' : 'loaded from a file') + '; it makes ') +
-        (m3Score ? describe(m3Score) : '') + '.<br>' +
-        (m2Score ? 'Your 3 hand-set weights managed ' + describe(m2Score) + '. ' : '') +
-        'Press "Train a new brain" again for a different run: evolution starts from random every time, so each brain ends up different.'
+      return card(
+        trainedSource === 'evolved' ? 'Evolution found all 47 weights' : 'This brain drives',
+        (trainedSource === 'evolved' ? 'No help needed: it makes ' : (trainedSource === 'pretrained' ? 'Evolved ahead of time: it makes ' : 'Loaded from a file: it makes ')) +
+          (m3Score ? describe(m3Score) : '') + '.' + (m2Score ? '<br>Your 3 weights made ' + describe(m2Score) + '.' : ''),
       )
   }
 }

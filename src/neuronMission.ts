@@ -3,8 +3,9 @@ import { createCar, getInputs, step, USE_GRIP, type Car } from './sim'
 
 // The mission looks at the first hidden neuron: "is the right side more open than the left?"
 export const NEURON = 0
-const BLANK_ROW = 4 // the row the player multiplies out themselves
+const SLIDER_ROW = 3 // the weight the player drags
 const LABELS = ['ray -60°', 'ray -30°', 'ray 0°', 'ray +30°', 'ray +60°', 'speed']
+const GOAL = -0.3 // the output counts as "steering left" below this
 
 const round2 = (x: number) => Math.round(x * 100) / 100
 
@@ -12,14 +13,14 @@ export type Moment = {
   car: Car
   brain: Brain
   inputs: number[] // shown to 2 decimals, and the arithmetic below uses those same numbers
-  weights: number[]
-  bias: number
-  sum: number
-  output: number
+  weights: number[] // the brain's own weights, so dragging the slider changes the real network
 }
 
-// Drive the starter brain until the neuron is doing something readable: a sum that is
-// clearly left or right, but not so big that the squash flattens it to exactly 1.
+const totalOf = (inputs: number[], weights: number[], bias: number) =>
+  inputs.reduce((s, x, i) => s + x * weights[i], bias)
+
+// Drive the starter brain until the neuron is doing something readable: steering clearly
+// right, with one ray strong enough that dragging its weight can turn the car left.
 export function findMoment(): Moment {
   const brain = starterBrain()
   const car = createCar(undefined, USE_GRIP)
@@ -28,77 +29,57 @@ export function findMoment(): Moment {
   for (;;) {
     const raw = getInputs(car)
     const inputs = raw.map(round2)
-    const sum = round2(inputs.reduce((s, x, i) => s + x * weights[i], bias))
-    const output = round2(Math.tanh(sum))
+    const sum = totalOf(inputs, weights, bias)
     const { outputs, hidden } = think(brain, raw)
-    const big = car.steps > 60 && Math.abs(sum) >= 0.4 && Math.abs(sum) <= 1.2
-    const matchesPanel = round2(hidden[NEURON]) === output // the network panel must show the same number
-    if ((big && matchesPanel && inputs[BLANK_ROW] >= 0.2) || car.steps > 400) {
-      return { car, brain, inputs, weights, bias, sum, output }
-    }
+    const readable = car.steps > 60 && sum >= 0.4 && sum <= 1.2
+    const canFlip = sum - weights[SLIDER_ROW] * inputs[SLIDER_ROW] < GOAL * 2
+    const matchesPanel = round2(hidden[NEURON]) === round2(Math.tanh(sum)) // the network panel must show the same number
+    if ((readable && canFlip && matchesPanel) || car.steps > 400) return { car, brain, inputs, weights }
     step(car, { steer: outputs[0], throttle: outputs[1] })
   }
 }
 
-const row = (cells: string[], tag = 'td') =>
-  '<tr>' + cells.map((c) => '<' + tag + ' style="padding:2px 12px 2px 0;text-align:right">' + c + '</' + tag + '>').join('') + '</tr>'
+// One live panel: drag a weight and watch the sum, the squash and the steering follow.
+export function runNeuronLab(panel: HTMLElement, m: Moment, onDone: () => void) {
+  const start = m.weights[SLIDER_ROW]
+  const bias = m.brain.b1[NEURON]
+  const used = m.inputs.map((_, i) => i).filter((i) => m.weights[i] !== 0)
 
-// Walk through one neuron: multiply, add, squash, then predict the steering.
-export function runNeuronSteps(panel: HTMLElement, m: Moment, onDone: () => void) {
-  const answer = round2(m.inputs[BLANK_ROW] * m.weights[BLANK_ROW])
+  panel.innerHTML =
+    '<p class="goal">Drag the slider until the car would steer <b>left</b>.</p>' +
+    '<label class="slider"><span>Weight of ' + LABELS[SLIDER_ROW] + '</span>' +
+    '<input id="n-weight" type="range" min="-3" max="3" step="0.1" value="' + start + '"><b id="n-value"></b></label>' +
+    '<table><tbody id="n-rows"></tbody></table>' +
+    '<div class="gauge"><span>Left</span><div><i id="n-mark"></i></div><span>Right</span></div>' +
+    '<p class="note" id="n-note"></p>'
+  const slider = panel.querySelector('#n-weight') as HTMLInputElement
+  const rows = panel.querySelector('#n-rows') as HTMLElement
+  const mark = panel.querySelector('#n-mark') as HTMLElement
+  const note = panel.querySelector('#n-note') as HTMLElement
+  const value = panel.querySelector('#n-value') as HTMLElement
 
-  function table(blank: boolean): string {
-    const rows = m.inputs.map((x, i) => {
-      const product = blank && i === BLANK_ROW ? '<input id="n-answer" inputmode="decimal">' : round2(x * m.weights[i]).toFixed(2)
-      return row([LABELS[i], x.toFixed(2), '× ' + m.weights[i], '= ' + product])
-    })
-    return '<table>' + row(['input', 'value', 'weight', 'result'], 'th') + rows.join('') + '</table>'
+  function show() {
+    const w = Number(slider.value)
+    m.weights[SLIDER_ROW] = w
+    value.textContent = w.toFixed(1)
+    const total = totalOf(m.inputs, m.weights, bias)
+    const output = Math.tanh(total)
+    rows.innerHTML =
+      used.map((i) =>
+        '<tr' + (i === SLIDER_ROW ? ' class="live"' : '') + '><td>' + LABELS[i] + '</td><td>' + m.inputs[i].toFixed(2) + ' × ' + m.weights[i].toFixed(1) +
+        '</td><td>' + (m.inputs[i] * m.weights[i]).toFixed(2) + '</td></tr>').join('') +
+      '<tr class="sum"><td colspan="2">Add them up</td><td>' + total.toFixed(2) + '</td></tr>' +
+      '<tr class="sum"><td colspan="2">Squash to -1…1</td><td>' + output.toFixed(2) + '</td></tr>'
+    mark.style.left = ((output + 1) / 2) * 100 + '%'
+    if (output < GOAL) {
+      note.innerHTML = 'That one weight changed the car\'s decision.<br><button class="btn primary" id="n-done">Continue</button>'
+      panel.querySelector('#n-done')!.addEventListener('click', () => {
+        m.weights[SLIDER_ROW] = start // the car drives on with its real brain
+        onDone()
+      })
+    } else note.textContent = 'Each input × weight, added up, then squashed. That is one neuron.'
   }
-
-  function multiply() {
-    panel.innerHTML =
-      '<b>Step 1 of 3: multiply.</b> The inputs are the 5 ray distances and the speed, scaled so that 1 means as far or as fast as possible. ' +
-      'The neuron multiplies each input by its weight. A weight of 0 means it ignores that input.' + table(true) +
-      '<button id="n-check" class="btn">Check</button> <span id="n-note" class="note">Work out the empty box.</span>'
-    const box = panel.querySelector('#n-answer') as HTMLInputElement
-    const note = panel.querySelector('#n-note') as HTMLElement
-    const check = () => {
-      const typed = Number(box.value.trim())
-      if (box.value.trim() !== '' && Math.abs(typed - answer) < 0.015) add()
-      else note.textContent = 'Not quite. Multiply ' + m.inputs[BLANK_ROW].toFixed(2) + ' by ' + m.weights[BLANK_ROW] + '.'
-    }
-    panel.querySelector('#n-check')!.addEventListener('click', check)
-    box.addEventListener('keydown', (e) => {
-      e.stopPropagation() // typing here must not drive the car
-      if (e.key === 'Enter') check()
-    })
-    box.focus()
-  }
-
-  function add() {
-    panel.innerHTML =
-      '<b>Step 2 of 3: add.</b> It adds up all the results, plus one extra number of its own called the <b>bias</b> (here ' + m.bias + '). ' +
-      'Left rays have negative weights and right rays positive ones, so more open space on the right makes the total go up.' + table(false) +
-      '<p style="margin:8px 0"><b>Total: ' + m.sum.toFixed(2) + '</b></p><button id="n-next" class="btn">Next</button>'
-    panel.querySelector('#n-next')!.addEventListener('click', squash)
-  }
-
-  function squash() {
-    panel.innerHTML =
-      '<b>Step 3 of 3: squash.</b> Totals can be any size, so the neuron squeezes its total into the range -1 to +1 with a function called <b>tanh</b>. ' +
-      'Big totals land near 1, and small ones stay about the same.<br>' +
-      '<table>' + row(['total', '-3', '-1', '0', '1', '3', '<b>' + m.sum.toFixed(2) + '</b>']) +
-      row(['after tanh', ...[-3, -1, 0, 1, 3].map((v) => Math.tanh(v).toFixed(2)), '<b>' + m.output.toFixed(2) + '</b>']) + '</table>' +
-      'This neuron outputs <b>' + m.output.toFixed(2) + '</b>, and that number goes on to the steering output: positive steers right, negative steers left. Which way will the car steer?<br>' +
-      '<button id="n-left" class="btn">Left</button> <button id="n-right" class="btn">Right</button> <span id="n-note" class="note"></span>'
-    const note = panel.querySelector('#n-note') as HTMLElement
-    const pick = (right: boolean) => {
-      if (right === m.output > 0) onDone()
-      else note.textContent = 'Look at the sign of ' + m.output.toFixed(2) + ' again.'
-    }
-    panel.querySelector('#n-left')!.addEventListener('click', () => pick(false))
-    panel.querySelector('#n-right')!.addEventListener('click', () => pick(true))
-  }
-
-  multiply()
+  slider.addEventListener('input', show)
+  slider.addEventListener('keydown', (e) => e.stopPropagation()) // arrow keys move the slider, not the car
+  show()
 }

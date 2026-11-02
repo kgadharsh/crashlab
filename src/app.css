@@ -89,18 +89,21 @@ canvas {
   background: var(--surface);
 }
 .panel p { margin: 8px 0; }
-.mission b { font-weight: 600; }
-.neuron table { border-collapse: collapse; margin: 8px 0; font-variant-numeric: tabular-nums; font-size: 14px; }
-.neuron th { font-weight: 500; color: var(--muted); }
-.neuron input {
-  width: 64px;
-  padding: 2px 6px;
-  border: 1px solid var(--accent);
-  border-radius: 4px;
-  background: var(--page);
-  color: var(--text);
-  font: inherit;
-}
+.mission h2 { margin: 0 0 6px; font-size: 18px; font-weight: 600; line-height: 1.3; }
+.mission p { margin: 0; color: var(--muted); }
+.mission p b { color: var(--text); font-weight: 500; }
+.actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
+.neuron .goal { margin: 0 0 12px; }
+.neuron table { width: 100%; border-collapse: collapse; margin: 4px 0 12px; font-variant-numeric: tabular-nums; font-size: 14px; }
+.neuron td { padding: 3px 0; color: var(--muted); white-space: nowrap; }
+.neuron td:nth-child(2) { text-align: right; }
+.neuron td:last-child { text-align: right; color: var(--text); }
+.neuron tr.live td { color: var(--accent); }
+.neuron tr.sum td { border-top: 1px solid var(--line); color: var(--text); font-weight: 500; }
+.gauge { display: grid; grid-template-columns: auto 1fr auto; gap: 8px; align-items: center; font-size: 13px; color: var(--muted); }
+.gauge div { position: relative; height: 6px; border-radius: 3px; background: var(--raised); }
+.gauge div::after { content: ''; position: absolute; left: 50%; top: -3px; width: 1px; height: 12px; background: var(--muted); }
+.gauge i { position: absolute; top: -4px; width: 14px; height: 14px; margin-left: -7px; border-radius: 50%; background: var(--accent); }
 .note { color: var(--muted); }
 
 .slider { display: grid; grid-template-columns: minmax(0, 1fr) 44px; gap: 2px 8px; margin-bottom: 10px; align-items: center; }
@@ -122,7 +125,6 @@ canvas {
 }
 .btn:hover, .toolbar button:hover, .pause button:hover, .more summary:hover { border-color: var(--muted); }
 button:disabled { opacity: 0.45; cursor: default; }
-.mission .btn { display: inline-block; margin: 8px 8px 0 0; }
 .btn.primary, .toolbar button.primary { border-color: var(--accent); background: var(--accent); color: var(--on-accent); }
 .toolbar { display: flex; flex-direction: column; gap: 8px; }
 .more summary { list-style: none; }
