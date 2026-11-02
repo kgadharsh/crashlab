@@ -99,12 +99,14 @@ canvas {
 .neuron td:nth-child(2) { text-align: right; }
 .neuron td:last-child { text-align: right; color: var(--text); }
 .neuron tr.live td { color: var(--accent); }
+.neuron tr.ignored td { opacity: 0.5; }
 .neuron tr.sum td { border-top: 1px solid var(--line); color: var(--text); font-weight: 500; }
 .gauge { display: grid; grid-template-columns: auto 1fr auto; gap: 8px; align-items: center; font-size: 13px; color: var(--muted); }
 .gauge div { position: relative; height: 6px; border-radius: 3px; background: var(--raised); }
 .gauge div::after { content: ''; position: absolute; left: 50%; top: -3px; width: 1px; height: 12px; background: var(--muted); }
 .gauge i { position: absolute; top: -4px; width: 14px; height: 14px; margin-left: -7px; border-radius: 50%; background: var(--accent); }
-.pull { display: grid; grid-template-columns: 62px minmax(0, 1fr) 84px; gap: 8px; align-items: center; min-height: 30px; font-size: 13px; color: var(--muted); }
+.pull { display: grid; grid-template-columns: 54px minmax(0, 1fr) 34px 64px; gap: 8px; align-items: center; min-height: 30px; font-size: 13px; color: var(--muted); }
+.pull b { font-weight: 500; text-align: right; color: var(--text); font-variant-numeric: tabular-nums; }
 .pull input { width: 100%; min-width: 0; accent-color: var(--accent); }
 .bar { position: relative; height: 12px; border-radius: 2px; background: var(--raised); }
 .bar::after { content: ''; position: absolute; left: 50%; top: -2px; width: 1px; height: 16px; background: var(--muted); }

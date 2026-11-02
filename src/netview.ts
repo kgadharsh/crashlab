@@ -224,7 +224,7 @@ export function drawNetwork(
 
   ctx.font = '13px sans-serif'
   ctx.fillStyle = selection ? 'white' : '#999'
-  ctx.fillText(selection ? describeSelection(selection, brain, inputs, thought) : 'Click a neuron or a connection', ctx.canvas.width / 2, 442)
+  ctx.fillText(selection ? describeSelection(selection, brain, inputs, thought) : 'Pause, then click a neuron to see its sum', ctx.canvas.width / 2, 442)
 
   ctx.fillStyle = '#ccc'
   ctx.font = '11px sans-serif'

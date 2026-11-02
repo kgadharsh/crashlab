@@ -168,6 +168,7 @@ const { leftWall, rightWall } = track
 let car: Car = createCar(undefined, USE_GRIP)
 let crashes = 0
 let frame = 0
+let beforeEdits: ReturnType<typeof predictPath> | null = null // the same moment without the player's changes
 let predicted: ReturnType<typeof predictPath> | null = null // where the brain would take the car
 let lastCrash: { x: number; y: number; frames: number } | null = null // fades out after a crash
 let best = 0
@@ -471,18 +472,18 @@ function drawHeat() {
   ctx.globalAlpha = 1
 }
 
-function drawPrediction(path: { points: Point[]; crashed: boolean }) {
-  ctx.strokeStyle = path.crashed ? C.negative : C.accent
-  ctx.lineWidth = 3
+function drawPrediction(path: { points: Point[]; crashed: boolean }, faint = false) {
+  ctx.strokeStyle = faint ? 'rgba(230,233,238,0.45)' : path.crashed ? C.negative : C.accent
+  ctx.lineWidth = faint ? 2 : 3
   ctx.lineCap = 'round'
-  ctx.setLineDash([2, 8])
+  ctx.setLineDash(faint ? [] : [2, 8])
   ctx.beginPath()
   path.points.forEach((p, i) => (i === 0 ? ctx.moveTo(p.x, p.y) : ctx.lineTo(p.x, p.y)))
   ctx.stroke()
   ctx.setLineDash([])
   ctx.lineCap = 'butt'
   const end = path.points[path.points.length - 1]
-  if (path.crashed) drawCrash(end.x, end.y)
+  if (path.crashed && !faint) drawCrash(end.x, end.y)
 }
 
 function drawCrash(x: number, y: number) {
@@ -539,9 +540,13 @@ function draw() {
 
   drawHeat()
   const stageM2 = missionStage === 'm2' || missionStage === 'm2done'
-  if ((selection || stageM2) && brainOn && canEdit() && !paused) {
-    if (frame++ % 8 === 0) predicted = predictPath(car, brain)
-  } else if (canEdit()) predicted = null
+  if ((selection || stageM2) && brainOn && canEdit()) {
+    if (frame++ % 8 === 0) {
+      predicted = predictPath(car, brain)
+      beforeEdits = edited || blinded.some(Boolean) ? predictPath(car, originalBrain) : null
+    }
+  } else if (canEdit()) predicted = beforeEdits = null
+  if (beforeEdits) drawPrediction(beforeEdits, true)
   if (predicted) drawPrediction(predicted)
   drawCarShape(car, 34, 18, mode === 'replay' ? C.positive : C.text)
   if (lastCrash && lastCrash.frames > 0) {
@@ -1407,8 +1412,13 @@ function renderEditor() {
     reset.className = 'btn'
     reset.textContent = 'Undo all my changes'
     reset.addEventListener('click', () => {
-      const original = originalBrain
-      watch(original, 'Your changes were undone.')
+      // the car stays where it is, so the same moment can be tried again
+      workingBrain = originalBrain
+      brain = originalBrain
+      edited = false
+      blinded.fill(false)
+      heat = null
+      renderEditor()
     })
     editor.appendChild(reset)
   }
@@ -1583,6 +1593,49 @@ function missionHtml(): string {
 
 applyStageVisibility()
 
+// ---------- THE PAUSED INSPECTOR ----------
+// While paused, a selected neuron shows its real sum: the same number as its circle in the network
+const inspector = document.createElement('div')
+inspector.className = 'panel neuron'
+inspector.style.display = 'none'
+rail.appendChild(inspector)
+let inspectorText = ''
+
+function inspectorHtml(): string {
+  const frozen = missionStage === 'neuron' || missionStage === 'read'
+  if (!paused || frozen || !shownBrain || selection?.kind !== 'node' || selection.layer === 'input') return ''
+  const lead = swarm ? swarm.cars[0] : car
+  const inputs = getInputs(lead)
+  const thought = think(shownBrain, inputs)
+  const hiddenLayer = selection.layer === 'hidden'
+  const i = selection.index
+  const weights = (hiddenLayer ? shownBrain.w1 : shownBrain.w2)[i]
+  const values = hiddenLayer ? inputs : thought.hidden
+  const names = hiddenLayer ? INPUT_LABELS : thought.hidden.map((_, h) => hiddenName(h))
+  const bias = (hiddenLayer ? shownBrain.b1 : shownBrain.b2)[i]
+  const result = (hiddenLayer ? thought.hidden : thought.outputs)[i]
+  const rows = weights
+    .map((w, k) => ({ name: names[k], value: values[k], weight: w, pull: w * values[k] }))
+    .sort((a, b) => Math.abs(b.pull) - Math.abs(a.pull))
+  const total = rows.reduce((sum, r) => sum + r.pull, bias)
+  return (
+    '<p class="goal">How ' + (hiddenLayer ? hiddenName(i) : OUTPUT_LABELS[i]) + ' got ' + result.toFixed(2) + '</p><table><tbody>' +
+    rows.map((r) => '<tr' + (r.weight === 0 ? ' class="ignored"' : '') + '><td>' + r.name + '</td><td>' + r.value.toFixed(2) + ' × ' + r.weight.toFixed(1) + '</td><td>' + r.pull.toFixed(2) + '</td></tr>').join('') +
+    '<tr><td colspan="2">Bias</td><td>' + bias.toFixed(2) + '</td></tr>' +
+    '<tr class="sum"><td colspan="2">Add them up</td><td>' + total.toFixed(2) + '</td></tr>' +
+    '<tr class="sum"><td colspan="2">Squash to -1…1</td><td>' + Math.tanh(total).toFixed(2) + '</td></tr>' +
+    '</tbody></table><p class="note">' + (edited || blinded.some(Boolean) ? 'Dotted line: with your changes. Faint line: the brain before them.' : 'Change a weight to see a second path, or press Step to see the same weights meet new inputs.') + ' Rounded to 2 decimals.</p>'
+  )
+}
+
+function showInspector() {
+  const html = inspectorHtml()
+  inspector.style.display = html ? 'block' : 'none'
+  if (html === inspectorText) return
+  inspectorText = html
+  inspector.innerHTML = html
+}
+
 // ---------- COPY MY RESULTS (for the friend test) ----------
 const resultsButton = document.createElement('button')
 resultsButton.className = 'btn results'
@@ -1635,6 +1688,7 @@ function loop(now: number) {
   }
   stepRequested = false
   draw()
+  showInspector()
   requestAnimationFrame(loop)
 }
 

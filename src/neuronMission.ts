@@ -50,11 +50,12 @@ export function runNeuronLab(panel: HTMLElement, m: Moment, onChange: () => void
     m.inputs.map((_, i) =>
       '<div class="pull"><span>' + LABELS[i] + '</span>' +
       '<input id="n-w' + i + '" type="range" min="-4" max="4" step="0.1" aria-label="Weight of ' + LABELS[i] + '">' +
-      '<div class="bar"><i id="n-b' + i + '"></i></div></div>').join('') +
+      '<b id="n-v' + i + '"></b><div class="bar"><i id="n-b' + i + '"></i></div></div>').join('') +
     '<p class="verdict" id="n-verdict"></p>' +
     '<div class="actions"><button class="btn" id="n-reset">Reset</button></div>' +
     '<p class="note" id="n-note">Longer bars pull harder. A weight of 0 means the neuron ignores that input.</p>'
   const sliders = m.inputs.map((_, i) => panel.querySelector('#n-w' + i) as HTMLInputElement)
+  const values = m.inputs.map((_, i) => panel.querySelector('#n-v' + i) as HTMLElement)
   const bars = m.inputs.map((_, i) => panel.querySelector('#n-b' + i) as HTMLElement)
   const verdict = panel.querySelector('#n-verdict') as HTMLElement
   const note = panel.querySelector('#n-note') as HTMLElement
@@ -73,6 +74,7 @@ export function runNeuronLab(panel: HTMLElement, m: Moment, onChange: () => void
     const output = Math.tanh(total)
     m.inputs.forEach((x, i) => {
       const pull = x * m.weights[i]
+      values[i].textContent = (m.weights[i] > 0 ? '+' : '') + m.weights[i].toFixed(1)
       const size = Math.min(50, (Math.abs(pull) / 3) * 50)
       bars[i].style.width = size + '%'
       bars[i].style.left = (pull < 0 ? 50 - size : 50) + '%'
