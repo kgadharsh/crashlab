@@ -17,7 +17,7 @@ Severity: **[S1]** blocks the teaching goal, **[S2]** a real bug or misleading r
   Done when: the wording is honest. The real fix is F13.
 - [x] **F05 [S3] Developer text on screen.** `mode: live`, `recorded steps`, raw checkpoint counts and "R = replay" are all visible, and those keys do not exist on a phone.
   Done when: players see only what the current mission needs.
-- [ ] **F06 [S3] Wrong or missing identity.** The page title is "crashlab", the project has no chosen name, and there is no meta description.
+- [x] **F06 [S3] Wrong or missing identity.** The page title is "crashlab", the project has no chosen name, and there is no meta description.
   Done when: a name is chosen and used everywhere.
 - [ ] **F07 [S4] Dead files.** `src/counter.ts` and `src/style.css` are unused, along with the template assets. `compare*.ts` are experiments sitting in `src/`.
   Done when: unused files are removed and experiments live in `scripts/`.
