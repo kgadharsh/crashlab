@@ -7,6 +7,8 @@
   --muted: #8f99a6;
   --accent: #f2b84b;
   --on-accent: #17130a;
+  --positive: #5aa2ff;
+  --negative: #ff5d5d;
   --space: 16px;
   --radius: 8px;
   color-scheme: dark;
@@ -181,4 +183,46 @@ button:disabled { opacity: 0.45; cursor: default; }
   .steps span { display: none; }
   .steps .now span { display: inline; }
   .steps { gap: 8px; }
+}
+
+/* ---------- lessons ---------- */
+.lesson { position: fixed; inset: 0; z-index: 10; overflow-y: auto; padding: var(--space); background: var(--page); }
+.lesson-box { max-width: 720px; margin: 0 auto; padding: 16px 0 32px; }
+.lesson-box h2 { margin: 0 0 8px; font-size: 24px; font-weight: 600; line-height: 1.25; }
+.lesson-box p { margin: 8px 0; color: var(--muted); font-size: 16px; }
+.lesson-box b { color: var(--text); font-weight: 500; }
+.lesson-box svg { display: block; width: 100%; height: auto; margin: 8px 0; }
+.lesson-box .lesson-step { margin: 0 0 4px; font-size: 13px; }
+.lesson-box .lesson-error { min-height: 22px; margin: 8px 0 0; color: var(--negative); font-size: 14px; }
+.lesson-box .lesson-score { color: var(--text); font-weight: 500; }
+.lesson-nav { justify-content: space-between; }
+.lesson-row { display: grid; grid-template-columns: 170px minmax(0, 1fr) 44px; gap: 12px; align-items: center; min-height: 34px; color: var(--muted); font-size: 14px; }
+.lesson-row input { width: 100%; min-width: 0; accent-color: var(--accent); }
+.lesson-row b { text-align: right; font-variant-numeric: tabular-nums; }
+.lesson-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 8px; margin: 10px 0; }
+.lesson-grid > div, .lesson-question, .lesson-flow > div { padding: 10px 12px; border-radius: var(--radius); background: var(--surface); color: var(--muted); font-size: 14px; line-height: 1.6; }
+.lesson-question { margin: 8px 0; }
+.lesson-big { font-size: 22px; }
+.lesson-flow { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 10px 0; font-size: 14px; }
+.lesson-words { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 12px; font-size: 12px; }
+.lesson-words span { padding: 3px 10px; border-radius: 6px; background: var(--raised); color: var(--accent); }
+.reveal { margin: 10px 0; padding: 14px 16px; border: 1px solid var(--accent); border-radius: var(--radius); background: var(--surface); }
+.reveal small { display: block; color: var(--muted); font-size: 13px; }
+.reveal strong { display: block; margin: 2px 0 4px; color: var(--accent); font-size: 24px; font-weight: 600; }
+.reveal span { font-size: 16px; line-height: 1.5; }
+.good { color: #3fb56b; }
+.bad { color: var(--negative); }
+.top .help { min-height: 32px; margin-left: auto; padding: 4px 10px; }
+
+/* ---------- the colour key ---------- */
+.key { display: flex; flex-wrap: wrap; gap: 6px 14px; color: var(--muted); font-size: 13px; }
+.key span { display: inline-flex; align-items: center; gap: 6px; }
+.key i { width: 12px; height: 12px; border-radius: 50%; }
+.key .yes { background: var(--positive); }
+.key .no { background: var(--negative); }
+.key .unsure { background: var(--raised); border: 1px solid var(--line); }
+.key-note { flex-basis: 100%; }
+
+@media (max-width: 640px) {
+  .lesson-row { grid-template-columns: 110px minmax(0, 1fr) 40px; gap: 8px; }
 }

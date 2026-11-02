@@ -74,7 +74,7 @@ export function hitTest(brain: Brain, x: number, y: number, editable: Edge[] = [
   return best
 }
 
-// Blue = positive, red = negative. Brighter = stronger.
+// Blue = yes (positive), red = no (negative). Brighter = surer.
 function nodeColor(value: number): string {
   const strength = Math.min(1, Math.abs(value))
   const lightness = 18 + 52 * strength
@@ -82,7 +82,7 @@ function nodeColor(value: number): string {
 }
 
 // Draw the connections between two columns.
-// Colour = which way the signal pushes (blue up, red down). Bright = strong signal right now.
+// Colour = which way the signal pushes (blue towards yes, red towards no). Bright = strong signal right now.
 function drawEdges(
   ctx: CanvasRenderingContext2D,
   from: Node[],
@@ -225,8 +225,4 @@ export function drawNetwork(
   ctx.font = '13px sans-serif'
   ctx.fillStyle = selection ? 'white' : '#999'
   ctx.fillText(selection ? describeSelection(selection, brain, inputs, thought) : 'Pause, then click a neuron to see its sum', ctx.canvas.width / 2, 442)
-
-  ctx.fillStyle = '#ccc'
-  ctx.font = '11px sans-serif'
-  ctx.fillText('blue = pushes up, red = pushes down, brighter = stronger', ctx.canvas.width / 2, 470)
 }

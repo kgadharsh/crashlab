@@ -11,6 +11,7 @@ import { blindBrain, cloneBrain } from './editor'
 import { findMoment, runNeuronLab, NEURON } from './neuronMission'
 import { pickRounds, runReadGame } from './readBrain'
 import { enterStep, noteChange, noteCrash, noteReadScore, resultsText } from './results'
+import { lessonOpen, showLesson, type LessonId } from './lessons'
 import { traceNeuron, type HeatPoint } from './roadMap'
 import {
   type Car,
@@ -65,6 +66,12 @@ const netCanvas = document.createElement('canvas')
 netCanvas.width = 420
 netCanvas.height = 500
 instrument.appendChild(netCanvas)
+const colourKey = document.createElement('div')
+colourKey.className = 'key'
+colourKey.innerHTML =
+  '<span><i class="yes"></i>Blue: yes</span><span><i class="no"></i>Red: no</span><span><i class="unsure"></i>Faint: unsure</span>' +
+  '<span class="key-note">Lines: blue pushes the next neuron towards yes, red towards no.</span>'
+instrument.appendChild(colourKey)
 const netCtx = netCanvas.getContext('2d')!
 const editor = document.createElement('div')
 editor.className = 'panel editor'
@@ -196,6 +203,7 @@ let showCheckpoints = false // press C to show the invisible checkpoints the sco
 let debug = false // press D for the developer readouts and keys (B, R, Enter, C)
 const keys: Record<string, boolean> = {}
 window.addEventListener('keydown', (e) => {
+  if (lessonOpen()) return
   keys[e.key] = true
   if (e.key.startsWith('Arrow')) e.preventDefault()
   if (e.key === ' ' && missionStage !== 'neuron' && missionStage !== 'read') {
@@ -473,10 +481,11 @@ function drawHeat() {
 }
 
 function drawPrediction(path: { points: Point[]; crashed: boolean }, faint = false) {
-  ctx.strokeStyle = faint ? 'rgba(230,233,238,0.45)' : path.crashed ? C.negative : C.accent
+  // a path that crashes is told apart by its long dashes and cross, because red already means "no"
+  ctx.strokeStyle = faint ? 'rgba(230,233,238,0.45)' : path.crashed ? C.text : C.accent
   ctx.lineWidth = faint ? 2 : 3
   ctx.lineCap = 'round'
-  ctx.setLineDash(faint ? [] : [2, 8])
+  ctx.setLineDash(faint ? [] : path.crashed ? [12, 9] : [2, 8])
   ctx.beginPath()
   path.points.forEach((p, i) => (i === 0 ? ctx.moveTo(p.x, p.y) : ctx.lineTo(p.x, p.y)))
   ctx.stroke()
@@ -1299,18 +1308,18 @@ function select(s: Selection) {
 
 // The road detector step: three neurons, three things they notice
 const NOTICES = [
-  'It fires blue when the right side is more open, and red when the left is.',
-  'It fires blue when a wall is close ahead, and red while the road ahead is clear.',
-  'It fires harder the faster the car goes.',
+  'Is the right side more open? Blue: yes. Red: no, the left is. Faint: about equal.',
+  'Is a wall close ahead? Blue: yes. Red: no, the road ahead is clear. Faint: not sure.',
+  'Am I going fast? Blue: yes. Faint: not very fast.',
 ]
 const seenNeurons = new Set<number>()
 function showDetector() {
   const current = selection?.kind === 'node' && selection.layer === 'hidden' ? selection.index : -1
   if (current >= 0 && current < NOTICES.length) seenNeurons.add(current)
   neuronPanel.innerHTML =
-    '<p class="goal">Pick a neuron and see where it fires on the road.</p>' +
+    '<p class="goal">Pick a neuron and the road shows its answer at each spot.</p>' +
     '<div class="actions">' + NOTICES.map((_, i) => '<button class="btn' + (i === current ? ' primary' : '') + '" data-neuron="' + i + '">Neuron ' + (i + 1) + '</button>').join('') + '</div>' +
-    '<p class="note">' + (current >= 0 ? NOTICES[current] ?? 'This neuron is unused, so it does nothing.' : 'Blue fires, red pushes against, faint does nothing.') + '</p>'
+    '<p class="note">' + (current >= 0 ? NOTICES[current] ?? 'This neuron is unused, so it does nothing.' : 'Blue means yes, red means no, and faint means unsure.') + '</p>'
   neuronPanel.querySelectorAll('button').forEach((b) =>
     b.addEventListener('click', () => select({ kind: 'node', layer: 'hidden', index: Number(b.dataset.neuron) })),
   )
@@ -1453,7 +1462,7 @@ function setStage(s: MissionStage) {
   applyStageVisibility()
 }
 
-const missions = {
+const launch = {
   retry1() {
     setStage('m1')
     brainOn = false
@@ -1523,7 +1532,46 @@ const missions = {
     brainOn = false
   },
 }
+
+// A mission opens with its lesson the first time. The ? button reopens it at any point.
+const LESSON_OF: Record<MissionStage, LessonId> = {
+  m1: 'drive', m1done: 'drive', neuron: 'neuron', neurondone: 'neuron', detect: 'hidden', detectdone: 'hidden',
+  read: 'read', readdone: 'read', m2: 'weights', m2done: 'weights', m3: 'training', m3done: 'training',
+}
+const taught = new Set<LessonId>()
+function teach(id: LessonId, onDone: () => void, review = false) {
+  const wasPaused = paused
+  setPaused(true)
+  for (const k in keys) keys[k] = false
+  enterStep('Lesson: ' + id)
+  showLesson(id, () => {
+    setPaused(wasPaused)
+    enterStep(STAGE_NAME[missionStage])
+    taught.add(id)
+    onDone()
+  }, review)
+}
+const firstTime = (id: LessonId, start: () => void) => () => (taught.has(id) ? start() : teach(id, start))
+const missions = {
+  retry1: launch.retry1,
+  startNeuron: firstTime('neuron', launch.startNeuron),
+  startRead: firstTime('read', launch.startRead),
+  startDetect: firstTime('hidden', launch.startDetect),
+  start2: firstTime('weights', launch.start2),
+  start3: firstTime('training', launch.start3),
+}
 ;(window as unknown as { missions: typeof missions }).missions = missions
+
+const helpButton = document.createElement('button')
+helpButton.className = 'btn help'
+helpButton.textContent = '?'
+helpButton.title = 'Explain this mission again'
+helpButton.setAttribute('aria-label', 'Explain this mission again')
+helpButton.addEventListener('click', () => {
+  helpButton.blur()
+  teach(LESSON_OF[missionStage], () => {}, true)
+})
+document.querySelector('.top')!.insertBefore(helpButton, stepList)
 
 const card = (title: string, body: string, actions = '') =>
   '<h2>' + title + '</h2><p>' + body + '</p>' + (actions ? '<div class="actions">' + actions + '</div>' : '')
@@ -1562,7 +1610,7 @@ function missionHtml(): string {
         missionButton('start2', 'Next: set the weights') + missionButton('startRead', 'Play again', false),
       )
     case 'detect':
-      return card('What neurons notice', 'Each neuron watches for one thing. The road shows where it fires on a lap.')
+      return card('What neurons notice', 'Each neuron watches for one thing. The road shows its answer at each spot of a lap.')
     case 'detectdone':
       return card(
         'Neurons are detectors',
@@ -1592,6 +1640,7 @@ function missionHtml(): string {
 }
 
 applyStageVisibility()
+teach('drive', () => {})
 
 // ---------- THE PAUSED INSPECTOR ----------
 // While paused, a selected neuron shows its real sum: the same number as its circle in the network
