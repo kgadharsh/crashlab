@@ -104,6 +104,15 @@ canvas {
 .gauge div { position: relative; height: 6px; border-radius: 3px; background: var(--raised); }
 .gauge div::after { content: ''; position: absolute; left: 50%; top: -3px; width: 1px; height: 12px; background: var(--muted); }
 .gauge i { position: absolute; top: -4px; width: 14px; height: 14px; margin-left: -7px; border-radius: 50%; background: var(--accent); }
+.pull { display: grid; grid-template-columns: 62px minmax(0, 1fr) 84px; gap: 8px; align-items: center; min-height: 30px; font-size: 13px; color: var(--muted); }
+.pull input { width: 100%; min-width: 0; accent-color: var(--accent); }
+.bar { position: relative; height: 12px; border-radius: 2px; background: var(--raised); }
+.bar::after { content: ''; position: absolute; left: 50%; top: -2px; width: 1px; height: 16px; background: var(--muted); }
+.bar i { position: absolute; top: 2px; height: 8px; border-radius: 1px; background: #5aa2ff; }
+.bar i.left { background: #ff5d5d; }
+.verdict { margin: 10px 0 0; font-size: 18px; font-weight: 600; }
+.neuron .actions { margin-top: 8px; }
+.neuron .note { margin: 8px 0 0; font-size: 13px; }
 .note { color: var(--muted); }
 
 .slider { display: grid; grid-template-columns: minmax(0, 1fr) 44px; gap: 2px 8px; margin-bottom: 10px; align-items: center; }

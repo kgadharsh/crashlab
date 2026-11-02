@@ -191,6 +191,18 @@ export function runBrain(brain: Brain, track: Track = DEFAULT_TRACK, maxSteps: n
   }
 }
 
+// Where a brain would take this car next, run on a copy so the real car does not move.
+export function predictPath(car: Car, brain: Brain, steps = 150): { points: Point[]; crashed: boolean } {
+  const ghost: Car = { ...car, rays: [...car.rays] }
+  const points: Point[] = [{ x: ghost.x, y: ghost.y }]
+  for (let i = 0; i < steps && !ghost.dead; i++) {
+    const { outputs } = think(brain, getInputs(ghost))
+    step(ghost, { steer: outputs[0], throttle: outputs[1] })
+    points.push({ x: ghost.x, y: ghost.y })
+  }
+  return { points, crashed: ghost.dead }
+}
+
 // How many steps a brain needs to collect one full lap of checkpoints (null if it never does).
 export function lapSteps(brain: Brain, track: Track = DEFAULT_TRACK, grip = USE_GRIP): number | null {
   const car = createCar(track, grip)

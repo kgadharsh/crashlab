@@ -20,7 +20,7 @@ Decided 2 Nov 2026 after ten chat prototypes. This order replaces the phase orde
 
 ### Build order
 
-- [ ] **B1. Tug-of-war and predicted path.** Replaces the neuron table. All six weights plus Reset. The path comes from a copy of the real car simulated ahead. Fixes the rest of F10.
+- [x] **B1. Tug-of-war and predicted path.** Replaces the neuron table. All six weights plus Reset. The path comes from a copy of the real car simulated ahead. Fixes the rest of F10.
 - [ ] **B2. Read the brain.** A few guessing rounds using real track positions. Also the start of the quiz in F15.
 - [ ] **B3. Edit the network directly.** Drag connections, click rays to blind them, cut connections, link rays on the track to inputs in the panel. Fixes F11, F13 and F14.
 - [ ] **B4. Road detector.** Hover a neuron and the real road lights up. Fixes F24, or record why it was dropped.

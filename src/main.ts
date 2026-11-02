@@ -20,6 +20,7 @@ import {
   DEFAULT_TRACK,
   runBrain,
   lapSteps,
+  predictPath,
   USE_GRIP,
   STALL_STEPS,
 } from './sim'
@@ -113,6 +114,7 @@ const KERB_BEND = 0.075 // bends sharper than this per point get striped kerbs
 const { leftWall, rightWall } = track
 let car: Car = createCar(undefined, USE_GRIP)
 let crashes = 0
+let predicted: ReturnType<typeof predictPath> | null = null // where the brain would take the car
 let lastCrash: { x: number; y: number; frames: number } | null = null // fades out after a crash
 let best = 0
 
@@ -391,6 +393,20 @@ function paintTrack(): HTMLCanvasElement {
 }
 const trackLayer = paintTrack()
 
+function drawPrediction(path: { points: Point[]; crashed: boolean }) {
+  ctx.strokeStyle = path.crashed ? C.negative : C.accent
+  ctx.lineWidth = 3
+  ctx.lineCap = 'round'
+  ctx.setLineDash([2, 8])
+  ctx.beginPath()
+  path.points.forEach((p, i) => (i === 0 ? ctx.moveTo(p.x, p.y) : ctx.lineTo(p.x, p.y)))
+  ctx.stroke()
+  ctx.setLineDash([])
+  ctx.lineCap = 'butt'
+  const end = path.points[path.points.length - 1]
+  if (path.crashed) drawCrash(end.x, end.y)
+}
+
 function drawCrash(x: number, y: number) {
   ctx.lineCap = 'round'
   ctx.strokeStyle = C.ground
@@ -440,6 +456,7 @@ function draw() {
     ctx.fill()
   }
 
+  if (predicted) drawPrediction(predicted)
   drawCarShape(car, 34, 18, mode === 'replay' ? C.positive : C.text)
   if (lastCrash && lastCrash.frames > 0) {
     ctx.globalAlpha = Math.min(1, lastCrash.frames / 30)
@@ -620,6 +637,7 @@ const trainButton = makeButton('Train a new brain', () => {
     stopTraining('Training stopped.')
     return
   }
+  setPaused(false) // a paused page would make training look dead
   run = { seed, history: [], shown: 0, watching: watchAll, finish: null }
   showGraph()
   trainButton.textContent = 'Stop training'
@@ -1181,7 +1199,11 @@ const missions = {
     car = moment.car
     setPaused(true)
     selection = { kind: 'node', layer: 'hidden', index: NEURON }
-    runNeuronLab(neuronPanel, moment, () => {
+    const showPath = () => {
+      predicted = predictPath(car, brain)
+    }
+    runNeuronLab(neuronPanel, moment, showPath, () => {
+      predicted = null
       setPaused(false)
       message = 'The car uses that same sum at every moment of the lap.'
       setStage('neurondone')

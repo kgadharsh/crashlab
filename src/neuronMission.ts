@@ -4,7 +4,7 @@ import { createCar, getInputs, step, USE_GRIP, type Car } from './sim'
 // The mission looks at the first hidden neuron: "is the right side more open than the left?"
 export const NEURON = 0
 const SLIDER_ROW = 3 // the weight the player drags
-const LABELS = ['ray -60°', 'ray -30°', 'ray 0°', 'ray +30°', 'ray +60°', 'speed']
+const LABELS = ['Far left', 'Left', 'Ahead', 'Right', 'Far right', 'Speed']
 const GOAL = -0.3 // the output counts as "steering left" below this
 
 const round2 = (x: number) => Math.round(x * 100) / 100
@@ -39,47 +39,60 @@ export function findMoment(): Moment {
   }
 }
 
-// One live panel: drag a weight and watch the sum, the squash and the steering follow.
-export function runNeuronLab(panel: HTMLElement, m: Moment, onDone: () => void) {
-  const start = m.weights[SLIDER_ROW]
+// Every weight of the neuron can be dragged. Each input pulls the steering left or right,
+// and the strongest side wins. onChange lets the page redraw the predicted path.
+export function runNeuronLab(panel: HTMLElement, m: Moment, onChange: () => void, onDone: () => void) {
+  const start = [...m.weights]
   const bias = m.brain.b1[NEURON]
-  const used = m.inputs.map((_, i) => i).filter((i) => m.weights[i] !== 0)
 
   panel.innerHTML =
-    '<p class="goal">Drag the slider until the car would steer <b>left</b>.</p>' +
-    '<label class="slider"><span>Weight of ' + LABELS[SLIDER_ROW] + '</span>' +
-    '<input id="n-weight" type="range" min="-3" max="3" step="0.1" value="' + start + '"><b id="n-value"></b></label>' +
-    '<table><tbody id="n-rows"></tbody></table>' +
-    '<div class="gauge"><span>Left</span><div><i id="n-mark"></i></div><span>Right</span></div>' +
-    '<p class="note" id="n-note"></p>'
-  const slider = panel.querySelector('#n-weight') as HTMLInputElement
-  const rows = panel.querySelector('#n-rows') as HTMLElement
-  const mark = panel.querySelector('#n-mark') as HTMLElement
+    '<p class="goal">Change the weights until the car would steer <b>left</b>.</p>' +
+    m.inputs.map((_, i) =>
+      '<div class="pull"><span>' + LABELS[i] + '</span>' +
+      '<input id="n-w' + i + '" type="range" min="-4" max="4" step="0.1" aria-label="Weight of ' + LABELS[i] + '">' +
+      '<div class="bar"><i id="n-b' + i + '"></i></div></div>').join('') +
+    '<p class="verdict" id="n-verdict"></p>' +
+    '<div class="actions"><button class="btn" id="n-reset">Reset</button></div>' +
+    '<p class="note" id="n-note">Longer bars pull harder. A weight of 0 means the neuron ignores that input.</p>'
+  const sliders = m.inputs.map((_, i) => panel.querySelector('#n-w' + i) as HTMLInputElement)
+  const bars = m.inputs.map((_, i) => panel.querySelector('#n-b' + i) as HTMLElement)
+  const verdict = panel.querySelector('#n-verdict') as HTMLElement
   const note = panel.querySelector('#n-note') as HTMLElement
-  const value = panel.querySelector('#n-value') as HTMLElement
+  const actions = panel.querySelector('.actions') as HTMLElement
+  const done = document.createElement('button')
+  done.className = 'btn primary'
+  done.textContent = 'Continue'
+  done.addEventListener('click', () => {
+    start.forEach((w, i) => (m.weights[i] = w)) // the car drives on with its real brain
+    onDone()
+  })
 
   function show() {
-    const w = Number(slider.value)
-    m.weights[SLIDER_ROW] = w
-    value.textContent = w.toFixed(1)
+    sliders.forEach((box, i) => (m.weights[i] = Number(box.value)))
     const total = totalOf(m.inputs, m.weights, bias)
     const output = Math.tanh(total)
-    rows.innerHTML =
-      used.map((i) =>
-        '<tr' + (i === SLIDER_ROW ? ' class="live"' : '') + '><td>' + LABELS[i] + '</td><td>' + m.inputs[i].toFixed(2) + ' × ' + m.weights[i].toFixed(1) +
-        '</td><td>' + (m.inputs[i] * m.weights[i]).toFixed(2) + '</td></tr>').join('') +
-      '<tr class="sum"><td colspan="2">Add them up</td><td>' + total.toFixed(2) + '</td></tr>' +
-      '<tr class="sum"><td colspan="2">Squash to -1…1</td><td>' + output.toFixed(2) + '</td></tr>'
-    mark.style.left = ((output + 1) / 2) * 100 + '%'
+    m.inputs.forEach((x, i) => {
+      const pull = x * m.weights[i]
+      const size = Math.min(50, (Math.abs(pull) / 3) * 50)
+      bars[i].style.width = size + '%'
+      bars[i].style.left = (pull < 0 ? 50 - size : 50) + '%'
+      bars[i].className = pull < 0 ? 'left' : ''
+    })
+    onChange()
+    verdict.textContent = Math.abs(output) < 0.1 ? 'Going straight' : output < 0 ? 'Steering left' : 'Steering right'
     if (output < GOAL) {
-      note.innerHTML = 'That one weight changed the car\'s decision.<br><button class="btn primary" id="n-done">Continue</button>'
-      panel.querySelector('#n-done')!.addEventListener('click', () => {
-        m.weights[SLIDER_ROW] = start // the car drives on with its real brain
-        onDone()
-      })
-    } else note.textContent = 'Each input × weight, added up, then squashed. That is one neuron.'
+      note.textContent = 'Those weights changed the decision. The line shows where the car would go.'
+      actions.appendChild(done)
+    } else done.remove()
   }
-  slider.addEventListener('input', show)
-  slider.addEventListener('keydown', (e) => e.stopPropagation()) // arrow keys move the slider, not the car
+  sliders.forEach((box) => {
+    box.addEventListener('input', show)
+    box.addEventListener('keydown', (e) => e.stopPropagation()) // arrow keys move the slider, not the car
+  })
+  panel.querySelector('#n-reset')!.addEventListener('click', () => {
+    sliders.forEach((box, i) => (box.value = String(start[i])))
+    show()
+  })
+  sliders.forEach((box, i) => (box.value = String(start[i])))
   show()
 }
