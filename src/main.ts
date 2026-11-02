@@ -6,7 +6,8 @@ import { genomeToBrain, brainToGenome } from './genome'
 import { brainToJson, brainFromJson } from './brainFile'
 import { PRETRAINED_GENOME } from './pretrained'
 import { prepareHiddenTracks, testOnHiddenTracks, hiddenVerdict, HIDDEN_COUNT, type BrainOrigin } from './hidden'
-import { drawNetwork, hitTest, type Selection } from './netview'
+import { drawNetwork, hitTest, hiddenName, sameEdge, INPUT_LABELS, OUTPUT_LABELS, type Edge, type Selection } from './netview'
+import { blindBrain, cloneBrain } from './editor'
 import { findMoment, runNeuronLab, NEURON } from './neuronMission'
 import { pickRounds, runReadGame } from './readBrain'
 import {
@@ -63,23 +64,72 @@ netCanvas.width = 420
 netCanvas.height = 500
 instrument.appendChild(netCanvas)
 const netCtx = netCanvas.getContext('2d')!
+const editor = document.createElement('div')
+editor.className = 'panel editor'
+editor.style.display = 'none'
+instrument.appendChild(editor)
 
 // ---------- CLICKING THE NETWORK ----------
 let selection: Selection = null
+let dragStart: { y: number; edge: Edge; value: number } | null = null
+let dragged = false
 let shownBrain: Brain | null = null // the brain drawn in the panel right now
 function panelPoint(e: MouseEvent) {
   const box = netCanvas.getBoundingClientRect()
   return { x: ((e.clientX - box.left) / box.width) * netCanvas.width, y: ((e.clientY - box.top) / box.height) * netCanvas.height }
 }
 netCanvas.addEventListener('click', (e) => {
-  if (!shownBrain) return
+  if (!shownBrain || swarm) return
+  if (dragged) {
+    dragged = false
+    return
+  }
   const { x, y } = panelPoint(e)
-  selection = hitTest(shownBrain, x, y)
+  select(hitTest(shownBrain, x, y, editableEdges()))
 })
-netCanvas.addEventListener('mousemove', (e) => {
+netCanvas.addEventListener('pointermove', (e) => {
   if (!shownBrain) return
   const { x, y } = panelPoint(e)
-  netCanvas.style.cursor = hitTest(shownBrain, x, y) ? 'pointer' : 'default'
+  netCanvas.style.cursor = hitTest(shownBrain, x, y, editableEdges()) ? 'pointer' : 'default'
+  if (!dragStart) return
+  dragged = true
+  setEdge(dragStart.edge, Math.max(-4, Math.min(4, dragStart.value + (dragStart.y - y) * 0.03)))
+  renderEditor()
+})
+// With a mouse, dragging up or down on a connection changes its weight
+netCanvas.addEventListener('pointerdown', (e) => {
+  if (!shownBrain || swarm || e.pointerType !== 'mouse') return
+  const { x, y } = panelPoint(e)
+  const hit = hitTest(shownBrain, x, y, editableEdges())
+  if (hit?.kind === 'edge' && canEditEdge(hit)) {
+    select(hit)
+    dragStart = { y, edge: hit, value: edgeWeight(hit) }
+  }
+})
+window.addEventListener('pointerup', () => {
+  dragStart = null
+})
+
+// Clicking a ray on the track selects its input in the network
+canvas.addEventListener('click', (e) => {
+  if (swarm || missionStage === 'neuron' || missionStage === 'read') return
+  const box = canvas.getBoundingClientRect()
+  const x = ((e.clientX - box.left) / box.width) * canvas.width
+  const y = ((e.clientY - box.top) / box.height) * canvas.height
+  let bestRay = -1
+  let bestDist = 10
+  car.rays.forEach((d, i) => {
+    const a = car.angle + RAY_ANGLES[i]
+    const dx = Math.cos(a)
+    const dy = Math.sin(a)
+    const along = Math.max(0, Math.min(d, (x - car.x) * dx + (y - car.y) * dy))
+    const gap = Math.hypot(x - car.x - dx * along, y - car.y - dy * along)
+    if (gap < bestDist) {
+      bestDist = gap
+      bestRay = i
+    }
+  })
+  if (bestRay >= 0) select({ kind: 'node', layer: 'input', index: bestRay })
 })
 
 // ---------- PAUSE AND STEP ----------
@@ -115,12 +165,17 @@ const KERB_BEND = 0.075 // bends sharper than this per point get striped kerbs
 const { leftWall, rightWall } = track
 let car: Car = createCar(undefined, USE_GRIP)
 let crashes = 0
+let frame = 0
 let predicted: ReturnType<typeof predictPath> | null = null // where the brain would take the car
 let lastCrash: { x: number; y: number; frames: number } | null = null // fades out after a crash
 let best = 0
 
 let brain: Brain = starterBrain()
 let brainOn = false
+let workingBrain: Brain = brain // the brain with the player's edits, before any blinding
+let originalBrain: Brain = brain // what Undo goes back to
+let edited = false
+const blinded = [false, false, false, false, false, false]
 
 function brainInput(): Input {
   const { outputs } = think(brain, getInputs(car))
@@ -445,18 +500,24 @@ function draw() {
     const d = car.rays[i]
     const hitX = car.x + Math.cos(a) * d
     const hitY = car.y + Math.sin(a) * d
-    ctx.strokeStyle = C.accent
-    ctx.lineWidth = 1.5
+    const chosen = selection?.kind === 'node' && selection.layer === 'input' && selection.index === i
+    ctx.strokeStyle = blinded[i] ? C.negative : chosen ? C.text : C.accent
+    ctx.lineWidth = chosen ? 3 : 1.5
+    if (blinded[i]) ctx.setLineDash([4, 6])
     ctx.beginPath()
     ctx.moveTo(car.x, car.y)
     ctx.lineTo(hitX, hitY)
     ctx.stroke()
+    ctx.setLineDash([])
     ctx.fillStyle = C.accent
     ctx.beginPath()
     ctx.arc(hitX, hitY, 3, 0, Math.PI * 2)
     ctx.fill()
   }
 
+  if (selection && brainOn && canEdit() && !paused) {
+    if (frame++ % 8 === 0) predicted = predictPath(car, brain)
+  } else if (canEdit()) predicted = null
   if (predicted) drawPrediction(predicted)
   drawCarShape(car, 34, 18, mode === 'replay' ? C.positive : C.text)
   if (lastCrash && lastCrash.frames > 0) {
@@ -558,6 +619,8 @@ function draw() {
     think(brain, inputs),
     brainOn && mode === 'live' ? 'The brain (driving)' : 'The brain (not driving: only what it would do)',
     selection,
+    missionStage === 'm2' ? editableEdges() : [],
+    blinded,
   )
   if (hideAnswer) {
     netCtx.fillStyle = C.ground
@@ -596,6 +659,11 @@ function makeButton(label: string, onClick: () => void, parent: HTMLElement = bu
 function watch(b: Brain, text: string) {
   setPaused(false)
   brain = b
+  workingBrain = b
+  originalBrain = b
+  edited = false
+  blinded.fill(false)
+  if (missionStage !== 'm2' && missionStage !== 'm2done') renderEditor() // Mission 3 restarts on every edit, mid-drag
   startFreshRecording()
   brainOn = true
   message = text
@@ -765,7 +833,7 @@ makeButton('Test on ' + HIDDEN_COUNT + ' hidden tracks', async () => {
   hiddenPanel.style.display = 'block'
   hiddenPanel.textContent = 'Testing the brain on ' + HIDDEN_COUNT + ' tracks it has never seen...'
   const tested = brain
-  const origin: BrainOrigin = tested !== trained ? 'handwritten' : trainedSource === 'file' ? 'unknown' : 'learned'
+  const origin: BrainOrigin = edited || blinded.some(Boolean) ? 'edited' : tested !== trained ? 'handwritten' : trainedSource === 'file' ? 'unknown' : 'learned'
   const r = await testOnHiddenTracks(tested)
   const dots = r.finished
     .map((ok, i) => '<span title="track ' + (i + 1) + (ok ? ': lapped' : ': failed') + '" class="dot' + (ok ? '' : ' fail') + '"></span>')
@@ -1125,31 +1193,7 @@ rail.appendChild(m2Panel)
 const m2Result = document.createElement('div')
 m2Result.style.marginTop = '6px'
 
-function addSlider(label: string, key: 'steer' | 'wall' | 'speed', min: number, max: number) {
-  const row = document.createElement('div')
-  row.className = 'slider'
-  const text = document.createElement('span')
-  text.textContent = label
-  const input = document.createElement('input')
-  input.type = 'range'
-  input.min = String(min)
-  input.max = String(max)
-  input.step = '0.1'
-  input.value = '0'
-  const value = document.createElement('b')
-  value.textContent = '0.0'
-  input.addEventListener('input', () => {
-    m2[key] = Number(input.value)
-    value.textContent = m2[key].toFixed(1)
-    scheduleM2()
-  })
-  input.addEventListener('change', () => input.blur()) // keep the keyboard free
-  row.append(text, input, value)
-  m2Panel.appendChild(row)
-}
-addSlider('Steer toward the more open side (negative = toward the walls!)', 'steer', -4, 4)
-addSlider('Brake when a wall is close ahead', 'wall', 0, 4)
-addSlider('Brake when going fast', 'speed', 0, 4)
+m2Panel.innerHTML = '<p class="note">Hidden neuron 1 means "right is open", 2 means "wall ahead", 3 means "going fast". Negative weights on throttle brake the car.</p>'
 m2Panel.appendChild(m2Result)
 
 // Re-test the brain whenever a slider moves (several moves in one frame count once)
@@ -1176,6 +1220,138 @@ rail.appendChild(neuronPanel)
 
 const STAGE_STEP: Record<MissionStage, number> = { m1: 0, m1done: 0, neuron: 1, neurondone: 1, read: 1, readdone: 1, m2: 2, m2done: 2, m3: 3, m3done: 3 }
 
+// ---------- EDITING THE NETWORK ----------
+const THREE_EDGES: Edge[] = [
+  { layer: 'second', from: 0, to: 0 },
+  { layer: 'second', from: 1, to: 1 },
+  { layer: 'second', from: 2, to: 1 },
+]
+const canEdit = () => missionStage === 'm2' || missionStage === 'm2done' || missionStage === 'm3' || missionStage === 'm3done'
+function editableEdges(): Edge[] {
+  return missionStage === 'm2' || missionStage === 'm2done' ? THREE_EDGES : []
+}
+const canEditEdge = (e: Edge) =>
+  missionStage === 'm3' || missionStage === 'm3done' || (canEdit() && THREE_EDGES.some((t) => sameEdge(t, e)))
+
+const edgeWeight = (e: Edge) => (e.layer === 'first' ? workingBrain.w1 : workingBrain.w2)[e.to][e.from]
+const edgeName = (e: Edge) =>
+  e.layer === 'first' ? INPUT_LABELS[e.from] + ' to ' + hiddenName(e.to) : hiddenName(e.from) + ' to ' + OUTPUT_LABELS[e.to]
+
+function changeBrain(fn: (b: Brain) => void) {
+  if (!edited) {
+    workingBrain = cloneBrain(workingBrain)
+    edited = true
+  }
+  fn(workingBrain)
+  brain = blinded.some(Boolean) ? blindBrain(workingBrain, blinded) : workingBrain
+}
+
+function setEdge(e: Edge, value: number) {
+  if (!canEditEdge(e)) return
+  if (missionStage === 'm2' || missionStage === 'm2done') {
+    // Mission 3's brain is rebuilt from these three numbers, which restarts the car
+    if (e.to === 0) m2.steer = value
+    else if (e.from === 1) m2.wall = -value
+    else m2.speed = -value
+    scheduleM2()
+    return
+  }
+  changeBrain((b) => ((e.layer === 'first' ? b.w1 : b.w2)[e.to][e.from] = value))
+}
+
+function select(s: Selection) {
+  selection = s
+  renderEditor()
+}
+
+function weightRow(label: string, value: number, onInput: (v: number) => void): HTMLElement {
+  const row = document.createElement('label')
+  row.className = 'slider'
+  const text = document.createElement('span')
+  text.textContent = label
+  const input = document.createElement('input')
+  input.type = 'range'
+  input.min = '-4'
+  input.max = '4'
+  input.step = '0.1'
+  input.value = String(value)
+  const shown = document.createElement('b')
+  shown.textContent = value.toFixed(1)
+  input.addEventListener('input', () => {
+    shown.textContent = Number(input.value).toFixed(1)
+    onInput(Number(input.value))
+  })
+  input.addEventListener('keydown', (e) => e.stopPropagation()) // arrow keys move the slider, not the car
+  row.append(text, input, shown)
+  return row
+}
+
+// The panel under the network: what the selected thing is, and what can be done to it
+function renderEditor() {
+  editor.innerHTML = ''
+  const show = canEdit() && !swarm && selection !== null
+  editor.style.display = show ? 'block' : 'none'
+  if (!show || !selection) return
+  const sel = selection
+  if (sel.kind === 'edge') {
+    if (!canEditEdge(sel)) {
+      editor.innerHTML = '<p class="note">This connection is locked here. Use the dashed ones.</p>'
+      return
+    }
+    editor.appendChild(weightRow(edgeName(sel), edgeWeight(sel), (v) => setEdge(sel, v)))
+    const cut = document.createElement('button')
+    cut.className = 'btn'
+    cut.textContent = 'Cut this connection'
+    cut.addEventListener('click', () => {
+      setEdge(sel, 0)
+      renderEditor()
+    })
+    editor.appendChild(cut)
+  } else if (sel.layer === 'input') {
+    if (missionStage === 'm2' || missionStage === 'm2done') {
+      editor.innerHTML = '<p class="note">' + INPUT_LABELS[sel.index] + ' is locked here.</p>'
+      return
+    }
+    const off = blinded[sel.index]
+    const toggle = document.createElement('button')
+    toggle.className = 'btn'
+    toggle.textContent = (off ? 'Give back ' : 'Blind ') + INPUT_LABELS[sel.index]
+    toggle.addEventListener('click', () => {
+      blinded[sel.index] = !off
+      changeBrain(() => {})
+      renderEditor()
+    })
+    editor.appendChild(toggle)
+  } else if (sel.layer === 'hidden' || sel.layer === 'output') {
+    if (missionStage === 'm2' || missionStage === 'm2done') {
+      THREE_EDGES.filter((e) => (sel.layer === 'hidden' ? e.from === sel.index : e.to === sel.index)).forEach((e) =>
+        editor.appendChild(weightRow(edgeName(e), edgeWeight(e), (v) => setEdge(e, v))),
+      )
+      return
+    }
+    const hiddenLayer = sel.layer === 'hidden'
+    const count = hiddenLayer ? INPUT_LABELS.length : workingBrain.w1.length
+    for (let i = 0; i < count; i++) {
+      const e: Edge = { layer: hiddenLayer ? 'first' : 'second', from: i, to: sel.index }
+      editor.appendChild(weightRow(edgeName(e), edgeWeight(e), (v) => setEdge(e, v)))
+    }
+    const biases = hiddenLayer ? 'b1' : 'b2'
+    editor.appendChild(
+      weightRow('Bias (always added)', workingBrain[biases][sel.index], (v) => changeBrain((b) => (b[biases][sel.index] = v))),
+    )
+  }
+  if (missionStage === 'm3' || missionStage === 'm3done') {
+    const reset = document.createElement('button')
+    reset.className = 'btn'
+    reset.textContent = 'Undo all my changes'
+    reset.addEventListener('click', () => {
+      const original = originalBrain
+      watch(original, 'Your changes were undone.')
+    })
+    editor.appendChild(reset)
+  }
+}
+
 function applyStageVisibility() {
   const sandbox = missionStage === 'm3' || missionStage === 'm3done'
   buttons.style.display = sandbox ? '' : 'none'
@@ -1185,6 +1361,7 @@ function applyStageVisibility() {
   const frozen = missionStage === 'neuron' || missionStage === 'read'
   neuronPanel.style.display = frozen ? 'block' : 'none'
   pauseRow.style.display = frozen ? 'none' : 'flex'
+  renderEditor()
   pad.style.display = frozen ? 'none' : ''
   document.body.classList.toggle('sandbox', sandbox)
   const current = STAGE_STEP[missionStage]
@@ -1298,7 +1475,7 @@ function missionHtml(): string {
         missionButton('start2', 'Next: set the weights') + missionButton('startRead', 'Play again', false),
       )
     case 'm2':
-      return card('Set three weights', 'Move the sliders until the car drives a lap by itself.<br>' + progress())
+      return card('Set three weights', (touchScreen ? 'Tap a neuron with a dashed connection and set its weight' : 'Click a dashed connection and set its weight, or drag it up and down,') + ' until the car laps by itself. The line shows where it will go.<br>' + progress())
     case 'm2done':
       return card(
         'It drives itself',

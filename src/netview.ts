@@ -1,8 +1,8 @@
 import { type Brain, type Thought } from './brain'
 import { C } from './theme'
 
-const INPUT_LABELS = ['ray -60°', 'ray -30°', 'ray 0°', 'ray +30°', 'ray +60°', 'speed']
-const OUTPUT_LABELS = ['steer', 'throttle']
+export const INPUT_LABELS = ['ray -60°', 'ray -30°', 'ray 0°', 'ray +30°', 'ray +60°', 'speed']
+export const OUTPUT_LABELS = ['steer', 'throttle']
 
 const COLUMN_X = { input: 100, hidden: 220, output: 330 }
 const NODE_RADIUS = 17
@@ -15,6 +15,9 @@ export type Selection =
   | { kind: 'node'; layer: 'input' | 'hidden' | 'output'; index: number }
   | { kind: 'edge'; layer: 'first' | 'second'; from: number; to: number }
   | null
+
+export type Edge = { layer: 'first' | 'second'; from: number; to: number }
+export const sameEdge = (a: Edge, b: Edge) => a.layer === b.layer && a.from === b.from && a.to === b.to
 
 // Evenly spaced nodes down one column
 function column(x: number, count: number): Node[] {
@@ -41,7 +44,7 @@ function distToLine(x: number, y: number, a: Node, b: Node): number {
 }
 
 // What is at this spot of the panel? Neurons win over the lines that run into them.
-export function hitTest(brain: Brain, x: number, y: number): Selection {
+export function hitTest(brain: Brain, x: number, y: number, editable: Edge[] = []): Selection {
   const { inNodes, hidNodes, outNodes } = layout(brain)
   const near = (nodes: Node[]) => nodes.findIndex((n) => Math.hypot(x - n.x, y - n.y) <= NODE_RADIUS + 5)
   const input = near(inNodes)
@@ -56,7 +59,8 @@ export function hitTest(brain: Brain, x: number, y: number): Selection {
   const search = (layer: 'first' | 'second', from: Node[], to: Node[], weights: number[][]) => {
     to.forEach((b, t) =>
       from.forEach((a, f) => {
-        if (Math.abs(weights[t][f]) < 0.01) return // not drawn, so not clickable
+        const open = editable.some((e) => sameEdge(e, { layer, from: f, to: t }))
+        if (Math.abs(weights[t][f]) < 0.01 && !open) return // not drawn, so not clickable
         const d = distToLine(x, y, a, b)
         if (d < bestDist) {
           bestDist = d
@@ -120,8 +124,9 @@ function drawNodes(ctx: CanvasRenderingContext2D, nodes: Node[], values: number[
 }
 
 // The name and current numbers of what is selected, in plain words
+export const hiddenName = (i: number) => 'hidden neuron ' + (i + 1)
+
 function describeSelection(sel: NonNullable<Selection>, brain: Brain, inputs: number[], thought: Thought): string {
-  const hiddenName = (i: number) => 'hidden neuron ' + (i + 1)
   if (sel.kind === 'node') {
     if (sel.layer === 'input') return INPUT_LABELS[sel.index] + ': ' + inputs[sel.index].toFixed(2)
     if (sel.layer === 'hidden') return hiddenName(sel.index) + ': ' + thought.hidden[sel.index].toFixed(2)
@@ -142,6 +147,8 @@ export function drawNetwork(
   thought: Thought,
   title: string,
   selection: Selection = null,
+  editable: Edge[] = [],
+  blinded: boolean[] = [],
 ) {
   ctx.fillStyle = C.ground
   ctx.fillRect(0, 0, ctx.canvas.width, ctx.canvas.height)
@@ -151,9 +158,36 @@ export function drawNetwork(
   drawEdges(ctx, inNodes, hidNodes, brain.w1, inputs)
   drawEdges(ctx, hidNodes, outNodes, brain.w2, thought.hidden)
 
+  // connections the player may change right now
+  ctx.strokeStyle = C.accent
+  ctx.lineWidth = 2
+  ctx.setLineDash([5, 5])
+  ctx.beginPath()
+  for (const e of editable) {
+    const [from, to] = e.layer === 'first' ? [inNodes, hidNodes] : [hidNodes, outNodes]
+    ctx.moveTo(from[e.from].x, from[e.from].y)
+    ctx.lineTo(to[e.to].x, to[e.to].y)
+  }
+  ctx.stroke()
+  ctx.setLineDash([])
+
   drawNodes(ctx, inNodes, inputs)
   drawNodes(ctx, hidNodes, thought.hidden)
   drawNodes(ctx, outNodes, thought.outputs)
+
+  // a blinded input gets a red cross
+  ctx.strokeStyle = C.negative
+  ctx.lineWidth = 3
+  ctx.beginPath()
+  blinded.forEach((off, i) => {
+    if (!off) return
+    const n = inNodes[i]
+    ctx.moveTo(n.x - 12, n.y - 12)
+    ctx.lineTo(n.x + 12, n.y + 12)
+    ctx.moveTo(n.x + 12, n.y - 12)
+    ctx.lineTo(n.x - 12, n.y + 12)
+  })
+  ctx.stroke()
 
   // a white outline marks what is selected
   ctx.strokeStyle = 'white'

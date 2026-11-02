@@ -22,7 +22,7 @@ Decided 2 Nov 2026 after ten chat prototypes. This order replaces the phase orde
 
 - [x] **B1. Tug-of-war and predicted path.** Replaces the neuron table. All six weights plus Reset. The path comes from a copy of the real car simulated ahead. Fixes the rest of F10.
 - [x] **B2. Read the brain.** A few guessing rounds using real track positions. Also the start of the quiz in F15.
-- [ ] **B3. Edit the network directly.** Drag connections, click rays to blind them, cut connections, link rays on the track to inputs in the panel. Fixes F11, F13 and F14.
+- [x] **B3. Edit the network directly.** Drag connections, click rays to blind them, cut connections, link rays on the track to inputs in the panel. Fixes F11, F13 and F14.
 - [ ] **B4. Road detector.** Hover a neuron and the real road lights up. Fixes F24, or record why it was dropped.
 - [ ] **Checkpoint: test Chapters 1 and 2 with 3 to 5 non-ML friends (F15).** Results can reorder everything below.
 - [ ] **B5. You are evolution and Downhill.** Pick-a-parent before the 100-car run, then the slope lesson. Fixes F16.
@@ -31,7 +31,7 @@ Decided 2 Nov 2026 after ten chat prototypes. This order replaces the phase orde
 - [ ] **B8. Reward design.** Real training with fixed reward terms and never user code. Needs a fast small run. Fixes F27.
 - [ ] **B9. Crash detective.** Starts as chosen crashes with known causes, then grows into automatic diagnosis (F26).
 
-Bias still needs a home, most likely in B1 or the Road detector.
+Bias is editable in the neuron list from B3, but nothing explains it yet.
 
 ## Phase 0: Quick fixes (one sitting)
 
@@ -58,13 +58,13 @@ Bias still needs a home, most likely in B1 or the Road detector.
   Done when: it has click targets, and pausing and stepping the car work.
 - [x] **F10 [S1] The app never shows what a neuron computes.** Weighted sum, bias, tanh and "hidden" are never explained.
   Done when: a new "inside one neuron" mission walks through ray x weight, the sum, the squash and the output, and the player drags a real weight to change the decision. Bias is not shown yet, because this neuron's bias is 0.
-- [ ] **F11 [S1] No way to break things.** Blind-a-ray and cut-a-connection do not exist.
+- [x] **F11 [S1] No way to break things.** Blind-a-ray and cut-a-connection do not exist.
   Done when: both work live and visibly change the driving.
 - [ ] **F12 [S2] Numbers do not match.** The yellow line says 106 while the network says 0.53, with no explanation.
   Done when: both use one scale, or the conversion is shown.
-- [ ] **F13 [S1] Mission 2 teaches car tuning, not weights.** Sliders name behaviours and are not linked to any connection, and the mission is badly tuned for grip.
+- [x] **F13 [S1] Mission 2 teaches car tuning, not weights.** Sliders name behaviours and are not linked to any connection, and the mission is badly tuned for grip.
   Done when: the player edits real connections, those connections light up, and a sensible attempt laps at a decent speed.
-- [ ] **F14 [S3] Connections are too small to tap on a phone.**
+- [x] **F14 [S3] Connections are too small to tap on a phone.**
   Done when: tapping a neuron opens its connections as a list of sliders.
 
 - [x] **F41 [S3] Text says "the network on the right", but on phones it is below the track.**
