@@ -1,15 +1,15 @@
-// Finds where extra training stops helping. Put this file in src/ and run:
-//   npx tsx src/compare3.ts 3        (3 seeds, starting at seed 1)
-//   npx tsx src/compare3.ts 3 4      (3 seeds, starting at seed 4)
+// Finds where extra training stops helping. Run:
+//   npx tsx scripts/compare3.ts 3        (3 seeds, starting at seed 1)
+//   npx tsx scripts/compare3.ts 3 4      (3 seeds, starting at seed 4)
 // Each seed trains ONCE for 160 generations on 5 tracks (grip on). Because evolution is
 // deterministic, the best brain at generation 40, 80, 120 and 160 is exactly what a run of
 // that length would have produced, so one run gives all four answers (a quarter of the work).
 // Between seeds it rests for 30 seconds so the laptop can cool down.
-import { evolve, DEFAULT_SETTINGS } from './evolve'
-import { genomeToBrain, GENOME_LENGTH } from './genome'
-import { makeRng } from './random'
-import { makeTrack } from './track'
-import { DEFAULT_TRACK, USE_GRIP, lapSteps } from './sim'
+import { evolve, DEFAULT_SETTINGS } from '../src/evolve'
+import { genomeToBrain, GENOME_LENGTH } from '../src/genome'
+import { makeRng } from '../src/random'
+import { makeTrack } from '../src/track'
+import { DEFAULT_TRACK, USE_GRIP, lapSteps } from '../src/sim'
 
 const SEEDS = Number(process.argv[2] ?? 3)
 const FIRST = Number(process.argv[3] ?? 1)

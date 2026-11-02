@@ -20,6 +20,5 @@
     "erasableSyntaxOnly": true,
     "noFallthroughCasesInSwitch": true
   },
-  "include": ["src"],
-  "exclude": ["src/compare.ts", "src/compare2.ts", "src/compare3.ts"]
+  "include": ["src"]
 }

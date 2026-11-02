@@ -1,15 +1,15 @@
-// Tests why the five-track brain drives slowly. Put this file in src/ and run:
-//   npx tsx src/compare2.ts 5
+// Tests why the five-track brain drives slowly. Run:
+//   npx tsx scripts/compare2.ts 5
 // For each seed it trains three ways (all on the same 5 tracks, grip on):
 //   A = the app's real settings (early stop at 52)
 //   B = no early stop, 40 generations
 //   C = no early stop, 80 generations
 // and reports laps on 40 unseen tracks, average lap time, and generations run.
-import { evolve, DEFAULT_SETTINGS } from './evolve'
-import { genomeToBrain, GENOME_LENGTH } from './genome'
-import { makeRng } from './random'
-import { makeTrack } from './track'
-import { DEFAULT_TRACK, USE_GRIP, lapSteps } from './sim'
+import { evolve, DEFAULT_SETTINGS } from '../src/evolve'
+import { genomeToBrain, GENOME_LENGTH } from '../src/genome'
+import { makeRng } from '../src/random'
+import { makeTrack } from '../src/track'
+import { DEFAULT_TRACK, USE_GRIP, lapSteps } from '../src/sim'
 
 const SEEDS = Number(process.argv[2] ?? 5)
 

@@ -19,7 +19,7 @@ Severity: **[S1]** blocks the teaching goal, **[S2]** a real bug or misleading r
   Done when: players see only what the current mission needs.
 - [x] **F06 [S3] Wrong or missing identity.** The page title is "crashlab", the project has no chosen name, and there is no meta description.
   Done when: a name is chosen and used everywhere.
-- [ ] **F07 [S4] Dead files.** `src/counter.ts` and `src/style.css` are unused, along with the template assets. `compare*.ts` are experiments sitting in `src/`.
+- [x] **F07 [S4] Dead files.** `src/counter.ts` and `src/style.css` are unused, along with the template assets. `compare*.ts` are experiments sitting in `src/`.
   Done when: unused files are removed and experiments live in `scripts/`.
 - [ ] **F08 [S4] Scripts are not type-checked.** `tsconfig.json` only includes `src`, so `scripts/` never goes through `tsc`.
   Done when: `npm run build` or a separate script checks them.

@@ -1,11 +1,11 @@
 // Compares evolved brains trained on ONE track vs SEVERAL tracks, with grip on.
-// Put this file in src/ and run:  npx tsx src/compare.ts 10
+// Run:  npx tsx scripts/compare.ts 10
 // (the number is how many seeds to try; each seed trains both ways, so expect several minutes)
-import { evolve, DEFAULT_SETTINGS } from './evolve'
-import { genomeToBrain, GENOME_LENGTH } from './genome'
-import { makeRng } from './random'
-import { makeTrack } from './track'
-import { DEFAULT_TRACK, USE_GRIP, lapSteps } from './sim'
+import { evolve, DEFAULT_SETTINGS } from '../src/evolve'
+import { genomeToBrain, GENOME_LENGTH } from '../src/genome'
+import { makeRng } from '../src/random'
+import { makeTrack } from '../src/track'
+import { DEFAULT_TRACK, USE_GRIP, lapSteps } from '../src/sim'
 
 const SEEDS = Number(process.argv[2] ?? 10)
 const GENERATIONS = 40
