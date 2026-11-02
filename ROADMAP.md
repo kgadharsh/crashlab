@@ -26,7 +26,7 @@ Severity: **[S1]** blocks the teaching goal, **[S2]** a real bug or misleading r
 
 ## Phase 1: Make the network touchable (the main work)
 
-- [ ] **F09 [S1] Nobody can interact with the network.** The panel is display-only.
+- [x] **F09 [S1] Nobody can interact with the network.** The panel is display-only.
   Done when: it has click targets, and pausing and stepping the car work.
 - [ ] **F10 [S1] The app never shows what a neuron computes.** Weighted sum, bias, tanh and "hidden" are never explained.
   Done when: a new "inside one neuron" mission walks through ray x weight, the sum, the squash and the output, and the player works one out.
@@ -38,6 +38,9 @@ Severity: **[S1]** blocks the teaching goal, **[S2]** a real bug or misleading r
   Done when: the player edits real connections, those connections light up, and a sensible attempt laps at a decent speed.
 - [ ] **F14 [S3] Connections are too small to tap on a phone.**
   Done when: tapping a neuron opens its connections as a list of sliders.
+
+- [ ] **F41 [S3] Text says "the network on the right", but on phones it is below the track.**
+  Done when: mission text does not depend on the layout.
 
 ### Checkpoint: test with people
 

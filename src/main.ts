@@ -5,7 +5,7 @@ import { genomeToBrain, brainToGenome } from './genome'
 import { brainToJson, brainFromJson } from './brainFile'
 import { PRETRAINED_GENOME } from './pretrained'
 import { prepareHiddenTracks, testOnHiddenTracks, hiddenVerdict, HIDDEN_COUNT, type BrainOrigin } from './hidden'
-import { drawNetwork } from './netview'
+import { drawNetwork, hitTest, type Selection } from './netview'
 import {
   type Car,
   type Input,
@@ -59,8 +59,57 @@ const netCanvas = document.createElement('canvas')
 netCanvas.width = 420
 netCanvas.height = 500
 netCanvas.style.cssText = 'border:2px solid black;max-width:100%;height:auto;box-sizing:border-box'
-wrapper.appendChild(netCanvas)
+const netColumn = document.createElement('div')
+netColumn.style.cssText = 'max-width:100%;min-width:0'
+wrapper.appendChild(netColumn)
+netColumn.appendChild(netCanvas)
 const netCtx = netCanvas.getContext('2d')!
+
+// ---------- CLICKING THE NETWORK ----------
+let selection: Selection = null
+let shownBrain: Brain | null = null // the brain drawn in the panel right now
+function panelPoint(e: MouseEvent) {
+  const box = netCanvas.getBoundingClientRect()
+  return { x: ((e.clientX - box.left) / box.width) * netCanvas.width, y: ((e.clientY - box.top) / box.height) * netCanvas.height }
+}
+netCanvas.addEventListener('click', (e) => {
+  if (!shownBrain) return
+  const { x, y } = panelPoint(e)
+  selection = hitTest(shownBrain, x, y)
+})
+netCanvas.addEventListener('mousemove', (e) => {
+  if (!shownBrain) return
+  const { x, y } = panelPoint(e)
+  netCanvas.style.cursor = hitTest(shownBrain, x, y) ? 'pointer' : 'default'
+})
+
+// ---------- PAUSE AND STEP ----------
+let paused = false
+let stepRequested = false
+const pauseRow = document.createElement('div')
+pauseRow.style.cssText = 'display:flex;gap:8px;margin-top:8px'
+netColumn.appendChild(pauseRow)
+function pauseControl(label: string, onClick: () => void): HTMLButtonElement {
+  const b = document.createElement('button')
+  b.textContent = label
+  b.style.cssText = 'flex:1;min-height:40px;font-size:15px'
+  b.addEventListener('click', () => {
+    b.blur() // so the arrow keys keep controlling the car
+    onClick()
+  })
+  pauseRow.appendChild(b)
+  return b
+}
+function setPaused(p: boolean) {
+  paused = p
+  pauseButton.textContent = p ? 'Resume' : 'Pause'
+  stepButton.disabled = !p
+}
+const pauseButton = pauseControl('Pause', () => setPaused(!paused))
+const stepButton = pauseControl('Step', () => {
+  stepRequested = true
+})
+stepButton.disabled = true
 
 // ---------- GAME STATE (the simulation itself lives in sim.ts) ----------
 const track = DEFAULT_TRACK // the road being driven and drawn
@@ -90,6 +139,10 @@ const keys: Record<string, boolean> = {}
 window.addEventListener('keydown', (e) => {
   keys[e.key] = true
   if (e.key.startsWith('Arrow')) e.preventDefault()
+  if (e.key === ' ') {
+    e.preventDefault()
+    setPaused(!paused)
+  }
   if (e.key === 'd' || e.key === 'D') debug = !debug
   if (!debug) return
   if (e.key === 'r' || e.key === 'R') startReplay()
@@ -329,6 +382,16 @@ function draw() {
   ctx.restore()
   }
 
+  if (paused) {
+    ctx.fillStyle = 'rgba(255,255,255,0.85)'
+    ctx.fillRect(345, 225, 110, 34)
+    ctx.fillStyle = 'black'
+    ctx.font = 'bold 18px sans-serif'
+    ctx.textAlign = 'center'
+    ctx.textBaseline = 'middle'
+    ctx.fillText('PAUSED', 400, 243)
+  }
+
   ctx.fillStyle = 'black'
   ctx.font = '16px sans-serif'
   ctx.textAlign = 'left'
@@ -396,16 +459,19 @@ function draw() {
   if (swarm) {
     const lead = swarm.cars[0]
     const inputs = getInputs(lead)
-    drawNetwork(netCtx, swarm.brains[0], inputs, think(swarm.brains[0], inputs), 'Best car of generation ' + (swarm.gen + 1))
+    shownBrain = swarm.brains[0]
+    drawNetwork(netCtx, swarm.brains[0], inputs, think(swarm.brains[0], inputs), 'Best car of generation ' + (swarm.gen + 1), selection)
     return
   }
   const inputs = getInputs(car)
+  shownBrain = brain
   drawNetwork(
     netCtx,
     brain,
     inputs,
     think(brain, inputs),
     brainOn && mode === 'live' ? 'The brain (driving)' : 'The brain (not driving: only what it would do)',
+    selection,
   )
 }
 
@@ -430,6 +496,7 @@ function makeButton(label: string, onClick: () => void): HTMLButtonElement {
 
 // Hand a brain to the car and let it drive from the start
 function watch(b: Brain, text: string) {
+  setPaused(false)
   brain = b
   startFreshRecording()
   brainOn = true
@@ -1082,12 +1149,20 @@ function loop(now: number) {
   lastTime = now
   if (owed > 250) owed = 250
 
-  while (owed >= STEP) {
-    tick()
-    owed -= STEP
+  if (paused) {
+    owed = 0
+    if (stepRequested) {
+      tick()
+      stepSwarm()
+    }
+  } else {
+    while (owed >= STEP) {
+      tick()
+      owed -= STEP
+    }
+    stepSwarm()
   }
-
-  stepSwarm()
+  stepRequested = false
   draw()
   requestAnimationFrame(loop)
 }

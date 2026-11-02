@@ -5,8 +5,15 @@ const OUTPUT_LABELS = ['steer', 'throttle']
 
 const COLUMN_X = { input: 100, hidden: 220, output: 330 }
 const NODE_RADIUS = 17
+const EDGE_REACH = 8 // how close a click must land to a connection
 
 type Node = { x: number; y: number }
+
+// What the user has clicked in the panel
+export type Selection =
+  | { kind: 'node'; layer: 'input' | 'hidden' | 'output'; index: number }
+  | { kind: 'edge'; layer: 'first' | 'second'; from: number; to: number }
+  | null
 
 // Evenly spaced nodes down one column
 function column(x: number, count: number): Node[] {
@@ -14,6 +21,52 @@ function column(x: number, count: number): Node[] {
   const bottom = 410
   const step = (bottom - top) / count
   return Array.from({ length: count }, (_, i) => ({ x, y: top + step * (i + 0.5) }))
+}
+
+// The neurons of all three columns
+function layout(brain: Brain) {
+  return {
+    inNodes: column(COLUMN_X.input, brain.w1[0].length),
+    hidNodes: column(COLUMN_X.hidden, brain.w1.length),
+    outNodes: column(COLUMN_X.output, brain.w2.length),
+  }
+}
+
+function distToLine(x: number, y: number, a: Node, b: Node): number {
+  const dx = b.x - a.x
+  const dy = b.y - a.y
+  const t = Math.max(0, Math.min(1, ((x - a.x) * dx + (y - a.y) * dy) / (dx * dx + dy * dy)))
+  return Math.hypot(x - (a.x + t * dx), y - (a.y + t * dy))
+}
+
+// What is at this spot of the panel? Neurons win over the lines that run into them.
+export function hitTest(brain: Brain, x: number, y: number): Selection {
+  const { inNodes, hidNodes, outNodes } = layout(brain)
+  const near = (nodes: Node[]) => nodes.findIndex((n) => Math.hypot(x - n.x, y - n.y) <= NODE_RADIUS + 5)
+  const input = near(inNodes)
+  if (input >= 0) return { kind: 'node', layer: 'input', index: input }
+  const hidden = near(hidNodes)
+  if (hidden >= 0) return { kind: 'node', layer: 'hidden', index: hidden }
+  const output = near(outNodes)
+  if (output >= 0) return { kind: 'node', layer: 'output', index: output }
+
+  let best: Selection = null
+  let bestDist = EDGE_REACH
+  const search = (layer: 'first' | 'second', from: Node[], to: Node[], weights: number[][]) => {
+    to.forEach((b, t) =>
+      from.forEach((a, f) => {
+        if (Math.abs(weights[t][f]) < 0.01) return // not drawn, so not clickable
+        const d = distToLine(x, y, a, b)
+        if (d < bestDist) {
+          bestDist = d
+          best = { kind: 'edge', layer, from: f, to: t }
+        }
+      }),
+    )
+  }
+  search('first', inNodes, hidNodes, brain.w1)
+  search('second', hidNodes, outNodes, brain.w2)
+  return best
 }
 
 // Blue = positive, red = negative. Brighter = stronger.
@@ -65,19 +118,34 @@ function drawNodes(ctx: CanvasRenderingContext2D, nodes: Node[], values: number[
   }
 }
 
+// The name and current numbers of what is selected, in plain words
+function describeSelection(sel: NonNullable<Selection>, brain: Brain, inputs: number[], thought: Thought): string {
+  const hiddenName = (i: number) => 'hidden neuron ' + (i + 1)
+  if (sel.kind === 'node') {
+    if (sel.layer === 'input') return INPUT_LABELS[sel.index] + ': ' + inputs[sel.index].toFixed(2)
+    if (sel.layer === 'hidden') return hiddenName(sel.index) + ': ' + thought.hidden[sel.index].toFixed(2)
+    return OUTPUT_LABELS[sel.index] + ': ' + thought.outputs[sel.index].toFixed(2)
+  }
+  if (sel.layer === 'first') {
+    const w = brain.w1[sel.to][sel.from]
+    return INPUT_LABELS[sel.from] + ' to ' + hiddenName(sel.to) + ': weight ' + w.toFixed(2)
+  }
+  const w = brain.w2[sel.to][sel.from]
+  return hiddenName(sel.from) + ' to ' + OUTPUT_LABELS[sel.to] + ': weight ' + w.toFixed(2)
+}
+
 export function drawNetwork(
   ctx: CanvasRenderingContext2D,
   brain: Brain,
   inputs: number[],
   thought: Thought,
   title: string,
+  selection: Selection = null,
 ) {
   ctx.fillStyle = '#14161c'
   ctx.fillRect(0, 0, ctx.canvas.width, ctx.canvas.height)
 
-  const inNodes = column(COLUMN_X.input, inputs.length)
-  const hidNodes = column(COLUMN_X.hidden, thought.hidden.length)
-  const outNodes = column(COLUMN_X.output, thought.outputs.length)
+  const { inNodes, hidNodes, outNodes } = layout(brain)
 
   drawEdges(ctx, inNodes, hidNodes, brain.w1, inputs)
   drawEdges(ctx, hidNodes, outNodes, brain.w2, thought.hidden)
@@ -85,6 +153,21 @@ export function drawNetwork(
   drawNodes(ctx, inNodes, inputs)
   drawNodes(ctx, hidNodes, thought.hidden)
   drawNodes(ctx, outNodes, thought.outputs)
+
+  // a white outline marks what is selected
+  ctx.strokeStyle = 'white'
+  ctx.lineWidth = 2.5
+  ctx.beginPath()
+  if (selection?.kind === 'node') {
+    const nodes = selection.layer === 'input' ? inNodes : selection.layer === 'hidden' ? hidNodes : outNodes
+    const n = nodes[selection.index]
+    ctx.arc(n.x, n.y, NODE_RADIUS + 3, 0, Math.PI * 2)
+  } else if (selection?.kind === 'edge') {
+    const [from, to] = selection.layer === 'first' ? [inNodes, hidNodes] : [hidNodes, outNodes]
+    ctx.moveTo(from[selection.from].x, from[selection.from].y)
+    ctx.lineTo(to[selection.to].x, to[selection.to].y)
+  }
+  ctx.stroke()
 
   // Labels
   ctx.fillStyle = '#ccc'
@@ -104,6 +187,11 @@ export function drawNetwork(
   ctx.font = '16px sans-serif'
   ctx.fillText(title, ctx.canvas.width / 2, 28)
 
+  ctx.font = '13px sans-serif'
+  ctx.fillStyle = selection ? 'white' : '#999'
+  ctx.fillText(selection ? describeSelection(selection, brain, inputs, thought) : 'Click a neuron or a connection', ctx.canvas.width / 2, 442)
+
+  ctx.fillStyle = '#ccc'
   ctx.font = '11px sans-serif'
   ctx.fillText('blue = pushes up, red = pushes down, brighter = stronger', ctx.canvas.width / 2, 470)
 }
