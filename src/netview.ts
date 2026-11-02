@@ -1,4 +1,5 @@
 import { type Brain, type Thought } from './brain'
+import { C } from './theme'
 
 const INPUT_LABELS = ['ray -60°', 'ray -30°', 'ray 0°', 'ray +30°', 'ray +60°', 'speed']
 const OUTPUT_LABELS = ['steer', 'throttle']
@@ -142,7 +143,7 @@ export function drawNetwork(
   title: string,
   selection: Selection = null,
 ) {
-  ctx.fillStyle = '#14161c'
+  ctx.fillStyle = C.ground
   ctx.fillRect(0, 0, ctx.canvas.width, ctx.canvas.height)
 
   const { inNodes, hidNodes, outNodes } = layout(brain)

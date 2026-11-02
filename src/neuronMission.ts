@@ -49,17 +49,17 @@ export function runNeuronSteps(panel: HTMLElement, m: Moment, onDone: () => void
 
   function table(blank: boolean): string {
     const rows = m.inputs.map((x, i) => {
-      const product = blank && i === BLANK_ROW ? '<input id="n-answer" inputmode="decimal" style="width:64px;font-size:16px">' : round2(x * m.weights[i]).toFixed(2)
+      const product = blank && i === BLANK_ROW ? '<input id="n-answer" inputmode="decimal">' : round2(x * m.weights[i]).toFixed(2)
       return row([LABELS[i], x.toFixed(2), '× ' + m.weights[i], '= ' + product])
     })
-    return '<table style="border-collapse:collapse">' + row(['input', 'value', 'weight', 'result'], 'th') + rows.join('') + '</table>'
+    return '<table>' + row(['input', 'value', 'weight', 'result'], 'th') + rows.join('') + '</table>'
   }
 
   function multiply() {
     panel.innerHTML =
       '<b>Step 1 of 3: multiply.</b> The inputs are the 5 ray distances and the speed, scaled so that 1 means as far or as fast as possible. ' +
       'The neuron multiplies each input by its weight. A weight of 0 means it ignores that input.' + table(true) +
-      '<button id="n-check" style="margin-top:8px;padding:6px 12px">Check</button> <span id="n-note">Work out the empty box.</span>'
+      '<button id="n-check" class="btn">Check</button> <span id="n-note" class="note">Work out the empty box.</span>'
     const box = panel.querySelector('#n-answer') as HTMLInputElement
     const note = panel.querySelector('#n-note') as HTMLElement
     const check = () => {
@@ -79,7 +79,7 @@ export function runNeuronSteps(panel: HTMLElement, m: Moment, onDone: () => void
     panel.innerHTML =
       '<b>Step 2 of 3: add.</b> It adds up all the results, plus one extra number of its own called the <b>bias</b> (here ' + m.bias + '). ' +
       'Left rays have negative weights and right rays positive ones, so more open space on the right makes the total go up.' + table(false) +
-      '<p style="margin:8px 0"><b>Total: ' + m.sum.toFixed(2) + '</b></p><button id="n-next" style="padding:6px 12px">Next</button>'
+      '<p style="margin:8px 0"><b>Total: ' + m.sum.toFixed(2) + '</b></p><button id="n-next" class="btn">Next</button>'
     panel.querySelector('#n-next')!.addEventListener('click', squash)
   }
 
@@ -87,10 +87,10 @@ export function runNeuronSteps(panel: HTMLElement, m: Moment, onDone: () => void
     panel.innerHTML =
       '<b>Step 3 of 3: squash.</b> Totals can be any size, so the neuron squeezes its total into the range -1 to +1 with a function called <b>tanh</b>. ' +
       'Big totals land near 1, and small ones stay about the same.<br>' +
-      '<table style="border-collapse:collapse;margin:8px 0">' + row(['total', '-3', '-1', '0', '1', '3', '<b>' + m.sum.toFixed(2) + '</b>']) +
+      '<table>' + row(['total', '-3', '-1', '0', '1', '3', '<b>' + m.sum.toFixed(2) + '</b>']) +
       row(['after tanh', ...[-3, -1, 0, 1, 3].map((v) => Math.tanh(v).toFixed(2)), '<b>' + m.output.toFixed(2) + '</b>']) + '</table>' +
       'This neuron outputs <b>' + m.output.toFixed(2) + '</b>, and that number goes on to the steering output: positive steers right, negative steers left. Which way will the car steer?<br>' +
-      '<button id="n-left" style="margin-top:8px;padding:6px 12px">Left</button> <button id="n-right" style="padding:6px 12px">Right</button> <span id="n-note"></span>'
+      '<button id="n-left" class="btn">Left</button> <button id="n-right" class="btn">Right</button> <span id="n-note" class="note"></span>'
     const note = panel.querySelector('#n-note') as HTMLElement
     const pick = (right: boolean) => {
       if (right === m.output > 0) onDone()

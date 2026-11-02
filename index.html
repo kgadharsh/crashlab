@@ -7,9 +7,16 @@
     <meta name="description" content="Teach a car to drive and see how a neural network works, one crash at a time." />
     <title>CrashLab</title>
   </head>
-  <body style="background: #fff; color: #111">
-    <h1 style="margin: 0 0 8px; font: bold 22px sans-serif">CrashLab</h1>
-    <div id="app"></div>
+  <body>
+    <header class="top">
+      <h1>CrashLab</h1>
+      <ol class="steps" id="steps"></ol>
+    </header>
+    <main class="lab">
+      <aside class="rail" id="rail"></aside>
+      <section class="stage" id="stage"></section>
+      <section class="instrument" id="instrument"></section>
+    </main>
     <script type="module" src="/src/main.ts"></script>
   </body>
 </html>

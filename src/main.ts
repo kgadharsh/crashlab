@@ -1,3 +1,4 @@
+import './app.css'
 import type { Point } from './sensors'
 import { starterBrain, think, type Brain } from './brain'
 import type { History } from './train'
@@ -23,19 +24,22 @@ import {
   STALL_STEPS,
 } from './sim'
 import { makeTrack } from './track'
+import { C } from './theme'
 
-// Two canvases side by side (they stack on narrow screens)
-const wrapper = document.createElement('div')
-wrapper.style.display = 'flex'
-wrapper.style.flexWrap = 'wrap'
-wrapper.style.gap = '12px'
-document.body.appendChild(wrapper)
+// The page has three columns (see index.html and app.css)
+const rail = document.getElementById('rail')!
+const stage = document.getElementById('stage')!
+const instrument = document.getElementById('instrument')!
+
+// The four missions, shown in the top bar
+const STEP_NAMES = ['Drive', 'Neuron', 'Weights', 'Evolve']
+const stepList = document.getElementById('steps')!
+stepList.innerHTML = STEP_NAMES.map((name, i) => '<li><b>' + (i + 1) + '</b><span>' + name + '</span></li>').join('')
 
 // ---------- MISSION BAR ----------
 const missionBar = document.createElement('div')
-missionBar.style.cssText =
-  'max-width:1240px;min-height:104px;box-sizing:border-box;margin:0 0 12px;padding:10px 14px;border:2px solid black;border-radius:6px;background:#fffbe6;font:16px/1.4 sans-serif'
-document.body.insertBefore(missionBar, wrapper)
+missionBar.className = 'panel mission'
+rail.appendChild(missionBar)
 type MissionStage = 'm1' | 'm1done' | 'neuron' | 'neurondone' | 'm2' | 'm2done' | 'm3' | 'm3done'
 let missionStage: MissionStage = 'm1'
 let lastMissionHtml = ''
@@ -48,22 +52,14 @@ function setMissionHtml(html: string) {
 const canvas = document.createElement('canvas')
 canvas.width = 800
 canvas.height = 500
-canvas.style.cssText = 'border:2px solid black;max-width:100%;height:auto;box-sizing:border-box;touch-action:none'
-// the track and its touch buttons live in one column, so the buttons sit right under the track
-const trackColumn = document.createElement('div')
-trackColumn.style.cssText = 'max-width:100%;min-width:0'
-wrapper.appendChild(trackColumn)
-trackColumn.appendChild(canvas)
+canvas.className = 'track'
+stage.appendChild(canvas)
 const ctx = canvas.getContext('2d')!
 
 const netCanvas = document.createElement('canvas')
 netCanvas.width = 420
 netCanvas.height = 500
-netCanvas.style.cssText = 'border:2px solid black;max-width:100%;height:auto;box-sizing:border-box'
-const netColumn = document.createElement('div')
-netColumn.style.cssText = 'max-width:100%;min-width:0'
-wrapper.appendChild(netColumn)
-netColumn.appendChild(netCanvas)
+instrument.appendChild(netCanvas)
 const netCtx = netCanvas.getContext('2d')!
 
 // ---------- CLICKING THE NETWORK ----------
@@ -88,12 +84,11 @@ netCanvas.addEventListener('mousemove', (e) => {
 let paused = false
 let stepRequested = false
 const pauseRow = document.createElement('div')
-pauseRow.style.cssText = 'display:flex;gap:8px;margin-top:8px'
-netColumn.appendChild(pauseRow)
+pauseRow.className = 'pause'
+instrument.appendChild(pauseRow)
 function pauseControl(label: string, onClick: () => void): HTMLButtonElement {
   const b = document.createElement('button')
   b.textContent = label
-  b.style.cssText = 'flex:1;min-height:40px;font-size:15px'
   b.addEventListener('click', () => {
     b.blur() // so the arrow keys keep controlling the car
     onClick()
@@ -166,16 +161,13 @@ function readKeys(): Input {
 const touchScreen =
   window.matchMedia('(pointer: coarse)').matches || window.matchMedia('(hover: none)').matches || navigator.maxTouchPoints > 0
 const pad = document.createElement('div')
-pad.style.cssText =
-  'display:' + (touchScreen ? 'flex' : 'none') + ';justify-content:space-between;gap:12px;margin:10px 0;max-width:800px;user-select:none;-webkit-user-select:none;touch-action:none'
+pad.className = touchScreen ? 'pad on' : 'pad'
 function padButton(label: string, key: string): HTMLButtonElement {
   const b = document.createElement('button')
   b.textContent = label
-  b.style.cssText =
-    'flex:1;height:72px;font-size:28px;border:2px solid black;border-radius:10px;background:#eee;touch-action:none;user-select:none;-webkit-user-select:none'
   const press = (down: boolean) => {
     keys[key] = down
-    b.style.background = down ? '#bcd' : '#eee'
+    b.classList.toggle('down', down)
   }
   b.addEventListener('pointerdown', (e) => {
     e.preventDefault()
@@ -187,13 +179,11 @@ function padButton(label: string, key: string): HTMLButtonElement {
   return b
 }
 const steerSide = document.createElement('div')
-steerSide.style.cssText = 'display:flex;gap:8px;flex:1'
 steerSide.append(padButton('◀', 'ArrowLeft'), padButton('▶', 'ArrowRight'))
 const pedalSide = document.createElement('div')
-pedalSide.style.cssText = 'display:flex;gap:8px;flex:1'
 pedalSide.append(padButton('Brake', 'ArrowDown'), padButton('Gas', 'ArrowUp'))
 pad.append(steerSide, pedalSide)
-trackColumn.appendChild(pad)
+stage.appendChild(pad)
 
 // One step of the game. In the game a crash sends you back to the start;
 // (evolution will treat a crash as the end of that car instead).
@@ -289,7 +279,7 @@ function tracePath(loop: Point[]) {
 // Small arrows along the road show which way the lap goes, and a label marks the start line
 function drawDirectionArrows() {
   const c = track.centerline
-  ctx.strokeStyle = 'rgba(255,255,255,0.35)'
+  ctx.strokeStyle = 'rgba(255,255,255,0.16)'
   ctx.lineWidth = 3
   ctx.lineCap = 'round'
   ctx.lineJoin = 'round'
@@ -307,8 +297,8 @@ function drawDirectionArrows() {
   }
   ctx.lineCap = 'butt'
   ctx.lineJoin = 'miter'
-  ctx.fillStyle = 'white'
-  ctx.font = 'bold 12px sans-serif'
+  ctx.fillStyle = C.muted
+  ctx.font = '500 12px sans-serif'
   ctx.textAlign = 'center'
   ctx.textBaseline = 'bottom'
   ctx.fillText('START', (leftWall[0].x + rightWall[0].x) / 2, leftWall[0].y - 4)
@@ -317,17 +307,17 @@ function drawDirectionArrows() {
 }
 
 function draw() {
-  ctx.fillStyle = '#9c9'
+  ctx.fillStyle = C.ground
   ctx.fillRect(0, 0, 800, 500)
 
   ctx.beginPath()
   tracePath(leftWall)
   tracePath(rightWall)
-  ctx.fillStyle = '#555'
+  ctx.fillStyle = C.road
   ctx.fill('evenodd')
 
-  ctx.strokeStyle = 'black'
-  ctx.lineWidth = 3
+  ctx.strokeStyle = C.wall
+  ctx.lineWidth = 2
   ctx.beginPath()
   tracePath(leftWall)
   ctx.stroke()
@@ -335,8 +325,8 @@ function draw() {
   tracePath(rightWall)
   ctx.stroke()
 
-  ctx.strokeStyle = 'white'
-  ctx.lineWidth = 4
+  ctx.strokeStyle = C.text
+  ctx.lineWidth = 3
   ctx.beginPath()
   ctx.moveTo(leftWall[0].x, leftWall[0].y)
   ctx.lineTo(rightWall[0].x, rightWall[0].y)
@@ -361,13 +351,13 @@ function draw() {
     const d = car.rays[i]
     const hitX = car.x + Math.cos(a) * d
     const hitY = car.y + Math.sin(a) * d
-    ctx.strokeStyle = 'yellow'
+    ctx.strokeStyle = C.accent
     ctx.lineWidth = 1.5
     ctx.beginPath()
     ctx.moveTo(car.x, car.y)
     ctx.lineTo(hitX, hitY)
     ctx.stroke()
-    ctx.fillStyle = 'yellow'
+    ctx.fillStyle = C.accent
     ctx.beginPath()
     ctx.arc(hitX, hitY, 3, 0, Math.PI * 2)
     ctx.fill()
@@ -376,44 +366,44 @@ function draw() {
   ctx.save()
   ctx.translate(car.x, car.y)
   ctx.rotate(car.angle)
-  ctx.fillStyle = mode === 'replay' ? 'royalblue' : 'red'
+  ctx.fillStyle = mode === 'replay' ? C.positive : C.text
   ctx.fillRect(-15, -8, 30, 16)
-  ctx.fillStyle = 'white'
+  ctx.fillStyle = C.road
   ctx.fillRect(8, -6, 6, 12)
   ctx.restore()
   }
 
   if (paused) {
-    ctx.fillStyle = 'rgba(255,255,255,0.85)'
+    ctx.fillStyle = C.overlay
     ctx.fillRect(345, 225, 110, 34)
-    ctx.fillStyle = 'black'
-    ctx.font = 'bold 18px sans-serif'
+    ctx.fillStyle = C.text
+    ctx.font = '500 16px sans-serif'
     ctx.textAlign = 'center'
     ctx.textBaseline = 'middle'
     ctx.fillText('PAUSED', 400, 243)
   }
 
-  ctx.fillStyle = 'black'
+  ctx.fillStyle = C.text
   ctx.font = '16px sans-serif'
   ctx.textAlign = 'left'
   ctx.textBaseline = 'alphabetic'
   if (swarm) {
-    ctx.fillStyle = 'rgba(255,255,255,0.85)'
+    ctx.fillStyle = C.overlay
     ctx.fillRect(6, 6, 250, 50)
-    ctx.fillStyle = 'black'
-    ctx.font = 'bold 16px sans-serif'
+    ctx.fillStyle = C.text
+    ctx.font = '500 16px sans-serif'
     ctx.fillText('Generation ' + (swarm.gen + 1), 14, 26)
     ctx.font = '14px sans-serif'
     ctx.fillText('best car: ' + (Math.max(...swarm.cars.map((c) => c.passed)) / CHECKPOINTS).toFixed(1) + ' laps so far', 14, 46)
     drawSwarmLegend()
     // the caption sits at the bottom, on a pale strip so it can be read
-    ctx.fillStyle = 'rgba(255,255,255,0.85)'
+    ctx.fillStyle = C.overlay
     ctx.fillRect(0, 462, 800, 38)
-    ctx.fillStyle = 'black'
+    ctx.fillStyle = C.text
     ctx.font = '15px sans-serif'
     ctx.fillText(swarmCaption(swarm), 10, 478)
     ctx.font = '12px sans-serif'
-    ctx.fillStyle = '#444'
+    ctx.fillStyle = C.muted
     ctx.fillText(message, 10, 494)
   } else {
   ctx.textAlign = 'left'
@@ -438,6 +428,7 @@ function draw() {
     112,
   )
   }
+  ctx.fillStyle = C.muted
   ctx.fillText(message, 10, 490)
   }
 
@@ -447,7 +438,7 @@ function draw() {
     const now = readKeys()
     const steer = now.steer < 0 ? 'left' : now.steer > 0 ? 'right' : 'straight'
     const gas = now.throttle > 0 ? 'gas' : now.throttle < 0 ? 'brake' : 'coast'
-    ctx.fillStyle = '#7a5c00'
+    ctx.fillStyle = C.accent
     ctx.fillText(
       'You see: ' + car.rays.map((d) => Math.round(d)).join(' ') + ' | speed ' + car.speed.toFixed(1) +
         '    You do: steer ' + steer + ', ' + gas,
@@ -479,19 +470,23 @@ function draw() {
 
 // ---------- BUTTONS: TRAIN, THEN WATCH ----------
 const buttons = document.createElement('div')
-buttons.style.margin = '12px 0'
-document.body.appendChild(buttons)
+buttons.className = 'toolbar'
+rail.appendChild(buttons)
+// Less common actions stay folded away
+const more = document.createElement('details')
+more.className = 'more'
+more.innerHTML = '<summary>More options</summary>'
+const moreList = document.createElement('div')
+more.appendChild(moreList)
 
-function makeButton(label: string, onClick: () => void): HTMLButtonElement {
+function makeButton(label: string, onClick: () => void, parent: HTMLElement = buttons): HTMLButtonElement {
   const b = document.createElement('button')
   b.textContent = label
-  b.style.marginRight = '8px'
-  b.style.padding = '6px 12px'
   b.addEventListener('click', () => {
     b.blur() // so Enter and arrow keys keep controlling the car
     onClick()
   })
-  buttons.appendChild(b)
+  parent.appendChild(b)
   return b
 }
 
@@ -575,6 +570,7 @@ const trainButton = makeButton('Train a new brain', () => {
   worker.onerror = () => stopTraining('Training failed. Try "Load a pre-trained brain" instead.')
   worker.postMessage({ type: 'start', seed: run.seed, generations: GENERATIONS, watch: watchAll })
 })
+trainButton.className = 'primary'
 
 const skipButton = makeButton('Skip to the end', () => {
   if (!worker || !run || !run.watching) return
@@ -591,14 +587,14 @@ skipButton.style.display = 'none'
 const watchButton = makeButton('Watch every generation: ON', () => {
   watchAll = !watchAll
   watchButton.textContent = 'Watch every generation: ' + (watchAll ? 'ON' : 'OFF')
-})
+}, moreList)
 
 makeButton('Watch the trained brain', () => {
   if (trained) watch(trained, 'Watching the trained brain.')
   else message = 'Nothing trained yet. Press "Train a new brain" first.'
 })
 
-makeButton('Back to the starter brain', () => watch(starterBrain(), 'The hand-written starter brain.'))
+makeButton('Back to the starter brain', () => watch(starterBrain(), 'The hand-written starter brain.'), moreList)
 
 // ---------- SAVING AND LOADING A BRAIN ----------
 // The brain is also kept in the browser, so a refresh does not lose it (the browser can still clear it).
@@ -619,7 +615,7 @@ function useBrain(genome: number[], source: 'pretrained' | 'file', text: string)
 makeButton('Load a pre-trained brain', () => {
   if (worker) stopTraining('')
   useBrain(PRETRAINED_GENOME, 'pretrained', 'Watching a pre-trained brain.')
-})
+}, moreList)
 
 makeButton('Save brain to file', () => {
   if (!trained) {
@@ -633,7 +629,7 @@ makeButton('Save brain to file', () => {
   a.click()
   URL.revokeObjectURL(url)
   message = 'Saved my-brain.json. Use "Load brain from file" to bring it back.'
-})
+}, moreList)
 
 const fileInput = document.createElement('input')
 fileInput.type = 'file'
@@ -651,13 +647,13 @@ fileInput.addEventListener('change', async () => {
   }
 })
 buttons.appendChild(fileInput)
-makeButton('Load brain from file', () => fileInput.click())
+makeButton('Load brain from file', () => fileInput.click(), moreList)
 
 // ---------- THE HIDDEN-TRACK TEST ----------
 // The brain on screen is sent round 20 tracks it has never driven on (the same 20 for everyone).
 const hiddenPanel = document.createElement('div')
-hiddenPanel.style.cssText =
-  'max-width:1240px;box-sizing:border-box;margin:0 0 12px;padding:10px 14px;border:2px solid black;border-radius:6px;background:#f4f0ff;font:15px/1.5 sans-serif;display:none'
+hiddenPanel.className = 'panel'
+hiddenPanel.style.display = 'none'
 buttons.after(hiddenPanel)
 let hiddenBusy = false
 makeButton('Test on ' + HIDDEN_COUNT + ' hidden tracks', async () => {
@@ -669,15 +665,16 @@ makeButton('Test on ' + HIDDEN_COUNT + ' hidden tracks', async () => {
   const origin: BrainOrigin = tested !== trained ? 'handwritten' : trainedSource === 'file' ? 'unknown' : 'learned'
   const r = await testOnHiddenTracks(tested)
   const dots = r.finished
-    .map((ok, i) => '<span title="track ' + (i + 1) + (ok ? ': lapped' : ': failed') + '" style="display:inline-block;width:16px;height:16px;margin:2px;border-radius:50%;background:' + (ok ? '#2a9d4b' : '#d33') + '"></span>')
+    .map((ok, i) => '<span title="track ' + (i + 1) + (ok ? ': lapped' : ': failed') + '" class="dot' + (ok ? '' : ' fail') + '"></span>')
     .join('')
   hiddenPanel.innerHTML =
     '<b>Hidden-track test: ' + r.count + ' of ' + HIDDEN_COUNT + ' tracks lapped</b>' +
     (r.avgLap !== null ? ' (average lap ' + r.avgLap.toFixed(1) + ' s)' : '') +
     '. Practice track: ' + (r.practiceLap !== null ? 'lapped in ' + r.practiceLap.toFixed(1) + ' s' : 'not lapped') + '.<br>' +
-    dots + '<br>' + hiddenVerdict(r, origin) + ' <span style="color:#666">(green = lapped, red = crashed or stuck)</span>'
+    dots + '<br>' + hiddenVerdict(r, origin) + ' <span class="note">Green = lapped, red = crashed or stuck.</span>'
   hiddenBusy = false
 })
+buttons.appendChild(more)
 void prepareHiddenTracks() // build the 20 tracks quietly in the background
 
 // bring back the brain from the last visit, if there is one
@@ -692,13 +689,12 @@ try {
 // ---------- THE LEARNING GRAPH ----------
 const graphCanvas = document.createElement('canvas')
 graphCanvas.width = 800
-graphCanvas.height = 240
-graphCanvas.style.cssText = 'border:2px solid black;display:block;max-width:100%;height:auto;box-sizing:border-box'
-document.body.appendChild(graphCanvas)
+graphCanvas.height = 170
+stage.appendChild(graphCanvas)
 const gctx = graphCanvas.getContext('2d')!
 
-const BEST_COLOR = '#0a7'
-const MEAN_COLOR = '#c60'
+const BEST_COLOR = C.accent
+const MEAN_COLOR = C.positive
 
 // One dot-and-line series on the graph
 function plotSeries(values: number[], color: string, x: (i: number) => number, y: (v: number) => number) {
@@ -714,14 +710,14 @@ function drawGraph(history: History | null, totalGenerations = 40) {
   const H = graphCanvas.height
   const left = 52
   const right = W - 20
-  const top = 34
-  const bottom = H - 36
+  const top = 30
+  const bottom = H - 34
   const maxY = 70 // a bit above the ~60 checkpoints a trained car reaches in 20 seconds with grip
   const generations = Math.max(totalGenerations, 2)
   const x = (i: number) => left + (i / (generations - 1)) * (right - left)
   const y = (v: number) => bottom - (v / maxY) * (bottom - top)
 
-  gctx.fillStyle = '#fff'
+  gctx.fillStyle = C.ground
   gctx.fillRect(0, 0, W, H)
 
   // grid and y labels
@@ -729,20 +725,20 @@ function drawGraph(history: History | null, totalGenerations = 40) {
   gctx.textBaseline = 'middle'
   gctx.textAlign = 'right'
   for (let v = 0; v <= 60; v += 20) {
-    gctx.strokeStyle = '#e3e3e3'
+    gctx.strokeStyle = C.road
     gctx.lineWidth = 1
     gctx.beginPath()
     gctx.moveTo(left, y(v))
     gctx.lineTo(right, y(v))
     gctx.stroke()
-    gctx.fillStyle = '#555'
+    gctx.fillStyle = C.muted
     gctx.fillText(String(v), left - 8, y(v))
   }
   // x labels
   gctx.textAlign = 'center'
   gctx.textBaseline = 'top'
   for (let g = 0; g < generations; g += 10) {
-    gctx.fillStyle = '#555'
+    gctx.fillStyle = C.muted
     gctx.fillText(String(g + 1), x(g), bottom + 8)
   }
   gctx.fillText('generation', (left + right) / 2, bottom + 20)
@@ -750,8 +746,8 @@ function drawGraph(history: History | null, totalGenerations = 40) {
   // title
   gctx.textAlign = 'left'
   gctx.textBaseline = 'alphabetic'
-  gctx.fillStyle = '#111'
-  gctx.font = 'bold 14px sans-serif'
+  gctx.fillStyle = C.text
+  gctx.font = '500 14px sans-serif'
   gctx.fillText(
     history ? 'Learning curve: progress in 20 seconds (20 = one lap)' : 'Learning curve',
     left,
@@ -759,7 +755,7 @@ function drawGraph(history: History | null, totalGenerations = 40) {
   )
 
   if (!history) {
-    gctx.fillStyle = '#777'
+    gctx.fillStyle = C.muted
     gctx.font = '14px sans-serif'
     gctx.textAlign = 'center'
     gctx.fillText('Press "Train a new brain" and the curve appears here.', (left + right) / 2, (top + bottom) / 2)
@@ -893,7 +889,7 @@ function drawSwarm() {
   swarm.trails.forEach((trail, i) => {
     if (trail.length < 2) return
     const best = i === 0
-    ctx.strokeStyle = best ? 'rgba(255,60,60,0.7)' : 'rgba(120,170,255,0.28)'
+    ctx.strokeStyle = best ? 'rgba(242,184,75,0.75)' : 'rgba(90,162,255,0.22)'
     ctx.lineWidth = best ? 3 : 2
     ctx.beginPath()
     ctx.moveTo(trail[0].x, trail[0].y)
@@ -904,7 +900,7 @@ function drawSwarm() {
   swarm.cars.forEach((c) => {
     if (!c.dead) return
     ctx.lineCap = 'round'
-    ctx.strokeStyle = 'white'
+    ctx.strokeStyle = C.ground
     ctx.lineWidth = 5
     ctx.beginPath()
     ctx.moveTo(c.x - 5, c.y - 5)
@@ -912,7 +908,7 @@ function drawSwarm() {
     ctx.moveTo(c.x + 5, c.y - 5)
     ctx.lineTo(c.x - 5, c.y + 5)
     ctx.stroke()
-    ctx.strokeStyle = '#c4001f'
+    ctx.strokeStyle = C.negative
     ctx.lineWidth = 2.5
     ctx.stroke()
     ctx.lineCap = 'butt'
@@ -921,7 +917,7 @@ function drawSwarm() {
   for (let i = swarm.cars.length - 1; i >= 0; i--) {
     const c = swarm.cars[i]
     if (c.dead) continue
-    drawCarShape(c, i === 0 ? 26 : 20, i === 0 ? 14 : 11, i === 0 ? '#e01020' : 'rgba(40,100,230,0.8)')
+    drawCarShape(c, i === 0 ? 26 : 20, i === 0 ? 14 : 11, i === 0 ? C.accent : 'rgba(90,162,255,0.8)')
   }
 }
 
@@ -929,20 +925,20 @@ function drawSwarm() {
 function drawSwarmLegend() {
   const x = 556
   const y = 16 // top-right corner: the track never reaches it
-  ctx.fillStyle = 'rgba(255,255,255,0.85)'
+  ctx.fillStyle = C.overlay
   ctx.fillRect(x - 8, y - 8, 246, 80)
   ctx.font = '13px sans-serif'
   ctx.textBaseline = 'middle'
   ctx.textAlign = 'left'
-  ctx.fillStyle = '#111'
-  drawCarShape({ x: x + 14, y: y + 8, angle: 0 } as Car, 22, 12, '#e01020')
-  ctx.fillStyle = '#111'
+  ctx.fillStyle = C.text
+  drawCarShape({ x: x + 14, y: y + 8, angle: 0 } as Car, 22, 12, C.accent)
+  ctx.fillStyle = C.text
   ctx.fillText('best car of this generation', x + 36, y + 8)
-  drawCarShape({ x: x + 14, y: y + 30, angle: 0 } as Car, 18, 10, 'rgba(40,100,230,0.8)')
-  ctx.fillStyle = '#111'
+  drawCarShape({ x: x + 14, y: y + 30, angle: 0 } as Car, 18, 10, 'rgba(90,162,255,0.8)')
+  ctx.fillStyle = C.text
   ctx.fillText('the other 99 cars', x + 36, y + 30)
   ctx.lineCap = 'round'
-  ctx.strokeStyle = '#c4001f'
+  ctx.strokeStyle = C.negative
   ctx.lineWidth = 2.5
   ctx.beginPath()
   ctx.moveTo(x + 8, y + 46)
@@ -951,13 +947,12 @@ function drawSwarmLegend() {
   ctx.lineTo(x + 8, y + 58)
   ctx.stroke()
   ctx.lineCap = 'butt'
-  ctx.fillStyle = '#111'
+  ctx.fillStyle = C.text
   ctx.fillText('a car crashed here', x + 36, y + 52)
   ctx.textBaseline = 'alphabetic'
 }
 
 // ---------- MISSIONS ----------
-const BTN = 'margin-left:8px;padding:4px 10px'
 const MISSION_TRACKS = Array.from({ length: 10 }, (_, i) => makeTrack(9000 + i, 1))
 
 type Score = { lap: number | null; reached: number; unseen: number }
@@ -1002,28 +997,24 @@ function missionBrain(): Brain {
 }
 
 const m2Panel = document.createElement('div')
-m2Panel.style.cssText =
-  'max-width:1240px;box-sizing:border-box;margin:0 0 12px;padding:10px 14px;border:2px solid black;border-radius:6px;background:#eef6ff;font:15px/1.5 sans-serif;display:none'
-document.body.insertBefore(m2Panel, wrapper)
+m2Panel.className = 'panel'
+rail.appendChild(m2Panel)
 const m2Result = document.createElement('div')
 m2Result.style.marginTop = '6px'
 
 function addSlider(label: string, key: 'steer' | 'wall' | 'speed', min: number, max: number) {
   const row = document.createElement('div')
-  row.style.cssText = 'display:flex;align-items:center;gap:10px;flex-wrap:wrap'
+  row.className = 'slider'
   const text = document.createElement('span')
   text.textContent = label
-  text.style.cssText = 'width:430px;max-width:100%'
   const input = document.createElement('input')
   input.type = 'range'
   input.min = String(min)
   input.max = String(max)
   input.step = '0.1'
   input.value = '0'
-  input.style.width = '260px'
   const value = document.createElement('b')
   value.textContent = '0.0'
-  value.style.width = '40px'
   input.addEventListener('input', () => {
     m2[key] = Number(input.value)
     value.textContent = m2[key].toFixed(1)
@@ -1057,9 +1048,10 @@ function applyM2() {
 
 // The neuron mission freezes the car mid-lap and steps through one real neuron
 const neuronPanel = document.createElement('div')
-neuronPanel.style.cssText =
-  'max-width:1240px;box-sizing:border-box;margin:0 0 12px;padding:10px 14px;border:2px solid black;border-radius:6px;background:#eef6ff;font:15px/1.5 sans-serif;display:none'
-document.body.insertBefore(neuronPanel, wrapper)
+neuronPanel.className = 'panel neuron'
+rail.appendChild(neuronPanel)
+
+const STAGE_STEP: Record<MissionStage, number> = { m1: 0, m1done: 0, neuron: 1, neurondone: 1, m2: 2, m2done: 2, m3: 3, m3done: 3 }
 
 function applyStageVisibility() {
   const sandbox = missionStage === 'm3' || missionStage === 'm3done'
@@ -1069,6 +1061,11 @@ function applyStageVisibility() {
   m2Panel.style.display = missionStage === 'm2' || missionStage === 'm2done' ? 'block' : 'none'
   neuronPanel.style.display = missionStage === 'neuron' ? 'block' : 'none'
   pauseRow.style.display = missionStage === 'neuron' ? 'none' : 'flex'
+  document.body.classList.toggle('sandbox', sandbox)
+  const current = STAGE_STEP[missionStage]
+  ;[...stepList.children].forEach((li, i) => {
+    li.className = i === current ? 'now' : i < current ? 'done' : ''
+  })
 }
 
 function setStage(s: MissionStage) {
@@ -1121,11 +1118,11 @@ function missionHtml(): string {
       return (
         '<b>Mission 1 complete!</b> One lap in <b>' + lapSeconds.toFixed(1) + ' s</b>' +
         (lapAttempts > 1 ? ' (attempt ' + lapAttempts + ')' : ' on your first attempt') + '.<br>' +
-        'Look at the yellow line of numbers on the track. While you drove, the car saw <b>6 numbers</b> ' +
+        'Look at the line of numbers on the track. While you drove, the car saw <b>6 numbers</b> ' +
         '(5 ray distances and its speed) and you answered with <b>2</b> (steer and gas). ' +
-        'That is exactly the job of the neural network on the right: numbers in, numbers out.' +
-        '<button onclick="missions.startNeuron()" style="' + BTN + '">Start Mission 2</button>' +
-        '<button onclick="missions.retry1()" style="' + BTN + '">Drive again</button>'
+        'That is exactly the job of a neural network: numbers in, numbers out.' +
+        '<button class="btn" onclick="missions.startNeuron()">Start Mission 2</button>' +
+        '<button class="btn" onclick="missions.retry1()">Drive again</button>'
       )
     case 'neuron':
       return (
@@ -1136,12 +1133,12 @@ function missionHtml(): string {
       return (
         '<b>Mission 2 complete!</b> You just did by hand what every neuron does at every moment: multiply, add, squash. ' +
         'This car has 7 of them, and large networks have billions. The steering output is one more neuron, fed by this one.' +
-        '<button onclick="missions.start2()" style="' + BTN + '">Start Mission 3</button>'
+        '<button class="btn" onclick="missions.start2()">Start Mission 3</button>'
       )
     case 'm2':
       return (
         '<b>Mission 3 of 4: set three weights.</b> A weight is how strongly one neuron pushes on another. ' +
-        'The network on the right has 47; the parts that judge the road are already wired up. ' +
+        'The network has 47; the parts that judge the road are already wired up. ' +
         'Move the three sliders until the car drives a lap on its own. Lap progress: <b>' + Math.round((100 * car.passed) / CHECKPOINTS) + '%</b>'
       )
     case 'm2done':
@@ -1151,13 +1148,13 @@ function missionHtml(): string {
         'That took trial and error with just 3 weights, and the other 44 were already set for you. ' +
         'A real network has thousands to billions, and nobody can tune those by hand. ' +
         'So how does a network find its own weights?' +
-        '<button onclick="missions.start3()" style="' + BTN + '">Start Mission 4</button>'
+        '<button class="btn" onclick="missions.start3()">Start Mission 4</button>'
       )
     case 'm3':
       return (
         '<b>Mission 4 of 4: let evolution find all 47 weights.</b> Press <b>Train a new brain</b>. ' +
         '100 cars start with random brains and nearly all crash at once. The best ones pass on their weights, ' +
-        'with small random changes, and the curve below shows the whole population getting better.'
+        'with small random changes, and the curve shows the whole population getting better.'
       )
     case 'm3done':
       return (

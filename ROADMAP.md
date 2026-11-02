@@ -39,8 +39,11 @@ Severity: **[S1]** blocks the teaching goal, **[S2]** a real bug or misleading r
 - [ ] **F14 [S3] Connections are too small to tap on a phone.**
   Done when: tapping a neuron opens its connections as a list of sliders.
 
-- [ ] **F41 [S3] Text says "the network on the right", but on phones it is below the track.**
+- [x] **F41 [S3] Text says "the network on the right", but on phones it is below the track.**
   Done when: mission text does not depend on the layout.
+
+- [x] **F42 [S2] The page had no real layout.** Stacked boxes, a graph below the fold, a row of plain buttons and clashing panel colours.
+  Done when: dark theme, three columns on desktop with no scrolling at 1280x720, one main action, and a working stacked phone layout.
 
 ### Checkpoint: test with people
 
@@ -107,7 +110,7 @@ Severity: **[S1]** blocks the teaching goal, **[S2]** a real bug or misleading r
   Done when: a small test suite runs from one command.
 - [ ] **F39 [S3] No README, write-up or demo.**
   Done when: the repo has a README with a GIF, results table and short write-up, including negative results.
-- [ ] **F40 [S4] Polish deferred.** Car sprites, road texture and panel look.
+- [ ] **F40 [S4] Polish deferred.** Car sprites and road texture. The page layout and theme were done in F42.
   Done when: done last. An optional 3D view stays a bonus and changes drawing only.
 
 ## Parked on purpose
