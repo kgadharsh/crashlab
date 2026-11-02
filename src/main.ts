@@ -6,6 +6,7 @@ import { brainToJson, brainFromJson } from './brainFile'
 import { PRETRAINED_GENOME } from './pretrained'
 import { prepareHiddenTracks, testOnHiddenTracks, hiddenVerdict, HIDDEN_COUNT, type BrainOrigin } from './hidden'
 import { drawNetwork, hitTest, type Selection } from './netview'
+import { findMoment, runNeuronSteps, NEURON } from './neuronMission'
 import {
   type Car,
   type Input,
@@ -35,7 +36,7 @@ const missionBar = document.createElement('div')
 missionBar.style.cssText =
   'max-width:1240px;min-height:104px;box-sizing:border-box;margin:0 0 12px;padding:10px 14px;border:2px solid black;border-radius:6px;background:#fffbe6;font:16px/1.4 sans-serif'
 document.body.insertBefore(missionBar, wrapper)
-type MissionStage = 'm1' | 'm1done' | 'm2' | 'm2done' | 'm3' | 'm3done'
+type MissionStage = 'm1' | 'm1done' | 'neuron' | 'neurondone' | 'm2' | 'm2done' | 'm3' | 'm3done'
 let missionStage: MissionStage = 'm1'
 let lastMissionHtml = ''
 function setMissionHtml(html: string) {
@@ -139,7 +140,7 @@ const keys: Record<string, boolean> = {}
 window.addEventListener('keydown', (e) => {
   keys[e.key] = true
   if (e.key.startsWith('Arrow')) e.preventDefault()
-  if (e.key === ' ') {
+  if (e.key === ' ' && missionStage !== 'neuron') {
     e.preventDefault()
     setPaused(!paused)
   }
@@ -1054,12 +1055,20 @@ function applyM2() {
   m2Result.innerHTML = 'With these weights the car makes ' + describe(m2Score) + '.'
 }
 
+// The neuron mission freezes the car mid-lap and steps through one real neuron
+const neuronPanel = document.createElement('div')
+neuronPanel.style.cssText =
+  'max-width:1240px;box-sizing:border-box;margin:0 0 12px;padding:10px 14px;border:2px solid black;border-radius:6px;background:#eef6ff;font:15px/1.5 sans-serif;display:none'
+document.body.insertBefore(neuronPanel, wrapper)
+
 function applyStageVisibility() {
   const sandbox = missionStage === 'm3' || missionStage === 'm3done'
   buttons.style.display = sandbox ? '' : 'none'
   if (!sandbox) hiddenPanel.style.display = 'none'
   graphCanvas.style.display = sandbox ? 'block' : 'none'
   m2Panel.style.display = missionStage === 'm2' || missionStage === 'm2done' ? 'block' : 'none'
+  neuronPanel.style.display = missionStage === 'neuron' ? 'block' : 'none'
+  pauseRow.style.display = missionStage === 'neuron' ? 'none' : 'flex'
 }
 
 function setStage(s: MissionStage) {
@@ -1074,7 +1083,21 @@ const missions = {
     startFreshRecording()
     message = 'Mission 1: drive one lap.'
   },
+  startNeuron() {
+    setStage('neuron')
+    const moment = findMoment()
+    watch(moment.brain, 'Frozen mid-lap.')
+    car = moment.car
+    setPaused(true)
+    selection = { kind: 'node', layer: 'hidden', index: NEURON }
+    runNeuronSteps(neuronPanel, moment, () => {
+      setPaused(false)
+      message = 'The car uses that same sum at every moment of the lap.'
+      setStage('neurondone')
+    })
+  },
   start2() {
+    selection = null
     setStage('m2')
     applyM2()
   },
@@ -1090,7 +1113,7 @@ function missionHtml(): string {
   switch (missionStage) {
     case 'm1':
       return (
-        '<b>Mission 1 of 3: drive one lap.</b> ' + (touchScreen ? 'Use the buttons under the track: Gas, Brake, and the two steering arrows. ' : 'Arrow keys: up = gas, down = brake, left and right = steer. ') +
+        '<b>Mission 1 of 4: drive one lap.</b> ' + (touchScreen ? 'Use the buttons under the track: Gas, Brake, and the two steering arrows. ' : 'Arrow keys: up = gas, down = brake, left and right = steer. ') +
         'Stay off the walls. Lap progress: <b>' + Math.round((100 * car.passed) / CHECKPOINTS) + '%</b>' +
         (crashes > 0 ? ' &nbsp;·&nbsp; crashes so far: ' + crashes : '')
       )
@@ -1101,35 +1124,46 @@ function missionHtml(): string {
         'Look at the yellow line of numbers on the track. While you drove, the car saw <b>6 numbers</b> ' +
         '(5 ray distances and its speed) and you answered with <b>2</b> (steer and gas). ' +
         'That is exactly the job of the neural network on the right: numbers in, numbers out.' +
-        '<button onclick="missions.start2()" style="' + BTN + '">Start Mission 2</button>' +
+        '<button onclick="missions.startNeuron()" style="' + BTN + '">Start Mission 2</button>' +
         '<button onclick="missions.retry1()" style="' + BTN + '">Drive again</button>'
+      )
+    case 'neuron':
+      return (
+        '<b>Mission 2 of 4: look inside one neuron.</b> The car is frozen mid-lap, and the outlined neuron in the network asks ' +
+        '"is the right side more open than the left?" A neuron only does three things: multiply, add and squash. Do them yourself.'
+      )
+    case 'neurondone':
+      return (
+        '<b>Mission 2 complete!</b> You just did by hand what every neuron does at every moment: multiply, add, squash. ' +
+        'This car has 7 of them, and large networks have billions. The steering output is one more neuron, fed by this one.' +
+        '<button onclick="missions.start2()" style="' + BTN + '">Start Mission 3</button>'
       )
     case 'm2':
       return (
-        '<b>Mission 2 of 3: set three weights.</b> A weight is how strongly one neuron pushes on another. ' +
+        '<b>Mission 3 of 4: set three weights.</b> A weight is how strongly one neuron pushes on another. ' +
         'The network on the right has 47; the parts that judge the road are already wired up. ' +
         'Move the three sliders until the car drives a lap on its own. Lap progress: <b>' + Math.round((100 * car.passed) / CHECKPOINTS) + '%</b>'
       )
     case 'm2done':
       return (
-        '<b>Mission 2 complete!</b> You tuned 3 numbers by hand and the car drives itself. ' +
+        '<b>Mission 3 complete!</b> You tuned 3 numbers by hand and the car drives itself. ' +
         'Your brain makes ' + (m2Score ? describe(m2Score) : '') + '.<br>' +
         'That took trial and error with just 3 weights, and the other 44 were already set for you. ' +
         'A real network has thousands to billions, and nobody can tune those by hand. ' +
         'So how does a network find its own weights?' +
-        '<button onclick="missions.start3()" style="' + BTN + '">Start Mission 3</button>'
+        '<button onclick="missions.start3()" style="' + BTN + '">Start Mission 4</button>'
       )
     case 'm3':
       return (
-        '<b>Mission 3 of 3: let evolution find all 47 weights.</b> Press <b>Train a new brain</b>. ' +
+        '<b>Mission 4 of 4: let evolution find all 47 weights.</b> Press <b>Train a new brain</b>. ' +
         '100 cars start with random brains and nearly all crash at once. The best ones pass on their weights, ' +
         'with small random changes, and the curve below shows the whole population getting better.'
       )
     case 'm3done':
       return (
         (trainedSource === 'evolved'
-          ? '<b>Mission 3 complete!</b> Evolution found all 47 weights with no help: '
-          : '<b>Mission 3 complete!</b> This brain was ' + (trainedSource === 'pretrained' ? 'evolved ahead of time' : 'loaded from a file') + '; it makes ') +
+          ? '<b>Mission 4 complete!</b> Evolution found all 47 weights with no help: '
+          : '<b>Mission 4 complete!</b> This brain was ' + (trainedSource === 'pretrained' ? 'evolved ahead of time' : 'loaded from a file') + '; it makes ') +
         (m3Score ? describe(m3Score) : '') + '.<br>' +
         (m2Score ? 'Your 3 hand-set weights managed ' + describe(m2Score) + '. ' : '') +
         'Press "Train a new brain" again for a different run: evolution starts from random every time, so each brain ends up different.'

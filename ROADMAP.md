@@ -28,7 +28,7 @@ Severity: **[S1]** blocks the teaching goal, **[S2]** a real bug or misleading r
 
 - [x] **F09 [S1] Nobody can interact with the network.** The panel is display-only.
   Done when: it has click targets, and pausing and stepping the car work.
-- [ ] **F10 [S1] The app never shows what a neuron computes.** Weighted sum, bias, tanh and "hidden" are never explained.
+- [x] **F10 [S1] The app never shows what a neuron computes.** Weighted sum, bias, tanh and "hidden" are never explained.
   Done when: a new "inside one neuron" mission walks through ray x weight, the sum, the squash and the output, and the player works one out.
 - [ ] **F11 [S1] No way to break things.** Blind-a-ray and cut-a-connection do not exist.
   Done when: both work live and visibly change the driving.
