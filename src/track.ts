@@ -12,6 +12,7 @@ export type Track = {
   leftWall: Point[]
   rightWall: Point[]
   walls: Segment[]
+  blocks: Point[] // centres of the obstacles on the road
   longestWall: number // length of the longest wall segment (used to skip far-away walls)
   start: { x: number; y: number; angle: number }
 }
@@ -44,6 +45,7 @@ export function buildTrack(centerline: Point[]): Track {
     leftWall,
     rightWall,
     walls,
+    blocks: [],
     longestWall: Math.max(...walls.map((w) => Math.hypot(w.b.x - w.a.x, w.b.y - w.a.y))),
     start: {
       x: centerline[0].x,
@@ -54,6 +56,58 @@ export function buildTrack(centerline: Point[]): Track {
       ),
     },
   }
+}
+
+// Square obstacles made of wall segments, so rays see them and hitting one is a crash.
+// Each sits off-centre at a centerline point, always on a gentle stretch: the car cannot dodge one in a bend.
+export const BLOCK_HALF = 13
+const BLOCK_OFFSET = 24
+function addBlocks(track: Track, points: number[], side: 1 | -1 = 1): Track {
+  for (const i of points) {
+    const c = track.centerline
+    const before = c[(i + POINTS - 1) % POINTS]
+    const after = c[(i + 1) % POINTS]
+    const len = Math.hypot(after.x - before.x, after.y - before.y)
+    const x = c[i].x - ((after.y - before.y) / len) * BLOCK_OFFSET * side
+    const y = c[i].y + ((after.x - before.x) / len) * BLOCK_OFFSET * side
+    track.blocks.push({ x, y })
+    track.walls.push(
+      ...loopToSegments([
+        { x: x - BLOCK_HALF, y: y - BLOCK_HALF },
+        { x: x + BLOCK_HALF, y: y - BLOCK_HALF },
+        { x: x + BLOCK_HALF, y: y + BLOCK_HALF },
+        { x: x - BLOCK_HALF, y: y + BLOCK_HALF },
+      ]),
+    )
+  }
+  track.longestWall = Math.max(track.longestWall, BLOCK_HALF * 2)
+  return track
+}
+
+// The two gentlest stretches of a track, away from the start line and from each other
+const BLOCK_START_GAP = 12
+const BLOCK_SPACING = 35
+function gentlestPoints(track: Track): number[] {
+  const c = track.centerline
+  const heading = (i: number) => {
+    const a = c[(i + POINTS) % POINTS]
+    const b = c[(i + 1 + POINTS) % POINTS]
+    return Math.atan2(b.y - a.y, b.x - a.x)
+  }
+  const bend = (i: number) => {
+    let sum = 0
+    for (let k = -5; k < 5; k++) {
+      const turn = heading(i + k + 1) - heading(i + k)
+      sum += Math.abs(Math.atan2(Math.sin(turn), Math.cos(turn)))
+    }
+    return sum
+  }
+  const order = Array.from({ length: POINTS }, (_, i) => i)
+    .filter((i) => i >= BLOCK_START_GAP && i <= POINTS - BLOCK_START_GAP)
+    .sort((a, b) => bend(a) - bend(b))
+  const first = order[0]
+  const apart = (i: number) => Math.min(Math.abs(i - first), POINTS - Math.abs(i - first))
+  return [first, order.find((i) => apart(i) >= BLOCK_SPACING) ?? first]
 }
 
 // ---------- THE ORIGINAL TRACK (the one you have been driving on) ----------
@@ -68,7 +122,7 @@ function defaultCenterline(): Point[] {
   }
   return pts
 }
-export const DEFAULT_TRACK: Track = buildTrack(defaultCenterline())
+export const DEFAULT_TRACK: Track = addBlocks(buildTrack(defaultCenterline()), [30, 95])
 
 // ---------- CHECKING A TRACK IS FAIR ----------
 const MIN_CORNER_RADIUS = 65 // tighter than this and the car cannot physically turn
@@ -162,7 +216,7 @@ export function makeTrack(seed: number, difficulty = 0.5, minRadius: number = MI
       pts.push({ x: a.x + (b.x - a.x) * f, y: a.y + (b.y - a.y) * f })
     }
     const track = buildTrack(pts)
-    if (trackProblem(track, minRadius) === null) return track
+    if (trackProblem(track, minRadius) === null) return addBlocks(track, gentlestPoints(track), seed % 2 === 0 ? 1 : -1)
   }
   // Very rarely a seed cannot make a valid shape at this difficulty: ease off and try again
   if (difficulty < 0.05) throw new Error('could not generate a valid track for seed ' + seed)

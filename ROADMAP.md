@@ -89,7 +89,7 @@ Bias is editable in the neuron list from B3, but nothing explains it yet.
   Done when: the story openly compares reliability and speed, or the starter is weakened with a stated reason.
 - [ ] **F19 [S2] "Best car" is shown on the wrong track.** Cars are scored on five tracks and shown on one, so the red best car can crash on screen, and the graph averages all five.
   Done when: the view shows all five tracks, or the wording explains the difference.
-- [ ] **F20 [S2] Every old experiment number is stale.** Rays, obstacles and multi-track results came from older physics and settings. Only the network-size test is current.
+- [ ] **F20 [S2] Every old experiment number is stale.** Rays, obstacles and multi-track results came from older physics and settings. Obstacles on every track (Nov 2026) also make the network-size test stale.
   Done when: the ray test is rerun, and old tables are marked or replaced.
 
 ## Phase 3: Teach size and layers
@@ -141,9 +141,14 @@ Bias is editable in the neuron list from B3, but nothing explains it yet.
 - [x] **F40 [S4] Plain car and track.** The car is now a drawn top-down race car, and the track has kerbs, a chequered start line and a centre line.
   Done when: done last. An optional 3D view stays a bonus and changes drawing only.
 
+## Ideas from obstacles
+
+- [ ] **Leaderboard final lap with obstacles.** A harder last test for the phase-2 arena, on hidden tracks only.
+- [ ] **Do obstacles justify more rays?** Not shown yet: an earlier obstacle test found 3 rays no worse than 5. Measure 3, 5, 7 and 9 rays across at least 10 seeds before teaching it.
+
 ## Parked on purpose
 
-Arena, ghost car, obstacles, PPO/PID benchmark, multi-car racing. None of these start until Phase 4 is done.
+Arena, ghost car, PPO/PID benchmark, multi-car racing. None of these start until Phase 4 is done.
 
 ## Already decided
 

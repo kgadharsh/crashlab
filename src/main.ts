@@ -27,7 +27,7 @@ import {
   USE_GRIP,
   STALL_STEPS,
 } from './sim'
-import { makeTrack } from './track'
+import { makeTrack, BLOCK_HALF } from './track'
 import { C } from './theme'
 
 // The page has three columns (see index.html and app.css)
@@ -446,6 +446,8 @@ function paintTrack(): HTMLCanvasElement {
   drawEdge(g, rightWall)
   drawDirectionArrows(g)
   drawStartLine(g)
+  g.fillStyle = C.accent
+  for (const k of track.blocks) g.fillRect(k.x - BLOCK_HALF, k.y - BLOCK_HALF, BLOCK_HALF * 2, BLOCK_HALF * 2)
   return layer
 }
 const trackLayer = paintTrack()
@@ -1184,6 +1186,7 @@ function describe(sc: Score): string {
 let m3Score: Score | null = null
 let m2Score: Score | null = null
 let readScore = 0
+let readTotal = 0
 let hideAnswer = false // the game covers the network's decision until the player guesses
 
 // Mission 2's brain: the parts that look at the road are pre-wired; you set three connections
@@ -1472,8 +1475,9 @@ const missions = {
         hideAnswer = false
         predicted = predictPath(round.car, round.brain)
       },
-      (score) => {
+      (score, total) => {
         readScore = score
+        readTotal = total
         predicted = null
         setPaused(false)
         message = ''
@@ -1533,8 +1537,8 @@ function missionHtml(): string {
       return card('Read the brain', 'Look at the rays and predict what the network will do.')
     case 'readdone':
       return card(
-        readScore + ' of 5 correct',
-        (readScore >= 4 ? 'You can read this neuron without seeing a single number.' : 'The side with longer rays wins. Try watching the rays as the car drives.'),
+        readScore + ' of ' + readTotal + ' correct',
+        (readScore >= readTotal - 1 ? 'You can read this brain without seeing a single number.' : 'Rays and speed decide everything. Try watching them as the car drives.'),
         missionButton('startDetect', 'Next: what neurons notice') + missionButton('startRead', 'Play again', false),
       )
     case 'detect':

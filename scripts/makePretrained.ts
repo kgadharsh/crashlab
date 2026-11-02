@@ -8,6 +8,7 @@ import { PRETRAINED_GENOME } from '../src/pretrained'
 
 const SEEDS = Number(process.argv[2] ?? 8)
 const GENERATIONS = 80
+const REST_SECONDS = 90 // pause between seeds so the laptop can cool down
 
 // Same five training tracks as trainWorker.ts
 const TRAIN_TRACKS = [DEFAULT_TRACK, ...Array.from({ length: 4 }, (_, i) => makeTrack(100 + i, 1))]
@@ -64,6 +65,7 @@ for (let seed = 1; seed <= SEEDS; seed++) {
   const s = score(genome, SELECT_TRACKS)
   console.log('  -> ' + fmt(s) + '  (' + ((Date.now() - t) / 1000).toFixed(0) + ' s)')
   if (!winner || better(s, winner.score)) winner = { seed, genome, score: s }
+  if (seed < SEEDS) Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, REST_SECONDS * 1000)
 }
 
 if (!winner) throw new Error('no seeds were run')

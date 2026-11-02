@@ -32,7 +32,7 @@ export const DEFAULT_SETTINGS: Settings = {
   tournamentSize: 3,
   mutationRate: 0.2,
   mutationSize: 0.5,
-  goodEnough: 52,
+  goodEnough: 45,
   patience: 8,
 }
 
