@@ -21,7 +21,7 @@ Severity: **[S1]** blocks the teaching goal, **[S2]** a real bug or misleading r
   Done when: a name is chosen and used everywhere.
 - [x] **F07 [S4] Dead files.** `src/counter.ts` and `src/style.css` are unused, along with the template assets. `compare*.ts` are experiments sitting in `src/`.
   Done when: unused files are removed and experiments live in `scripts/`.
-- [ ] **F08 [S4] Scripts are not type-checked.** `tsconfig.json` only includes `src`, so `scripts/` never goes through `tsc`.
+- [x] **F08 [S4] Scripts are not type-checked.** `tsconfig.json` only includes `src`, so `scripts/` never goes through `tsc`.
   Done when: `npm run build` or a separate script checks them.
 
 ## Phase 1: Make the network touchable (the main work)

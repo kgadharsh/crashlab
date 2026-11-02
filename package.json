@@ -6,9 +6,11 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc && vite build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "check": "tsc && tsc -p tsconfig.scripts.json"
   },
   "devDependencies": {
+    "@types/node": "^26.6.6",
     "tsx": "^4.23.15",
     "typescript": "~6.0.3",
     "vite": "^8.3.4"
