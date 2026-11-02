@@ -24,7 +24,7 @@ Decided 2 Nov 2026 after ten chat prototypes. This order replaces the phase orde
 - [x] **B2. Read the brain.** A few guessing rounds using real track positions. Also the start of the quiz in F15.
 - [x] **B3. Edit the network directly.** Drag connections, click rays to blind them, cut connections, link rays on the track to inputs in the panel. Fixes F11, F13 and F14.
 - [x] **B4. Road detector.** Hover a neuron and the real road lights up. Fixes F24, or record why it was dropped.
-- [ ] **Checkpoint: test Chapters 1 and 2 with 3 to 5 non-ML friends (F15).** Results can reorder everything below.
+- [ ] **Checkpoint: test Chapters 1 and 2 with 3 to 5 non-ML friends (F15).** Results can reorder everything below. The guide and quiz are in `docs/friend-test.md`.
 - [ ] **B5. You are evolution and Downhill.** Pick-a-parent before the 100-car run, then the slope lesson. Fixes F16.
 - [ ] **B6. Memorise vs learn.** Real brains trained on one track and on five, across at least 10 seeds. Fixes F17 and supports F30.
 - [ ] **B7. Hidden layers.** Fixes F21 and needs F22. Measure two hidden layers on the car (F23).
