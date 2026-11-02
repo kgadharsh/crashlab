@@ -60,6 +60,14 @@ Give the same five questions before and after. Do not show the answers.
 2. In your own words, what does a neuron do?
 3. Would you send this to a friend? Why or why not?
 
+## If you cannot be there
+
+Put the quiz, the link and the three questions in a Google Form that does not collect email addresses, and send it to 3 to 5 people.
+
+At the end of the Weights step, or whenever they stop, ask them to press **Copy my results** at the bottom of the left column and paste the text into the form. It shows the time on each step, crashes, slider changes and the Read the brain score. It stays on their device unless they paste it.
+
+If someone is willing, a screen recording is even better. It should show only the app.
+
 ## What to record
 
 | ID | Device | Quiz before (of 5) | Quiz after (of 5) | Finished without help? | Stuck at | Hints given | Minutes |

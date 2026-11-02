@@ -118,6 +118,8 @@ canvas {
 .editor .slider { margin-bottom: 6px; font-size: 13px; }
 .goal.right { color: #3fb56b; }
 .goal.wrong { color: #ff5d5d; }
+button.results { align-self: flex-start; background: none; color: var(--muted); }
+textarea.results { width: 100%; padding: 8px; border: 1px solid var(--line); border-radius: 6px; background: var(--surface); color: var(--text); font: 13px/1.4 system-ui, sans-serif; }
 .note { color: var(--muted); }
 
 .slider { display: grid; grid-template-columns: minmax(0, 1fr) 44px; gap: 2px 8px; margin-bottom: 10px; align-items: center; }

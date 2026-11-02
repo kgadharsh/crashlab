@@ -10,6 +10,7 @@ import { drawNetwork, hitTest, hiddenName, sameEdge, INPUT_LABELS, OUTPUT_LABELS
 import { blindBrain, cloneBrain } from './editor'
 import { findMoment, runNeuronLab, NEURON } from './neuronMission'
 import { pickRounds, runReadGame } from './readBrain'
+import { enterStep, noteChange, noteCrash, noteReadScore, resultsText } from './results'
 import { traceNeuron, type HeatPoint } from './roadMap'
 import {
   type Car,
@@ -274,6 +275,7 @@ function update(input: Input) {
   if (car.dead) {
     crashes++
     lastCrash = { x: car.x, y: car.y, frames: 120 }
+    if (!brainOn) noteCrash()
     car = createCar(undefined, USE_GRIP)
   }
 }
@@ -1344,6 +1346,7 @@ function renderM2Sliders() {
     m2Sliders.appendChild(
       weightRow(label, value, (v) => {
         selection = { kind: 'edge', ...edge }
+        noteChange()
         setEdge(edge, v)
       }),
     )
@@ -1411,7 +1414,13 @@ function renderEditor() {
   }
 }
 
+const STAGE_NAME: Record<MissionStage, string> = {
+  m1: 'Drive', m1done: 'Drive', neuron: 'Neuron', neurondone: 'Neuron', detect: 'What neurons notice', detectdone: 'What neurons notice',
+  read: 'Read the brain', readdone: 'Read the brain', m2: 'Weights', m2done: 'Weights', m3: 'Evolve', m3done: 'Evolve',
+}
+
 function applyStageVisibility() {
+  enterStep(STAGE_NAME[missionStage])
   const sandbox = missionStage === 'm3' || missionStage === 'm3done'
   buttons.style.display = sandbox ? '' : 'none'
   if (!sandbox) hiddenPanel.style.display = 'none'
@@ -1478,6 +1487,7 @@ const missions = {
       (score, total) => {
         readScore = score
         readTotal = total
+        noteReadScore(score, total)
         predicted = null
         setPaused(false)
         message = ''
@@ -1572,6 +1582,33 @@ function missionHtml(): string {
 }
 
 applyStageVisibility()
+
+// ---------- COPY MY RESULTS (for the friend test) ----------
+const resultsButton = document.createElement('button')
+resultsButton.className = 'btn results'
+resultsButton.textContent = 'Copy my results'
+const resultsBox = document.createElement('textarea')
+resultsBox.className = 'results'
+resultsBox.readOnly = true
+resultsBox.rows = 8
+resultsBox.style.display = 'none'
+resultsBox.addEventListener('keydown', (e) => e.stopPropagation())
+resultsButton.addEventListener('click', async () => {
+  const text = resultsText(touchScreen ? 'phone or tablet' : 'computer')
+  resultsBox.value = text
+  try {
+    await navigator.clipboard.writeText(text)
+    resultsBox.style.display = 'none'
+    resultsButton.textContent = 'Copied'
+  } catch {
+    resultsBox.style.display = 'block' // no clipboard access: let them copy it by hand
+    resultsBox.select()
+    resultsButton.textContent = 'Copy the text below'
+  }
+  resultsButton.blur()
+  setTimeout(() => (resultsButton.textContent = 'Copy my results'), 2500)
+})
+rail.append(resultsButton, resultsBox)
 
 // ---------- THE LOOP ----------
 const STEP = 1000 / 60
