@@ -1536,7 +1536,7 @@ const launch = {
 // A mission opens with its lesson the first time. The ? button reopens it at any point.
 const LESSON_OF: Record<MissionStage, LessonId> = {
   m1: 'drive', m1done: 'drive', neuron: 'neuron', neurondone: 'neuron', detect: 'hidden', detectdone: 'hidden',
-  read: 'read', readdone: 'read', m2: 'weights', m2done: 'weights', m3: 'training', m3done: 'training',
+  read: 'read', readdone: 'read', m2: 'neuron', m2done: 'neuron', m3: 'training', m3done: 'training',
 }
 const taught = new Set<LessonId>()
 function teach(id: LessonId, onDone: () => void, review = false) {
@@ -1557,7 +1557,7 @@ const missions = {
   startNeuron: firstTime('neuron', launch.startNeuron),
   startRead: firstTime('read', launch.startRead),
   startDetect: firstTime('hidden', launch.startDetect),
-  start2: firstTime('weights', launch.start2),
+  start2: launch.start2,
   start3: firstTime('training', launch.start3),
 }
 ;(window as unknown as { missions: typeof missions }).missions = missions
@@ -1585,7 +1585,9 @@ function missionHtml(): string {
       return card(
         'Drive one lap',
         (touchScreen ? 'Use the buttons under the track.' : 'Arrow keys: up = gas, down = brake, left and right = steer.') +
-          '<br>' + progress() + (crashes > 0 ? ' · crashes: ' + crashes : ''),
+          '<br>' + progress() + (crashes > 0 ? ' · crashes: ' + crashes : '') +
+          (crashes >= 3 ? '<br>Driving by hand is hard, and it is only a warm-up. You can skip it without missing anything.' : ''),
+        missionButton('startNeuron', 'Skip the warm-up', crashes >= 3),
       )
     case 'm1done':
       return card(
@@ -1635,8 +1637,8 @@ function missionHtml(): string {
         trainedSource === 'evolved' ? 'Evolution found all 47 weights' : 'This brain drives',
         (trainedSource === 'evolved' ? 'No help needed: it makes ' : (trainedSource === 'pretrained' ? 'Evolved ahead of time: it makes ' : 'Loaded from a file: it makes ')) +
           (m3Score ? describe(m3Score) : '') + '.' + (m2Score ? '<br>Your 3 weights made ' + describe(m2Score) + '.' : '') +
-          (trainedSource === 'evolved' && m3Score && m3Score.unseen < 8
-            ? '<br>It learned its practice tracks better than new ones. This is called overfitting. Every run turns out differently, so you can press Train a new brain and compare.'
+          (trainedSource === 'evolved' && m3Score && m3Score.unseen < 10
+            ? '<br>Be warned: it learned its practice tracks better than new ones, so it still fails on some roads it has never seen. This is called overfitting. Every run turns out differently, so you can press Train a new brain and compare.'
             : ''),
       )
   }

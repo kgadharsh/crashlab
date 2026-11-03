@@ -3,6 +3,8 @@
 Started 2 Nov 2026 from a full review of the code, headless measurements and the running app.
 Work top to bottom, one item at a time. Tick an item only when its "done when" is true.
 
+> **Until 17 Nov 2026, [docs/focus.md](docs/focus.md) wins over this file.** B5 to B9 and the ideas sections are frozen until its learning goal is met.
+
 Severity: **[S1]** blocks the teaching goal, **[S2]** a real bug or misleading result, **[S3]** rough edge, **[S4]** cleanup.
 
 ## Build plan: from prototypes to the real app
