@@ -1632,15 +1632,22 @@ function missionHtml(): string {
         'Let evolution find all 47 weights',
         '100 random brains drive and most crash. The best pass on their weights with small changes, and the curve shows them improving.',
       )
-    case 'm3done':
+    case 'm3done': {
+      // Compare with the player's own 3 weights, and never cheer a brain that drives worse on new roads
+      const lostUnseen = !!(m3Score && m2Score && m3Score.unseen < m2Score.unseen)
+      const evolved = trainedSource === 'evolved'
+      const title = !evolved ? 'This brain drives' : lostUnseen ? 'Faster, but worse on new roads' : 'Evolution found all 47 weights'
+      const lead = evolved ? 'Evolution’s brain makes ' : trainedSource === 'pretrained' ? 'Evolved ahead of time: it makes ' : 'Loaded from a file: it makes '
+      const warning = !evolved || !m3Score || m3Score.unseen >= 10
+        ? ''
+        : lostUnseen
+          ? '<br>Your 3 weights handle new roads better. Evolution only practised on a few tracks, so it learned those tracks instead of how to drive. This is called overfitting. Every run turns out differently, so press Train a new brain to try again.'
+          : '<br>It still fails on some roads it has never seen, because it learned its practice tracks better than new ones. This is called overfitting.'
       return card(
-        trainedSource === 'evolved' ? 'Evolution found all 47 weights' : 'This brain drives',
-        (trainedSource === 'evolved' ? 'No help needed: it makes ' : (trainedSource === 'pretrained' ? 'Evolved ahead of time: it makes ' : 'Loaded from a file: it makes ')) +
-          (m3Score ? describe(m3Score) : '') + '.' + (m2Score ? '<br>Your 3 weights made ' + describe(m2Score) + '.' : '') +
-          (trainedSource === 'evolved' && m3Score && m3Score.unseen < 10
-            ? '<br>Be warned: it learned its practice tracks better than new ones, so it still fails on some roads it has never seen. This is called overfitting. Every run turns out differently, so you can press Train a new brain and compare.'
-            : ''),
+        title,
+        lead + (m3Score ? describe(m3Score) : '') + '.' + (m2Score ? '<br>Your 3 weights made ' + describe(m2Score) + '.' : '') + warning,
       )
+    }
   }
 }
 

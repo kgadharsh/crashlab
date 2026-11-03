@@ -60,16 +60,18 @@ export function buildTrack(centerline: Point[]): Track {
 
 // Square obstacles made of wall segments, so rays see them and hitting one is a crash.
 // Each sits off-centre at a centerline point, always on a gentle stretch: the car cannot dodge one in a bend.
+// The blocks take turns between the two sides, so keeping to one side of the road never dodges them all.
 export const BLOCK_HALF = 13
 const BLOCK_OFFSET = 24
 function addBlocks(track: Track, points: number[], side: 1 | -1 = 1): Track {
-  for (const i of points) {
+  for (const [n, i] of points.entries()) {
+    const flip = n % 2 === 0 ? side : -side
     const c = track.centerline
     const before = c[(i + POINTS - 1) % POINTS]
     const after = c[(i + 1) % POINTS]
     const len = Math.hypot(after.x - before.x, after.y - before.y)
-    const x = c[i].x - ((after.y - before.y) / len) * BLOCK_OFFSET * side
-    const y = c[i].y + ((after.x - before.x) / len) * BLOCK_OFFSET * side
+    const x = c[i].x - ((after.y - before.y) / len) * BLOCK_OFFSET * flip
+    const y = c[i].y + ((after.x - before.x) / len) * BLOCK_OFFSET * flip
     track.blocks.push({ x, y })
     track.walls.push(
       ...loopToSegments([
@@ -84,10 +86,10 @@ function addBlocks(track: Track, points: number[], side: 1 | -1 = 1): Track {
   return track
 }
 
-// The two gentlest stretches of a track, away from the start line and from each other
+// The track's points from straightest to most bent, away from the start line
 const BLOCK_START_GAP = 12
 const BLOCK_SPACING = 35
-function gentlestPoints(track: Track): number[] {
+function gentleOrder(track: Track): number[] {
   const c = track.centerline
   const heading = (i: number) => {
     const a = c[(i + POINTS) % POINTS]
@@ -102,12 +104,29 @@ function gentlestPoints(track: Track): number[] {
     }
     return sum
   }
-  const order = Array.from({ length: POINTS }, (_, i) => i)
+  return Array.from({ length: POINTS }, (_, i) => i)
     .filter((i) => i >= BLOCK_START_GAP && i <= POINTS - BLOCK_START_GAP)
     .sort((a, b) => bend(a) - bend(b))
+}
+const apart = (i: number, j: number) => Math.min(Math.abs(i - j), POINTS - Math.abs(i - j))
+
+// The two gentlest stretches of a track, away from the start line and from each other
+function gentlestPoints(track: Track): number[] {
+  const order = gentleOrder(track)
   const first = order[0]
-  const apart = (i: number) => Math.min(Math.abs(i - first), POINTS - Math.abs(i - first))
-  return [first, order.find((i) => apart(i) >= BLOCK_SPACING) ?? first]
+  return [first, order.find((i) => apart(i, first) >= BLOCK_SPACING) ?? first]
+}
+
+// The same track with its blocks moved to two random gentle stretches, on random sides.
+// Training uses this so a brain cannot win by remembering where the blocks are.
+const GENTLE_CHOICES = 40
+export function moveBlocks(track: Track, rng: () => number): Track {
+  const gentle = gentleOrder(track).slice(0, GENTLE_CHOICES)
+  const pick = (from: number[]) => from[Math.floor(rng() * from.length)]
+  const first = pick(gentle)
+  const far = gentle.filter((i) => apart(i, first) >= BLOCK_SPACING)
+  const bare = { ...track, blocks: [], walls: track.walls.slice(0, track.walls.length - 4 * track.blocks.length) }
+  return addBlocks(bare, [first, far.length ? pick(far) : first], rng() < 0.5 ? 1 : -1)
 }
 
 // ---------- THE ORIGINAL TRACK (the one you have been driving on) ----------

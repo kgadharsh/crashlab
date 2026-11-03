@@ -116,13 +116,16 @@ export type GenerationReport = {
 }
 
 // An evolution you can advance one generation at a time (so a viewer can watch each one).
+// tracks can be a function that hands each generation its own tracks: then scores from
+// different generations cannot be compared, so it never stops early.
 export function createEvolution(
   makeBrain: (genome: Genome) => Brain,
   rng: Rng,
   generations: number,
   settings: Settings = DEFAULT_SETTINGS,
-  tracks: Track[] = [DEFAULT_TRACK],
+  tracks: Track[] | ((generation: number) => Track[]) = [DEFAULT_TRACK],
 ) {
+  const changing = typeof tracks === 'function'
   let genomes = initialPopulation(settings, rng)
   let gen = 0
   let topScore = -Infinity
@@ -130,7 +133,7 @@ export function createEvolution(
   return {
     // Score the current generation, report it, and (unless finished) breed the next one.
     step(): { report: GenerationReport; finished: boolean } {
-      const scored = scorePopulation(genomes, makeBrain, tracks, !!settings.grip)
+      const scored = scorePopulation(genomes, makeBrain, changing ? tracks(gen) : tracks, !!settings.grip)
       const meanFitness = scored.reduce((sum, x) => sum + x.fitness, 0) / scored.length
       const best = scored[0]
       const report: GenerationReport = { generation: gen, best, meanFitness, population: scored.map((x) => x.genome) }
@@ -140,7 +143,7 @@ export function createEvolution(
       }
       // Learned and no longer improving: more generations would only waste time
       const finished =
-        gen + 1 >= generations || (topScore >= settings.goodEnough && gen - lastImproved >= settings.patience)
+        gen + 1 >= generations || (!changing && topScore >= settings.goodEnough && gen - lastImproved >= settings.patience)
       if (!finished) genomes = breed(scored, settings, rng)
       gen++
       return { report, finished }
