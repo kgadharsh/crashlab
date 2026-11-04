@@ -1,9 +1,9 @@
-import { buildProblem, genomeLength, shapeOf, type Build } from './setup'
+import { buildProblem, cleanBuild, genomeLength, shapeOf, type Build } from './setup'
 import { PRACTICE_COUNT } from './track'
 
 // A car is its garage build plus its trained weights, saved as text.
 const FORMAT = 'crashlab-car'
-const VERSION = 2
+const VERSION = 3 // 3: ray range is no longer part of a build
 const MAX_WEIGHT = 1000 // anything bigger is certainly not a real brain
 
 export type CarFile = { name: string; build: Build; genome: number[] }
@@ -26,7 +26,7 @@ export function carFromJson(text: string): CarFile | { error: string } {
   if (d.version !== VERSION) return { error: 'That car was saved by a different version of CrashLab.' }
   const problem = buildProblem(d.build, PRACTICE_COUNT)
   if (problem) return { error: 'That car has an illegal setup: ' + problem + '.' }
-  const build = d.build as Build
+  const build = cleanBuild(d.build as Build)
   const length = genomeLength(shapeOf(build.sensors))
   if (!Array.isArray(d.genome) || d.genome.length !== length) return { error: 'That car should have ' + length + ' weights.' }
   for (const w of d.genome) {

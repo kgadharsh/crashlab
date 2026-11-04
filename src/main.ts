@@ -1,9 +1,10 @@
 import './style.css'
-import { DEFAULT_BUILD, LIMITS, POPULATION, TRAINING_BUDGET, buildProblem, genomeLength, shapeOf, specOf, type Build } from './setup'
-import { CHECKPOINTS, MAX_STEPS, STALL_STEPS, createCar, drive, type Brain, type Car } from './sim'
-import { PRACTICE_COUNT, practiceLevel, practiceTrack, trackStats, type Track } from './track'
+import { DEFAULT_BUILD, LIMITS, POPULATION, TRAINING_BUDGET, buildProblem, cleanBuild, genomeLength, shapeOf, specOf, type Build } from './setup'
+import { CHECKPOINTS, STALL_STEPS, createCar, drive, type Brain, type Car } from './sim'
+import { PRACTICE, PRACTICE_COUNT, practiceTrack, trackFeatures, trackStats, type Track } from './track'
 import { genomeToBrain } from './genome'
 import { carFromJson, carToJson, type CarFile } from './carFile'
+import { createRaceView } from './raceView'
 import { COL, H, W, clear, drawCar, drawCrash, drawMinimap, drawRays, drawThumb, drawTrack, fit, follow, newCamera, withCamera } from './draw'
 
 // ---------- SAVED STATE ----------
@@ -29,7 +30,7 @@ const clone = <T,>(v: T): T => JSON.parse(JSON.stringify(v)) as T
 const savedDraft = load<Draft>(KEYS.draft)
 const draft: Draft =
   savedDraft && typeof savedDraft.name === 'string' && buildProblem(savedDraft.build, PRACTICE_COUNT) === null
-    ? savedDraft
+    ? { name: savedDraft.name, build: cleanBuild(savedDraft.build) }
     : { name: 'Team Crash', build: clone(DEFAULT_BUILD) }
 const savedCar = load<string>(KEYS.car)
 const parsedCar = savedCar ? carFromJson(savedCar) : null
@@ -40,17 +41,27 @@ const sameBuild = (a: Build, c: Build) => JSON.stringify(a) === JSON.stringify(c
 const carIsStale = () => !!car && !sameBuild(car.build, draft.build)
 
 // ---------- TRACK NAMES AND TAGS ----------
-const TRACK_NAMES = ['Home Circuit', 'Kestrel Loop', 'Saltmarsh', 'Ironbridge', 'Vale Ring', 'Copperhead', 'Northgate', 'Pinewood', 'Basalt Bend', 'Lantern Park', 'Foxglove', 'Granite Run']
-const LEVELS = ['Gentle', 'Medium', 'Twisty', 'Wild']
+const TRACK_NAMES = PRACTICE.map((p) => p.name)
 const built = new Set<number>([0])
+const km = (px: number) => (px / 1000).toFixed(1) + ' km'
+const plural = (n: number, word: string) => n + ' ' + word + (n === 1 ? '' : 's')
+// What stands out about a track, measured from its shape (shown once the track is built)
 function trackTags(id: number): string {
-  const level = practiceLevel(id)
-  const tags = [level === null ? 'Home' : LEVELS[level]]
-  if (built.has(id)) {
-    const { length } = trackStats(practiceTrack(id))
-    tags.push((length / 1000).toFixed(1) + ' km')
-  }
-  return tags.join(' · ')
+  if (!built.has(id)) return '…'
+  const f = trackFeatures(practiceTrack(id))
+  if (f.blocks >= 10) return plural(f.blocks, 'block')
+  if (f.longestStraight >= 1500) return km(f.longestStraight) + ' straight'
+  if (f.hairpins >= 4) return plural(f.hairpins, 'tight bend')
+  if (trackStats(practiceTrack(id)).tightest > 200) return 'wide, fast bends'
+  if (f.blocks >= 8) return plural(f.blocks, 'block')
+  if (f.hairpins >= 1) return plural(f.hairpins, 'tight bend')
+  if (f.longestStraight >= 1000) return km(f.longestStraight) + ' straight'
+  return plural(f.blocks, 'block')
+}
+// Everything about a track, for the big screen
+function trackLine(id: number): string {
+  const f = trackFeatures(practiceTrack(id))
+  return [km(f.length) + ' lap', plural(f.hairpins, 'tight bend'), km(f.longestStraight) + ' straight', plural(f.blocks, 'block')].join(' · ').toUpperCase()
 }
 
 // ---------- PAGE ----------
@@ -60,7 +71,7 @@ document.querySelector('#app')!.innerHTML = `
   <nav class="tabs" role="tablist">
     <button class="tab" data-tab="garage" role="tab">Garage</button>
     <button class="tab" data-tab="practice" role="tab">Practice</button>
-    <button class="tab" disabled title="Race day comes next">Race<small>soon</small></button>
+    <button class="tab" data-tab="race" role="tab">Race</button>
   </nav>
   <div class="chip" id="chip"></div>
 </header>
@@ -81,8 +92,7 @@ document.querySelector('#app')!.innerHTML = `
         <h2><span class="n">01</span>Sensors<span class="aside" id="weights"></span></h2>
         <label class="row"><span>Rays</span><input type="range" id="count" min="${LIMITS.count[0]}" max="${LIMITS.count[1]}" step="1" /><output id="countOut"></output></label>
         <label class="row"><span>Spread</span><input type="range" id="spread" min="${LIMITS.spread[0]}" max="${LIMITS.spread[1]}" step="5" /><output id="spreadOut"></output></label>
-        <label class="row"><span>Range</span><input type="range" id="range" min="${LIMITS.range[0]}" max="${LIMITS.range[1]}" step="10" /><output id="rangeOut"></output></label>
-        <p class="tip">More rays see more, but every ray adds weights for training to find.</p>
+        <p class="tip">More rays see more, but every ray adds weights for training to find. A wide spread sees bends sooner; a narrow one sees straight ahead in more detail.</p>
       </div>
       <div class="panel">
         <h2><span class="n">02</span>Car setup</h2>
@@ -140,6 +150,30 @@ document.querySelector('#app')!.innerHTML = `
         <p class="msg" id="carMsg"></p>
       </div>
     </div>
+    <div id="race" class="side">
+      <div class="panel">
+        <h2>Grand Prix 1<span class="aside">8 secret tracks</span></h2>
+        <p class="tip" style="margin-top:0">Your car drives 8 tracks it has never seen, once each. Most tracks finished wins, then the lowest total time.</p>
+        <p class="tip" id="medalRules"></p>
+        <div class="actions">
+          <button class="btn primary" id="raceGo">Race your car</button>
+          <button class="btn" id="raceSpeed">Speed 4×</button>
+          <button class="btn" id="raceSkip">Skip to results</button>
+        </div>
+        <p class="msg" id="raceMsg"></p>
+      </div>
+      <div class="panel">
+        <h2>Timing<span class="aside" id="raceTotal"></span></h2>
+        <ol class="tower" id="tower"></ol>
+      </div>
+      <div class="panel" id="resultPanel" hidden>
+        <h2>Result</h2>
+        <div class="medal" id="medal"></div>
+        <p class="tip" id="resultLine" style="margin-top:4px"></p>
+        <p class="tip warn" id="advice"></p>
+      </div>
+      <p class="tip" id="pb"></p>
+    </div>
   </aside>
 </main>`
 
@@ -151,21 +185,28 @@ const gctx = gcanvas.getContext('2d')!
 const strip = $('strip')
 
 // ---------- TABS ----------
-type Tab = 'garage' | 'practice'
+type Tab = 'garage' | 'practice' | 'race'
+let tab: Tab = 'garage'
 function setTab(t: Tab) {
+  tab = t
   document.querySelectorAll<HTMLButtonElement>('.tab[data-tab]').forEach((btn) => {
     btn.classList.toggle('on', btn.dataset.tab === t)
     btn.setAttribute('aria-selected', String(btn.dataset.tab === t))
   })
   $('garage').hidden = t !== 'garage'
   $('practice').hidden = t !== 'practice'
+  $('race').hidden = t !== 'race'
   $('graphBox').hidden = t !== 'practice'
-  if (t === 'garage') stopTestDrive()
+  if (t !== 'practice') stopTestDrive()
   renderPractice()
+  raceView?.render()
 }
 document.querySelectorAll<HTMLButtonElement>('.tab[data-tab]').forEach((btn) => btn.addEventListener('click', () => setTab(btn.dataset.tab as Tab)))
 $('toPractice').addEventListener('click', () => setTab('practice'))
 $('toGarage').addEventListener('click', () => setTab('garage'))
+
+// ---------- RACE DAY (raceView.ts) ----------
+let raceView: ReturnType<typeof createRaceView> | null = null
 
 // ---------- CAMERA ----------
 // The camera never rotates. It shows the whole track in the garage, and follows a car when one drives.
@@ -192,7 +233,6 @@ function bindSlider(id: string, get: () => number, set: (v: number) => void, sca
 }
 bindSlider('count', () => b.sensors.count, (v) => (b.sensors.count = v))
 bindSlider('spread', () => b.sensors.spread, (v) => (b.sensors.spread = v))
-bindSlider('range', () => b.sensors.range, (v) => (b.sensors.range = v))
 bindSlider('balance', () => b.balance, (v) => (b.balance = v), 100)
 bindSlider('pace', () => b.reward.pace, (v) => (b.reward.pace = v), 100)
 bindSlider('safety', () => b.reward.safety, (v) => (b.reward.safety = v), 100)
@@ -240,15 +280,16 @@ function buildOneThumb() {
   renderGarage()
 }
 
-// The fewest generations the budget allows (more when early cars crash quickly)
-const estGenerations = (build: Build) => Math.floor(TRAINING_BUDGET / (POPULATION * build.practice.length * MAX_STEPS))
+// Roughly how many generations the budget buys. Measured 4 Nov 2026: an attempt lasts about
+// 700 steps on average over a run (early cars crash fast, later ones drive the full 40 s).
+const AVERAGE_ATTEMPT = 700
+const estGenerations = (build: Build) => Math.round(TRAINING_BUDGET / (POPULATION * build.practice.length * AVERAGE_ATTEMPT) / 5) * 5
 
 function renderGarage() {
   const spec = specOf(b)
   $('weights').textContent = genomeLength(shapeOf(b.sensors)) + ' weights'
   $('countOut').textContent = String(b.sensors.count)
   $('spreadOut').textContent = b.sensors.spread + '°'
-  $('rangeOut').textContent = String(b.sensors.range)
   $('speedOut').textContent = spec.maxSpeed.toFixed(1)
   $('gripOut').textContent = spec.gripSpeed.toFixed(1)
   $('speedBar').style.width = ((spec.maxSpeed - 4.5) / 3) * 100 + '%'
@@ -286,15 +327,16 @@ function renderChip() {
 }
 
 // ---------- TRAINING ----------
-type History = { best: number; mean: number }[]
+type History = { best: number; mean: number }[] // laps driven in one practice attempt: the best car, and the average car
 type Finish = { genome: number[]; generations: number }
 type Run = { build: Build; name: string; history: History; shown: number; watching: boolean; finish: Finish | null; spent: number }
 let worker: Worker | null = null
 let run: Run | null = null
+let lastRun: { spent: number; generations: number } | null = null // what the finished run used, for the budget panel
 
-type Swarm = { gen: number; trackId: number; track: Track; cars: Car[]; brains: Brain[]; done: boolean[]; hold: number; trails: { x: number; y: number }[][]; lead: number }
+type Swarm = { gen: number; trackId: number; track: Track; cars: Car[]; brains: Brain[]; done: boolean[]; hold: number; trails: { x: number; y: number }[][]; lead: number; switched: boolean; crashHold: number; speed: number; owed: number; frames: number }
 let swarm: Swarm | null = null
-let waiting: { gen: number; genomes: number[][] } | null = null
+let waiting: { gen: number; genomes: number[][]; bestSteps: number } | null = null
 const VIEW_STEPS = 900 // each generation is shown for 15 seconds of driving
 
 function trainMsg(text: string, bad = false) {
@@ -315,12 +357,14 @@ function stopTraining(text: string) {
 
 function finishTraining(f: Finish) {
   const r = run!
+  lastRun = { spent: r.spent, generations: f.generations }
   car = { name: r.name, build: r.build, genome: f.genome }
   carBrain = genomeToBrain(f.genome, shapeOf(r.build.sensors))
   save(KEYS.car, carToJson(car))
   drawGraph(r.history)
   stopTraining('Done: ' + f.generations + ' generations. Here is your car on its first test drive.')
   renderChip()
+  raceView?.render()
   startTestDrive()
 }
 
@@ -339,14 +383,16 @@ $('train').addEventListener('click', () => {
     const m = event.data
     if (!run) return
     if (m.type === 'progress') {
-      run.history.push({ best: m.best, mean: m.mean })
+      run.history.push({ best: m.checkpoints / CHECKPOINTS, mean: m.meanCheckpoints / CHECKPOINTS })
       run.spent = m.spent
-      if (run.watching) waiting = { gen: m.generation, genomes: m.population }
+      if (run.watching) waiting = { gen: m.generation, genomes: m.population, bestSteps: m.bestSteps }
       else {
         run.shown = run.history.length
         drawGraph(run.history)
       }
       renderPractice()
+    } else if (m.type === 'judging') {
+      trainMsg('Picking your car: the best 20 drive mirrored and backwards versions of your practice tracks...')
     } else if (m.type === 'done') {
       run.finish = { genome: m.genome, generations: m.generations }
       if (!run.watching) finishTraining(run.finish)
@@ -379,14 +425,21 @@ function renderWatchOptions() {
   watchSelect.value = String(ids.includes(keep) ? keep : ids[0])
 }
 
-function makeSwarm(gen: number, genomes: number[][], build: Build): Swarm {
+// Every generation gets about the same time on screen. The worker says how long the best car
+// lasted in practice, so a generation that crashes early plays close to real time (and can be
+// watched), and one that drives the full distance plays fast (and does not drag).
+const SHOW_FRAMES = 120 // about 2 seconds per generation
+const MAX_SPEED = 12 // simulated steps per frame
+const paceFor = (bestSteps: number) => Math.min(MAX_SPEED, Math.max(1, Math.min(bestSteps, VIEW_STEPS) / SHOW_FRAMES))
+
+function makeSwarm(gen: number, genomes: number[][], build: Build, bestSteps: number): Swarm {
   const shape = shapeOf(build.sensors)
   const spec = specOf(build)
   const trackId = Number(watchSelect.value)
   const track = practiceTrack(trackId)
   const brains = genomes.map((g) => genomeToBrain(g, shape))
   const cars = brains.map(() => createCar(track, spec))
-  return { gen, trackId, track, cars, brains, done: brains.map(() => false), hold: 0, trails: cars.map((c) => [{ x: c.x, y: c.y }]), lead: 0 }
+  return { gen, trackId, track, cars, brains, done: brains.map(() => false), hold: 0, trails: cars.map((c) => [{ x: c.x, y: c.y }]), lead: 0, switched: false, crashHold: 0, speed: paceFor(bestSteps), owed: 0, frames: 0 }
 }
 
 function stepSwarm() {
@@ -398,7 +451,7 @@ function stepSwarm() {
   }
   if (!swarm || over) {
     if (waiting) {
-      swarm = makeSwarm(waiting.gen, waiting.genomes, run.build)
+      swarm = makeSwarm(waiting.gen, waiting.genomes, run.build, waiting.bestSteps)
       waiting = null
       if (run.watching) {
         run.shown = swarm.gen + 1
@@ -415,7 +468,12 @@ function stepSwarm() {
   // the fewer cars are left, the faster time runs (so the work per frame stays about the same)
   const sw = swarm
   const alive = sw.done.filter((d) => !d).length
-  const steps = Math.min(12, Math.max(6, Math.round(600 / Math.max(alive, 1))))
+  // if cars outlast the best car's practice runs, speed up rather than drag past the planned time
+  sw.frames++
+  const late = sw.frames > SHOW_FRAMES * 1.5 || (sw.done[sw.lead] && alive < 5)
+  sw.owed += late ? MAX_SPEED : sw.speed
+  const steps = Math.floor(sw.owed)
+  sw.owed -= steps
   for (let k = 0; k < steps; k++) {
     sw.cars.forEach((c, i) => {
       if (sw.done[i]) return
@@ -429,16 +487,20 @@ function stepSwarm() {
   pickLead(sw)
 }
 
-// The camera follows the car furthest round the track. It only switches when that car stops,
-// or another gets clearly ahead, so the view does not flick between cars side by side.
+// The camera follows the generation's best car (cars come sorted by their score on all the
+// practice tracks). If it stops, the camera stays on the spot for half a second, then switches
+// once to the car furthest round the track, and stays with that one. So it never shows more than two.
+const CRASH_HOLD = 30 // frames
 function pickLead(sw: Swarm) {
+  if (sw.switched || !sw.done[sw.lead]) return
+  if (sw.crashHold++ < CRASH_HOLD) return
   let best = -1
   sw.cars.forEach((c, i) => {
     if (!sw.done[i] && (best < 0 || c.passed > sw.cars[best].passed)) best = i
   })
   if (best < 0) return
-  const current = sw.cars[sw.lead]
-  if (sw.done[sw.lead] || sw.cars[best].passed > current.passed + 2) sw.lead = best
+  sw.lead = best
+  sw.switched = true
 }
 
 // ---------- TEST DRIVE ----------
@@ -521,16 +583,20 @@ fileInput.addEventListener('change', async () => {
 function renderPractice() {
   renderWatchOptions()
   const training = !!worker
-  const spent = run?.spent ?? 0
+  const spent = run?.spent ?? lastRun?.spent ?? 0
   $('budgetBar').style.width = (100 * spent) / TRAINING_BUDGET + '%'
   $('budgetUsed').textContent = (spent / 1e6).toFixed(1) + ' of ' + (TRAINING_BUDGET / 1e6).toFixed(0) + 'M steps'
-  $('budgetGen').textContent = run ? 'generation ' + run.history.length : 'at least ' + estGenerations(b) + ' generations'
+  $('budgetGen').textContent = run
+    ? 'generation ' + run.history.length
+    : lastRun
+      ? lastRun.generations + ' generations · done'
+      : 'about ' + estGenerations(b) + ' generations'
   $('trainState').textContent = training ? (run?.watching ? 'watching' : 'training') : 'ready'
   $('train').textContent = training ? 'Stop' : car ? 'Train a new car' : 'Start training'
   $('skip').hidden = !(training && run?.watching)
   const spec = specOf(b)
   const rows: [string, string][] = [
-    ['Sensors', b.sensors.count + ' rays · ' + b.sensors.spread + '° · range ' + b.sensors.range],
+    ['Sensors', b.sensors.count + ' rays across ' + b.sensors.spread + '°'],
     ['Brain', genomeLength(shapeOf(b.sensors)) + ' weights'],
     ['Top speed · cornering', spec.maxSpeed.toFixed(1) + ' · ' + spec.gripSpeed.toFixed(1)],
     ['Pace · crash · smooth', pct(b.reward.pace) + ' · ' + pct(b.reward.safety) + ' · ' + pct(b.reward.smooth)],
@@ -571,20 +637,20 @@ function drawGraph(history: History) {
   gctx.fillStyle = COL.muted
   gctx.textAlign = 'left'
   gctx.textBaseline = 'alphabetic'
-  gctx.fillText('SCORE PER GENERATION', left, 18)
+  gctx.fillText('LAPS DRIVEN IN 40 S, PER GENERATION', left, 18)
   gctx.fillStyle = COL.accent
-  gctx.fillText('— BEST CAR', left + 150, 18)
+  gctx.fillText('— BEST CAR', left + 230, 18)
   gctx.fillStyle = COL.tele
-  gctx.fillText('— AVERAGE CAR', left + 228, 18)
-  const maxY = Math.max(20, ...history.map((h) => h.best)) * 1.1
-  const minY = Math.min(0, ...history.map((h) => h.mean))
+  gctx.fillText('— AVERAGE CAR', left + 308, 18)
+  const maxY = Math.max(1, ...history.map((h) => h.best)) * 1.1
+  const minY = 0
   const n = Math.max(history.length, 10)
   const x = (i: number) => left + (i / (n - 1)) * (right - left)
   const y = (v: number) => bottom - ((v - minY) / (maxY - minY)) * (bottom - top)
   gctx.font = '11px "JetBrains Mono", monospace'
   gctx.textAlign = 'right'
   gctx.textBaseline = 'middle'
-  const stepY = maxY > 150 ? 50 : maxY > 60 ? 20 : 10
+  const stepY = maxY > 2.2 ? 1 : 0.5
   for (let v = 0; v <= maxY; v += stepY) {
     gctx.strokeStyle = COL.road
     gctx.lineWidth = 1
@@ -593,7 +659,7 @@ function drawGraph(history: History) {
     gctx.lineTo(right, y(v))
     gctx.stroke()
     gctx.fillStyle = COL.muted
-    gctx.fillText(String(v), left - 8, y(v))
+    gctx.fillText(v.toFixed(1), left - 8, y(v))
   }
   if (history.length === 0) {
     gctx.textAlign = 'center'
@@ -613,7 +679,7 @@ function drawGraph(history: History) {
   gctx.textAlign = 'right'
   gctx.textBaseline = 'bottom'
   gctx.fillStyle = COL.accent
-  gctx.fillText(last.best.toFixed(1), right, Math.max(top, y(last.best) - 4))
+  gctx.fillText(last.best.toFixed(2) + ' laps', right, Math.max(top, y(last.best) - 4))
 }
 
 // ---------- THE BIG SCREEN ----------
@@ -648,6 +714,7 @@ function setStrip(cells: [string, string][]) {
 }
 
 function draw() {
+  if (tab === 'race' && raceView) return raceView.draw()
   clear(ctx)
   const target = focusCar()
   if (target) follow(cam, target)
@@ -667,7 +734,8 @@ function draw() {
       })
       sw.cars.forEach((c) => c.dead && drawCrash(ctx, c.x, c.y))
       sw.cars.forEach((c, i) => !c.dead && i !== sw.lead && drawCar(ctx, c, 26, 14, COL.swarm))
-      drawCar(ctx, sw.cars[sw.lead], 34, 18, COL.accent) // the lead car on top
+      const lead = sw.cars[sw.lead]
+      if (!lead.dead) drawCar(ctx, lead, 34, 18, COL.accent) // the followed car on top
     })
     drawMinimap(ctx, sw.track, cam, sw.cars[sw.lead], sw.cars.filter((_, i) => !sw.done[i] && i !== sw.lead))
     const alive = sw.done.filter((d) => !d).length
@@ -675,11 +743,11 @@ function draw() {
     hudText('WATCHING ' + TRACK_NAMES[sw.trackId].toUpperCase(), 16, 64, 16, COL.muted)
     hudText('SCORED ON ALL ' + run.build.practice.length + ' PRACTICE TRACKS', 16, 82, 13, COL.muted)
     hudText(alive + ' / ' + sw.cars.length + ' DRIVING', W - 16, H - 16, 18, COL.tele, 'right')
-    hudText('FOLLOWING THE LEAD CAR', W - 16, H - 38, 13, COL.accent, 'right')
+    hudText(sw.switched ? 'BEST CAR STOPPED · FOLLOWING THE LEADER' : "FOLLOWING THIS GENERATION'S BEST CAR", W - 16, H - 38, 13, COL.accent, 'right')
     setStrip([
       ['Generation', String(sw.gen + 1)],
       ['Budget used', Math.round((100 * run.spent) / TRAINING_BUDGET) + '<small>%</small>'],
-      ['Best score', run.history[sw.gen]?.best.toFixed(1) ?? '–'],
+      ['Best car', (run.history[sw.gen]?.best.toFixed(2) ?? '–') + '<small> laps</small>'],
       ['Crashed', String(sw.cars.filter((c) => c.dead).length)],
     ])
     return
@@ -719,7 +787,7 @@ function draw() {
     drawRays(ctx, p)
     drawCar(ctx, p, 34, 18, COL.accent)
   })
-  hudText('LAP ' + (trackStats(p.track).length / 1000).toFixed(1) + ' KM', W - 16, 30, 16, COL.muted, 'right')
+  hudText(trackLine(focusTrack), W - 16, 30, 14, COL.muted, 'right')
   const picked = b.practice.includes(focusTrack)
   hudText(TRACK_NAMES[focusTrack].toUpperCase(), 16, 38, 26)
   hudText(picked ? 'PRACTICE TRACK' : 'NOT PICKED', 16, 58, 14, picked ? COL.accent : COL.muted)
@@ -727,7 +795,7 @@ function draw() {
     ['Brain', genomeLength(shapeOf(b.sensors)) + '<small> weights</small>'],
     ['Top speed', specOf(b).maxSpeed.toFixed(1)],
     ['Practice', b.practice.length + '<small> tracks</small>'],
-    ['Generations', estGenerations(b) + '<small>+</small>'],
+    ['Generations', '~' + estGenerations(b)],
   ])
 }
 
@@ -740,6 +808,7 @@ function loop(now: number) {
   lastTime = now
   while (owed >= STEP) {
     tickTestDrive()
+    if (tab === 'race') raceView?.tick()
     owed -= STEP
   }
   stepSwarm()
@@ -748,6 +817,7 @@ function loop(now: number) {
   requestAnimationFrame(loop)
 }
 
+raceView = createRaceView({ ctx, cam, getCar: () => car, isStale: carIsStale, hudText, setStrip })
 renderGarage()
 renderChip()
 drawGraph([])

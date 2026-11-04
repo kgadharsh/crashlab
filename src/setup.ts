@@ -4,8 +4,9 @@
 export type Sensors = {
   count: number // how many rays
   spread: number // degrees from the leftmost ray to the rightmost
-  range: number // how far each ray can see, in pixels
 }
+// How far every ray can see, in pixels. It is not a choice: a longer ray cost nothing, so it was not a real decision.
+export const RAY_RANGE = 200
 
 // What training rewards. Each is 0 to 1. Progress round the track always counts.
 export type Reward = {
@@ -24,12 +25,11 @@ export type Build = {
 export const LIMITS = {
   count: [3, 9],
   spread: [60, 200],
-  range: [120, 280],
   practice: [1, 6],
 } as const
 
 export const DEFAULT_BUILD: Build = {
-  sensors: { count: 5, spread: 120, range: 200 },
+  sensors: { count: 5, spread: 120 },
   balance: 0.5,
   reward: { pace: 0, safety: 0, smooth: 0 },
   practice: [0, 1, 2, 3],
@@ -66,7 +66,7 @@ export function rayAngles(s: Sensors): number[] {
 export function specOf(b: Build): CarSpec {
   return {
     rayAngles: rayAngles(b.sensors),
-    rayRange: b.sensors.range,
+    rayRange: RAY_RANGE,
     maxSpeed: lerp(5, 7, b.balance),
     gripSpeed: lerp(3.5, 2.5, b.balance),
   }
@@ -85,11 +85,20 @@ export function buildProblem(b: unknown, practiceCount: number): string | null {
   const s = d.sensors
   if (!within(s.count, LIMITS.count) || !Number.isInteger(s.count)) return 'ray count out of range'
   if (!within(s.spread, LIMITS.spread)) return 'ray spread out of range'
-  if (!within(s.range, LIMITS.range)) return 'ray range out of range'
   if (!within(d.balance, [0, 1])) return 'car setup out of range'
   for (const k of ['pace', 'safety', 'smooth'] as const) if (!within(d.reward[k], [0, 1])) return 'reward out of range'
   const p = d.practice
   if (p.length < LIMITS.practice[0] || p.length > LIMITS.practice[1]) return 'wrong number of practice tracks'
   if (new Set(p).size !== p.length || p.some((id) => !Number.isInteger(id) || id < 0 || id >= practiceCount)) return 'unknown practice track'
   return null
+}
+
+// A build with only the fields this version knows, so old saved data compares cleanly
+export function cleanBuild(b: Build): Build {
+  return {
+    sensors: { count: b.sensors.count, spread: b.sensors.spread },
+    balance: b.balance,
+    reward: { pace: b.reward.pace, safety: b.reward.safety, smooth: b.reward.smooth },
+    practice: [...b.practice],
+  }
 }

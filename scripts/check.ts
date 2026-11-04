@@ -10,7 +10,7 @@ import { DEFAULT_BUILD, specOf, shapeOf, genomeLength, type Build } from '../src
 const GENERATIONS = Number(process.argv[2] ?? 25)
 const builds: Record<string, Build> = {
   default: DEFAULT_BUILD,
-  wide9: { ...DEFAULT_BUILD, sensors: { count: 9, spread: 180, range: 240 }, balance: 0.8, reward: { pace: 0.6, safety: 0.8, smooth: 0.3 } },
+  wide9: { ...DEFAULT_BUILD, sensors: { count: 9, spread: 180 }, balance: 0.8, reward: { pace: 0.6, safety: 0.8, smooth: 0.3 } },
 }
 const still = Array.from({ length: 5 }, (_, i) => makeTrack(9100 + i, 1))
 

@@ -14,16 +14,17 @@ A racing game HUD: dark, bold and fast. Big lap timers, sector splits, telemetry
 
 ## The garage (the build)
 
-1. **Sensor package.** The number, angle and range of the rays. More vision means a bigger brain, which needs more of the budget to train.
+1. **Sensor package.** The number of rays and how wide they spread. More rays mean a bigger brain, which needs more of the budget to train. Ray range is fixed: a longer ray cost nothing, so it was not a real choice.
 2. **Car setup.** Top speed against grip and acceleration. A fast car is harder to keep on the road.
 3. **Driving style.** Reward sliders for raw pace, staying alive and smooth lines. Training optimises whatever you choose.
-4. **Practice tracks.** Pick which tracks to train on, each tagged with what it has (hairpins, blocks, narrow sections). Choose them to get ready for unknown race tracks.
+4. **Practice tracks.** Pick 1 to 6 of 8 tracks, each with its own character (tight bends, long straights, wide sweepers, lots of blocks), tagged with features measured from the track. Choose them to get ready for unknown race tracks.
 
 
 ## Training
 
 - **Fixed budget.** Everyone gets the same number of "garage hours", measured in car-laps simulated rather than seconds, so a faster laptop gives no advantage. More practice tracks use the budget faster, and a bigger brain (from more rays) has more weights to find, so it needs more generations to learn.
-- You can watch the generations, or skip to the end.
+- You can watch the generations, or skip to the end. Each generation is shown for about 2 seconds, following its best car.
+- **Picking the car.** At the end, the best 20 cars drive mirrored and backwards versions of the practice tracks, and the best of them becomes your car. This cut the luck in training a lot (see `docs/experiments.md`).
 
 ## Racing
 
@@ -36,8 +37,8 @@ A racing game HUD: dark, bold and fast. Big lap timers, sector splits, telemetry
 ## Build order
 
 - [x] **R1. Engine changes.** The sensor setup, car setup and reward weights become parameters, with a variable brain size. Car files store their full setup. The budget is counted in simulated driving steps. Code: `setup.ts`, `sim.ts`, `evolve.ts`, `trainWorker.ts`, `carFile.ts`, and `scripts/check.ts` for a headless check.
-- [ ] **R2. New front end: Garage and Practice.** HUD look, garage screens and training on a budget.
-- [ ] **R3. Local race day.** Sample race tracks, a results screen, a timing tower and ghost replays against your own best car.
+- [x] **R2. New front end: Garage and Practice.** HUD look, garage screens and training on a budget.
+- [x] **R3. Local race day.** Grand Prix 1: 8 secret tracks, one in the style of each practice track plus a wild one (`src/race.ts`, `src/raceView.ts`). A replay with a timing tower, then a medal, a personal best and one piece of advice based on why the car failed. Gold: all 8 in under 200 s. Silver: all 8. Bronze: 6 or more. Ghost replays wait for R4.
 - [ ] **R4. Server.** Car upload, secret-track re-scoring, the always-on leaderboard and leader ghosts.
 - [ ] **R5. Weekly Grand Prix.** Rotating track sets, a leaderboard for each race, season points.
 

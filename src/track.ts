@@ -61,10 +61,12 @@ export function buildTrack(centerline: Point[]): Track {
 }
 
 // Square obstacles made of wall segments, so rays see them and hitting one is a crash.
-// Each sits off-centre at a centerline point, always on a gentle stretch: the car cannot dodge one in a bend.
+// Each sits off-centre at a centerline point, always on a nearly straight stretch: a car cannot
+// dodge one in a bend (on 4 Nov 2026 a block mid-bend stopped all 80 cars tested on one track).
+// It nearly closes one side of the road and leaves the other side about 60 px wide, for a 24 px car.
 // The blocks take turns between the two sides, so keeping to one side of the road never dodges them all.
 export const BLOCK_HALF = 13
-const BLOCK_OFFSET = 24
+const BLOCK_OFFSET = 30
 function addBlocks(track: Track, points: number[], side: 1 | -1 = 1): Track {
   for (const [n, i] of points.entries()) {
     const flip = n % 2 === 0 ? side : -side
@@ -88,11 +90,27 @@ function addBlocks(track: Track, points: number[], side: 1 | -1 = 1): Track {
   return track
 }
 
-// The track's points from straightest to most bent, away from the start line
+// The track's points from straightest to most bent, away from the start line, leaving out any
+// point within BLOCK_CLEAR points of a bend tighter than BLOCK_MIN_RADIUS. A twisty track
+// therefore gets fewer blocks, never impossible ones.
 export const BLOCK_COUNT = 6
 const BLOCK_START_GAP = 36
-const BLOCK_SPACING = 45 // points between blocks
+const BLOCK_MIN_RADIUS = 300
+const BLOCK_CLEAR = 10
+const straightEnough = new WeakMap<Point[], boolean[]>()
+function blockable(track: Track): boolean[] {
+  const cached = straightEnough.get(track.centerline)
+  if (cached) return cached
+  const radii = bendRadii(track)
+  const ok = radii.map((_, i) => {
+    for (let k = -BLOCK_CLEAR; k <= BLOCK_CLEAR; k++) if (radii[(i + k + POINTS) % POINTS] < BLOCK_MIN_RADIUS) return false
+    return true
+  })
+  straightEnough.set(track.centerline, ok)
+  return ok
+}
 function gentleOrder(track: Track): number[] {
+  const ok = blockable(track)
   const c = track.centerline
   const heading = (i: number) => {
     const a = c[(i + POINTS) % POINTS]
@@ -108,33 +126,36 @@ function gentleOrder(track: Track): number[] {
     return sum
   }
   return Array.from({ length: POINTS }, (_, i) => i)
-    .filter((i) => i >= BLOCK_START_GAP && i <= POINTS - BLOCK_START_GAP)
+    .filter((i) => i >= BLOCK_START_GAP && i <= POINTS - BLOCK_START_GAP && ok[i])
     .sort((a, b) => bend(a) - bend(b))
 }
 const apart = (i: number, j: number) => Math.min(Math.abs(i - j), POINTS - Math.abs(i - j))
 
-// Up to BLOCK_COUNT points from a list (in its order), each far enough from the ones already taken
-function spaced(order: number[]): number[] {
+// Up to count points from a list (in its order), each far enough from the ones already taken.
+// The more blocks, the closer together they may be.
+const GENTLE_SHARE = 0.4 // blocks go on the gentlest 40% of the track
+const spacingFor = (count: number) => Math.max(12, Math.floor((POINTS * GENTLE_SHARE) / count))
+function spaced(order: number[], count: number): number[] {
   const taken: number[] = []
+  const gap = spacingFor(count)
   for (const i of order) {
-    if (taken.every((j) => apart(i, j) >= BLOCK_SPACING)) taken.push(i)
-    if (taken.length === BLOCK_COUNT) break
+    if (taken.every((j) => apart(i, j) >= gap)) taken.push(i)
+    if (taken.length === count) break
   }
   return taken.sort((a, b) => a - b)
 }
 
 // The gentlest stretches of a track, away from the start line and from each other
-const gentlestPoints = (track: Track) => spaced(gentleOrder(track))
+const gentlestPoints = (track: Track, count = BLOCK_COUNT) => spaced(gentleOrder(track), count)
 
-// The same track with its blocks moved to random gentle stretches, on random sides.
+// The same track with the same number of blocks, moved to random gentle stretches on random sides.
 // Training uses this so a brain cannot win by remembering where the blocks are.
-const GENTLE_SHARE = 0.4 // blocks go on the gentlest 40% of the track
 export function moveBlocks(track: Track, rng: () => number): Track {
   const gentle = gentleOrder(track)
   const pool = gentle.slice(0, Math.round(gentle.length * GENTLE_SHARE))
   const shuffled = pool.map((i) => ({ i, r: rng() })).sort((a, b) => a.r - b.r).map((x) => x.i)
   const bare = { ...track, blocks: [], walls: track.walls.slice(0, track.walls.length - 4 * track.blocks.length) }
-  return addBlocks(bare, spaced(shuffled), rng() < 0.5 ? 1 : -1)
+  return addBlocks(bare, spaced(shuffled, track.blocks.length), rng() < 0.5 ? 1 : -1)
 }
 
 // ---------- THE ORIGINAL TRACK (the one you have been driving on) ----------
@@ -202,21 +223,27 @@ export function trackProblem(track: Track, minRadius: number = MIN_CORNER_RADIUS
 
 // ---------- THE TRACK GENERATOR ----------
 // Draws a closed curve whose distance from the centre wobbles by several waves at once.
-// difficulty 0 = gentle rounded loops, 1 = lumpy tracks with tight corners and chicanes.
-// Same seed + difficulty in = same track out. Tries random shapes until one passes the checks.
-// A big track needs higher waves for its corners to be as tight as on a small one
-const WAVES = 14
-const WAVE_SIZE = 0.3
-const WAVE_FALL = 0.9
+// A style says which waves (low = big sweeping bends, high = tight wiggles), how strong they
+// are, how flat the loop is (flat = long straights with hairpins at the ends) and how many blocks.
+// Same seed + style in = same track out. Tries random shapes until one passes the checks.
+export type TrackStyle = { kMin: number; kMax: number; size: number; fall: number; squash: [number, number]; blocks: number }
+
+// The old difficulty dial (0 gentle to 1 wild), still used for race tracks
+export const styleFor = (difficulty: number): TrackStyle => ({ kMin: 2, kMax: 14, size: 0.3 * difficulty, fall: 0.9, squash: [0.55, 0.75], blocks: BLOCK_COUNT })
+
 export function makeTrack(seed: number, difficulty = 0.5, minRadius: number = MIN_CORNER_RADIUS): Track {
+  return makeStyledTrack(seed, styleFor(difficulty), minRadius)
+}
+
+export function makeStyledTrack(seed: number, style: TrackStyle, minRadius: number = MIN_CORNER_RADIUS): Track {
   const rng = makeRng(seed * 7919 + 13)
   const between = (lo: number, hi: number) => lo + rng() * (hi - lo)
   const FINE = 4800
   for (let attempt = 0; attempt < 800; attempt++) {
-    const squash = between(0.55, 0.75) // how much flatter than wide
+    const squash = between(style.squash[0], style.squash[1]) // how much flatter than wide
     const waves: { k: number; amp: number; phase: number }[] = []
-    for (let k = 2; k <= WAVES; k++) {
-      waves.push({ k, amp: (difficulty * WAVE_SIZE * rng()) / Math.pow(k, WAVE_FALL), phase: between(0, Math.PI * 2) })
+    for (let k = style.kMin; k <= style.kMax; k++) {
+      waves.push({ k, amp: (style.size * rng()) / Math.pow(k, style.fall), phase: between(0, Math.PI * 2) })
     }
     // 1. a finely sampled version of the curve
     const fine: Point[] = []
@@ -255,22 +282,97 @@ export function makeTrack(seed: number, difficulty = 0.5, minRadius: number = MI
       pts.push({ x: a.x + (b.x - a.x) * f, y: a.y + (b.y - a.y) * f })
     }
     const track = buildTrack(pts)
-    if (trackProblem(track, minRadius) === null) return addBlocks(track, gentlestPoints(track), seed % 2 === 0 ? 1 : -1)
+    if (trackProblem(track, minRadius) === null) return addBlocks(track, gentlestPoints(track, style.blocks), seed % 2 === 0 ? 1 : -1)
   }
-  // Very rarely a seed cannot make a valid shape at this difficulty: ease off and try again
-  if (difficulty < 0.05) throw new Error('could not generate a valid track for seed ' + seed)
-  return makeTrack(seed, difficulty * 0.8, minRadius)
+  // Very rarely a seed cannot make a valid shape in this style: ease off and try again
+  if (style.size < 0.01) throw new Error('could not generate a valid track for seed ' + seed)
+  return makeStyledTrack(seed, { ...style, size: style.size * 0.8 }, minRadius)
 }
 
 // ---------- THE PRACTICE TRACKS ----------
-// Track 0 is the home circuit. The rest are generated, from gentle to wild.
-// Each one is built the first time it is asked for, so nothing waits on startup.
-export const PRACTICE_COUNT = 12
+// Eight tracks, each with its own character, so picking practice tracks is a real choice.
+// Track 0 is the home circuit. Each is built the first time it is asked for.
+export const PRACTICE: { name: string; seed: number; style: TrackStyle | null }[] = [
+  { name: 'Home Circuit', seed: 0, style: null },
+  { name: 'Hairpin Valley', seed: 601, style: { kMin: 4, kMax: 8, size: 0.4, fall: 0.2, squash: [0.6, 0.75], blocks: 4 } },
+  { name: 'Fast Sweepers', seed: 602, style: { kMin: 2, kMax: 4, size: 0.32, fall: 0.3, squash: [0.6, 0.7], blocks: 3 } },
+  { name: 'Block Alley', seed: 603, style: { kMin: 2, kMax: 6, size: 0.12, fall: 0.8, squash: [0.6, 0.7], blocks: 14 } },
+  { name: 'Long Straights', seed: 604, style: { kMin: 2, kMax: 3, size: 0.05, fall: 0.5, squash: [0.34, 0.4], blocks: 4 } },
+  { name: 'Chicanes', seed: 601, style: { kMin: 9, kMax: 14, size: 0.1, fall: 0.2, squash: [0.6, 0.72], blocks: 5 } },
+  { name: 'Technical', seed: 606, style: { kMin: 2, kMax: 14, size: 0.36, fall: 0.8, squash: [0.55, 0.75], blocks: 8 } },
+  { name: 'Grand Loop', seed: 607, style: { kMin: 2, kMax: 10, size: 0.18, fall: 0.9, squash: [0.6, 0.75], blocks: 6 } },
+]
+export const PRACTICE_COUNT = PRACTICE.length
 const practice: Track[] = []
 export function practiceTrack(id: number): Track {
-  if (id === 0) return DEFAULT_TRACK
-  return (practice[id] ??= makeTrack(500 + id, 0.35 + (0.65 * (practiceLevel(id) ?? 0)) / 3))
+  const p = PRACTICE[id]
+  return (practice[id] ??= p.style ? makeStyledTrack(p.seed, p.style) : DEFAULT_TRACK)
 }
 
-// How twisty a generated practice track is: 0 gentle to 3 wild (null for the home circuit)
-export const practiceLevel = (id: number): number | null => (id === 0 ? null : (id - 1) % 4)
+// ---------- WHAT A TRACK HAS IN IT (measured, for the labels) ----------
+// Radius of the bend at each point, measured over a few points either side so it is not noisy
+export function bendRadii(track: Track): number[] {
+  const c = track.centerline
+  const K = 4
+  return c.map((b, i) => {
+    const a = c[(i + POINTS - K) % POINTS]
+    const d = c[(i + K) % POINTS]
+    const ab = Math.hypot(b.x - a.x, b.y - a.y)
+    const bd = Math.hypot(d.x - b.x, d.y - b.y)
+    const ad = Math.hypot(d.x - a.x, d.y - a.y)
+    const cross = Math.abs((b.x - a.x) * (d.y - a.y) - (b.y - a.y) * (d.x - a.x))
+    return cross < 1e-9 ? Infinity : (ab * bd * ad) / (2 * cross)
+  })
+}
+
+// Runs of neighbouring points where test() holds, going round the loop: how many, and the longest
+function runs(values: number[], test: (v: number) => boolean): { count: number; longest: number } {
+  const n = values.length
+  const start = values.findIndex((v) => !test(v))
+  if (start < 0) return { count: 1, longest: n }
+  let count = 0
+  let longest = 0
+  let run = 0
+  for (let k = 1; k <= n; k++) {
+    if (test(values[(start + k) % n])) run++
+    else {
+      if (run > 0) count++
+      longest = Math.max(longest, run)
+      run = 0
+    }
+  }
+  return { count, longest }
+}
+
+export const HAIRPIN_RADIUS = 110 // a bend tighter than this needs hard braking
+const STRAIGHT_RADIUS = 900
+export function trackFeatures(track: Track) {
+  const radii = bendRadii(track)
+  const { length } = trackStats(track)
+  return {
+    length,
+    hairpins: runs(radii, (r) => r < HAIRPIN_RADIUS).count,
+    longestStraight: runs(radii, (r) => r > STRAIGHT_RADIUS).longest * (length / POINTS),
+    blocks: track.blocks.length,
+  }
+}
+
+// ---------- NEW TRACKS FROM OLD ONES ----------
+// A track mirrored left to right, driven backwards, or both: the same kinds of bends and
+// blocks, but turning the other way round and in a new order. Judging a car on these shows
+// whether it can drive or has only learned its practice tracks.
+function fromCenterline(centerline: Point[], blocks: number): Track {
+  const t = buildTrack(centerline)
+  return addBlocks(t, gentlestPoints(t, blocks))
+}
+const variantCache = new WeakMap<Track, Track[]>()
+export function trackVariants(track: Track): Track[] {
+  const cached = variantCache.get(track)
+  if (cached) return cached
+  const c = track.centerline
+  const backwards = (pts: Point[]) => [pts[0], ...pts.slice(1).reverse()] // same start line, lap the other way
+  const mirrored = c.map((p) => ({ x: WORLD.w - p.x, y: p.y }))
+  const variants = [mirrored, backwards(c), backwards(mirrored)].map((cl) => fromCenterline(cl, track.blocks.length))
+  variantCache.set(track, variants)
+  return variants
+}

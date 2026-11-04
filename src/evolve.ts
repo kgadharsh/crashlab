@@ -94,7 +94,9 @@ export type GenerationReport = {
   generation: number
   best: Individual
   meanFitness: number
+  meanCheckpoints: number
   steps: number // simulated steps this generation used
+  tracks: number // how many tracks each car drove
   population: Genome[] // every car of this generation, best first
 }
 
@@ -105,12 +107,15 @@ export function createEvolution(rng: Rng, settings: Settings, drive: Drive, trac
   let gen = 0
   return {
     step(): GenerationReport {
-      const scored = scorePopulation(genomes, drive, tracks(gen))
+      const drawn = tracks(gen)
+      const scored = scorePopulation(genomes, drive, drawn)
       const report: GenerationReport = {
         generation: gen,
         best: scored[0],
         meanFitness: scored.reduce((sum, x) => sum + x.fitness, 0) / scored.length,
+        meanCheckpoints: scored.reduce((sum, x) => sum + x.checkpoints, 0) / scored.length,
         steps: scored.reduce((sum, x) => sum + x.steps, 0),
+        tracks: drawn.length,
         population: scored.map((x) => x.genome),
       }
       genomes = breed(scored, settings, rng)
