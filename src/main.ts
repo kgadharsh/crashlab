@@ -334,7 +334,7 @@ let worker: Worker | null = null
 let run: Run | null = null
 let lastRun: { spent: number; generations: number } | null = null // what the finished run used, for the budget panel
 
-type Swarm = { gen: number; trackId: number; track: Track; cars: Car[]; brains: Brain[]; done: boolean[]; hold: number; trails: { x: number; y: number }[][]; lead: number; speed: number; owed: number; frames: number }
+type Swarm = { gen: number; genomes: number[][]; bestSteps: number; trackId: number; track: Track; cars: Car[]; brains: Brain[]; done: boolean[]; hold: number; trails: { x: number; y: number }[][]; lead: number; speed: number; owed: number; frames: number }
 let swarm: Swarm | null = null
 let waiting: { gen: number; genomes: number[][]; bestSteps: number } | null = null
 const VIEW_STEPS = 900 // each generation is shown for 15 seconds of driving
@@ -416,14 +416,30 @@ $('skip').addEventListener('click', () => {
   renderPractice()
 })
 
-// The practice track the generations are shown on (scoring always uses all of them)
+// The practice track the generations are shown on (scoring always uses all of them).
+// The options are only rebuilt when the practice tracks change, so an open list is never
+// snapped shut mid-choice. A new choice shows straight away: the current generation is
+// replayed on it, and before training the screen shows that track.
 const watchSelect = $<HTMLSelectElement>('watchTrack')
+let watchOptionsFor = ''
 function renderWatchOptions() {
   const ids = run?.build.practice ?? b.practice
-  const keep = Number(watchSelect.value)
-  watchSelect.replaceChildren(...ids.map((id) => new Option(TRACK_NAMES[id], String(id))))
-  watchSelect.value = String(ids.includes(keep) ? keep : ids[0])
+  if (ids.join() !== watchOptionsFor) {
+    watchOptionsFor = ids.join()
+    const keep = Number(watchSelect.value)
+    watchSelect.replaceChildren(...ids.map((id) => new Option(TRACK_NAMES[id], String(id))))
+    watchSelect.value = String(ids.includes(keep) ? keep : ids[0])
+  }
+  // outside training, the list follows the track last looked at in the garage
+  if (!run && ids.includes(focusTrack) && watchSelect.value !== String(focusTrack)) watchSelect.value = String(focusTrack)
 }
+watchSelect.addEventListener('change', () => {
+  focusTrack = Number(watchSelect.value)
+  if (swarm && run) {
+    swarm = makeSwarm(swarm.gen, swarm.genomes, run.build, swarm.bestSteps)
+    follow(cam, swarm.cars[0], true)
+  }
+})
 
 // Every generation gets about the same time on screen. The worker says how long the best car
 // lasted in practice, so a generation that crashes early plays close to real time (and can be
@@ -439,7 +455,7 @@ function makeSwarm(gen: number, genomes: number[][], build: Build, bestSteps: nu
   const track = practiceTrack(trackId)
   const brains = genomes.map((g) => genomeToBrain(g, shape))
   const cars = brains.map(() => createCar(track, spec))
-  return { gen, trackId, track, cars, brains, done: brains.map(() => false), hold: 0, trails: cars.map((c) => [{ x: c.x, y: c.y }]), lead: 0, speed: paceFor(bestSteps), owed: 0, frames: 0 }
+  return { gen, genomes, bestSteps, trackId, track, cars, brains, done: brains.map(() => false), hold: 0, trails: cars.map((c) => [{ x: c.x, y: c.y }]), lead: 0, speed: paceFor(bestSteps), owed: 0, frames: 0 }
 }
 
 function stepSwarm() {
