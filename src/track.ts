@@ -1,10 +1,12 @@
 import type { Point, Segment } from './sensors'
 import { makeRng } from './random'
 
-export const POINTS = 120
+// Tracks live in a world several screens big; the camera scrolls over it
+export const WORLD = { w: 2400, h: 1500 }
+export const POINTS = 360 // centerline points, about 15 px apart
 export const HALF_WIDTH = 45
 export const CHECKPOINT_STRIDE = 6
-export const CHECKPOINTS = POINTS / CHECKPOINT_STRIDE
+export const CHECKPOINTS = POINTS / CHECKPOINT_STRIDE // 60 per lap
 
 // Everything a car needs to know about the road it is driving on
 export type Track = {
@@ -87,8 +89,9 @@ function addBlocks(track: Track, points: number[], side: 1 | -1 = 1): Track {
 }
 
 // The track's points from straightest to most bent, away from the start line
-const BLOCK_START_GAP = 12
-const BLOCK_SPACING = 35
+export const BLOCK_COUNT = 6
+const BLOCK_START_GAP = 36
+const BLOCK_SPACING = 45 // points between blocks
 function gentleOrder(track: Track): number[] {
   const c = track.centerline
   const heading = (i: number) => {
@@ -98,7 +101,7 @@ function gentleOrder(track: Track): number[] {
   }
   const bend = (i: number) => {
     let sum = 0
-    for (let k = -5; k < 5; k++) {
+    for (let k = -15; k < 15; k++) {
       const turn = heading(i + k + 1) - heading(i + k)
       sum += Math.abs(Math.atan2(Math.sin(turn), Math.cos(turn)))
     }
@@ -110,23 +113,28 @@ function gentleOrder(track: Track): number[] {
 }
 const apart = (i: number, j: number) => Math.min(Math.abs(i - j), POINTS - Math.abs(i - j))
 
-// The two gentlest stretches of a track, away from the start line and from each other
-function gentlestPoints(track: Track): number[] {
-  const order = gentleOrder(track)
-  const first = order[0]
-  return [first, order.find((i) => apart(i, first) >= BLOCK_SPACING) ?? first]
+// Up to BLOCK_COUNT points from a list (in its order), each far enough from the ones already taken
+function spaced(order: number[]): number[] {
+  const taken: number[] = []
+  for (const i of order) {
+    if (taken.every((j) => apart(i, j) >= BLOCK_SPACING)) taken.push(i)
+    if (taken.length === BLOCK_COUNT) break
+  }
+  return taken.sort((a, b) => a - b)
 }
 
-// The same track with its blocks moved to two random gentle stretches, on random sides.
+// The gentlest stretches of a track, away from the start line and from each other
+const gentlestPoints = (track: Track) => spaced(gentleOrder(track))
+
+// The same track with its blocks moved to random gentle stretches, on random sides.
 // Training uses this so a brain cannot win by remembering where the blocks are.
-const GENTLE_CHOICES = 40
+const GENTLE_SHARE = 0.4 // blocks go on the gentlest 40% of the track
 export function moveBlocks(track: Track, rng: () => number): Track {
-  const gentle = gentleOrder(track).slice(0, GENTLE_CHOICES)
-  const pick = (from: number[]) => from[Math.floor(rng() * from.length)]
-  const first = pick(gentle)
-  const far = gentle.filter((i) => apart(i, first) >= BLOCK_SPACING)
+  const gentle = gentleOrder(track)
+  const pool = gentle.slice(0, Math.round(gentle.length * GENTLE_SHARE))
+  const shuffled = pool.map((i) => ({ i, r: rng() })).sort((a, b) => a.r - b.r).map((x) => x.i)
   const bare = { ...track, blocks: [], walls: track.walls.slice(0, track.walls.length - 4 * track.blocks.length) }
-  return addBlocks(bare, [first, far.length ? pick(far) : first], rng() < 0.5 ? 1 : -1)
+  return addBlocks(bare, spaced(shuffled), rng() < 0.5 ? 1 : -1)
 }
 
 // ---------- THE ORIGINAL TRACK (the one you have been driving on) ----------
@@ -135,23 +143,24 @@ function defaultCenterline(): Point[] {
   for (let i = 0; i < POINTS; i++) {
     const t = (i / POINTS) * Math.PI * 2
     pts.push({
-      x: 400 + (270 + 15 * Math.cos(2 * t)) * Math.cos(t),
-      y: 250 + (160 + 15 * Math.sin(3 * t)) * Math.sin(t),
+      x: WORLD.w / 2 + (950 + 60 * Math.cos(2 * t) + 45 * Math.cos(5 * t + 1)) * Math.cos(t),
+      y: WORLD.h / 2 + (560 + 50 * Math.sin(3 * t) + 40 * Math.sin(4 * t)) * Math.sin(t),
     })
   }
   return pts
 }
-export const DEFAULT_TRACK: Track = addBlocks(buildTrack(defaultCenterline()), [30, 95])
+const homeBase = buildTrack(defaultCenterline())
+export const DEFAULT_TRACK: Track = addBlocks(homeBase, gentlestPoints(homeBase))
 
 // ---------- CHECKING A TRACK IS FAIR ----------
 const MIN_CORNER_RADIUS = 65 // tighter than this and the car cannot physically turn
 const MIN_GAP = 2 * HALF_WIDTH + 30 // two far-apart parts of the road must not touch
-const MIN_LENGTH = 1000
-const MAX_LENGTH = 1800
-const CANVAS = { w: 800, h: 500, margin: 8 }
+const MIN_LENGTH = 4000
+const MAX_LENGTH = 8500
+const CANVAS = { w: WORLD.w, h: WORLD.h, margin: 8 }
 
-// Returns why the track is unusable, or null if it is fine
-export function trackProblem(track: Track, minRadius: number = MIN_CORNER_RADIUS): string | null {
+// Total length and tightest corner radius of a track's centerline
+export function trackStats(track: Track): { length: number; tightest: number } {
   const c = track.centerline
   let length = 0
   let tightest = Infinity
@@ -168,12 +177,19 @@ export function trackProblem(track: Track, minRadius: number = MIN_CORNER_RADIUS
     const radius = cross < 1e-9 ? Infinity : (ab * bd * ad) / (2 * cross)
     tightest = Math.min(tightest, radius)
   }
+  return { length, tightest }
+}
+
+// Returns why the track is unusable, or null if it is fine
+export function trackProblem(track: Track, minRadius: number = MIN_CORNER_RADIUS): string | null {
+  const c = track.centerline
+  const { length, tightest } = trackStats(track)
   if (tightest < minRadius) return 'corner too tight (' + tightest.toFixed(0) + ' px)'
   if (length < MIN_LENGTH || length > MAX_LENGTH) return 'length ' + length.toFixed(0) + ' px'
   for (let i = 0; i < POINTS; i++) {
     for (let j = i + 1; j < POINTS; j++) {
       const apart = Math.min(j - i, POINTS - (j - i))
-      if (apart <= 20) continue
+      if (apart <= 60) continue
       if (Math.hypot(c[i].x - c[j].x, c[i].y - c[j].y) < MIN_GAP) return 'road touches itself'
     }
   }
@@ -188,15 +204,19 @@ export function trackProblem(track: Track, minRadius: number = MIN_CORNER_RADIUS
 // Draws a closed curve whose distance from the centre wobbles by several waves at once.
 // difficulty 0 = gentle rounded loops, 1 = lumpy tracks with tight corners and chicanes.
 // Same seed + difficulty in = same track out. Tries random shapes until one passes the checks.
+// A big track needs higher waves for its corners to be as tight as on a small one
+const WAVES = 14
+const WAVE_SIZE = 0.3
+const WAVE_FALL = 0.9
 export function makeTrack(seed: number, difficulty = 0.5, minRadius: number = MIN_CORNER_RADIUS): Track {
   const rng = makeRng(seed * 7919 + 13)
   const between = (lo: number, hi: number) => lo + rng() * (hi - lo)
-  const FINE = 2400
+  const FINE = 4800
   for (let attempt = 0; attempt < 800; attempt++) {
     const squash = between(0.55, 0.75) // how much flatter than wide
     const waves: { k: number; amp: number; phase: number }[] = []
-    for (let k = 2; k <= 7; k++) {
-      waves.push({ k, amp: (difficulty * 0.3 * rng()) / Math.pow(k, 0.5), phase: between(0, Math.PI * 2) })
+    for (let k = 2; k <= WAVES; k++) {
+      waves.push({ k, amp: (difficulty * WAVE_SIZE * rng()) / Math.pow(k, WAVE_FALL), phase: between(0, Math.PI * 2) })
     }
     // 1. a finely sampled version of the curve
     const fine: Point[] = []
@@ -211,10 +231,10 @@ export function makeTrack(seed: number, difficulty = 0.5, minRadius: number = MI
     const ys = fine.map((p) => p.y)
     const w = Math.max(...xs) - Math.min(...xs)
     const h = Math.max(...ys) - Math.min(...ys)
-    const scale = Math.min((CANVAS.w - 2 * (HALF_WIDTH + 14)) / w, (CANVAS.h - 2 * (HALF_WIDTH + 14)) / h)
     const mx = (Math.max(...xs) + Math.min(...xs)) / 2
     const my = (Math.max(...ys) + Math.min(...ys)) / 2
-    const placed = fine.map((p) => ({ x: 400 + (p.x - mx) * scale, y: 250 + (p.y - my) * scale }))
+    const scale = Math.min((CANVAS.w - 2 * (HALF_WIDTH + 14)) / w, (CANVAS.h - 2 * (HALF_WIDTH + 14)) / h)
+    const placed = fine.map((p) => ({ x: WORLD.w / 2 + (p.x - mx) * scale, y: WORLD.h / 2 + (p.y - my) * scale }))
     // 3. keep POINTS points, evenly spaced along the curve (so checkpoints are evenly spaced)
     let total = 0
     const cum = [0]
@@ -241,3 +261,16 @@ export function makeTrack(seed: number, difficulty = 0.5, minRadius: number = MI
   if (difficulty < 0.05) throw new Error('could not generate a valid track for seed ' + seed)
   return makeTrack(seed, difficulty * 0.8, minRadius)
 }
+
+// ---------- THE PRACTICE TRACKS ----------
+// Track 0 is the home circuit. The rest are generated, from gentle to wild.
+// Each one is built the first time it is asked for, so nothing waits on startup.
+export const PRACTICE_COUNT = 12
+const practice: Track[] = []
+export function practiceTrack(id: number): Track {
+  if (id === 0) return DEFAULT_TRACK
+  return (practice[id] ??= makeTrack(500 + id, 0.35 + (0.65 * (practiceLevel(id) ?? 0)) / 3))
+}
+
+// How twisty a generated practice track is: 0 gentle to 3 wild (null for the home circuit)
+export const practiceLevel = (id: number): number | null => (id === 0 ? null : (id - 1) % 4)

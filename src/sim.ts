@@ -1,40 +1,27 @@
 import { castRay, type Point, type Segment } from './sensors'
-import { think } from './brain'
+import { think, type Brain } from './brain'
 import { CHECKPOINTS, CHECKPOINT_STRIDE, DEFAULT_TRACK, POINTS, type Track } from './track'
+import { DEFAULT_SPEC, type CarSpec, type Reward } from './setup'
 
 export { CHECKPOINTS, CHECKPOINT_STRIDE, DEFAULT_TRACK }
-export type { Track }
-
-// Whatever shape your brain has, this picks up its type from think()
-export type Brain = Parameters<typeof think>[0]
+export type { Track, Brain }
 export type Input = { throttle: number; steer: number }
 
-// ---------- CAR SETTINGS ----------
+// ---------- FIXED PHYSICS (the same for every car) ----------
 export const CAR_RADIUS = 12
 export const ACCEL = 0.15
 export const FRICTION = 0.98
-export const MAX_SPEED = 6
 export const MAX_REVERSE = -2
 export const TURN_RATE = 0.008
-
-// ---------- GRIP (cars use it by default, following USE_GRIP below) ----------
-// With grip on, the tyres can only turn the car so hard. Above GRIP_SPEED the turning
-// weakens as the car speeds up, so you must brake before a bend. With grip off, the
-// turning radius is the same at every speed and braking never helps.
-export const GRIP_SPEED = 3
+// Above the car's grip speed, turning weakens as the car speeds up, so you must brake before a bend.
 export const GRIP_POWER = 2
-// ONE switch for the whole app (missions, training, swarm, scores): every function defaults to it. false = the old physics.
-export const USE_GRIP = true
 
 // ---------- PROGRESS SETTINGS ----------
 export const CHECKPOINT_RADIUS = 50
 const MIN_FORWARD_SPEED = 0.5 // slower than this (or reversing) earns no checkpoints
 export const STALL_STEPS = 300 // 5 seconds without a new checkpoint ends an attempt
-export const MAX_STEPS = 1200 // 20 seconds is the longest attempt
-
-// ---------- RAY SETTINGS ----------
-export const RAY_ANGLES = [-60, -30, 0, 30, 60].map((deg) => (deg * Math.PI) / 180)
-export const RAY_RANGE = 200
+export const MAX_STEPS = 2400 // 40 seconds is the longest training attempt (about one lap)
+export const RACE_STEPS = 6000 // 100 seconds is the longest race lap
 
 function distToSegment(px: number, py: number, s: Segment): number {
   const dx = s.b.x - s.a.x
@@ -48,6 +35,7 @@ function distToSegment(px: number, py: number, s: Segment): number {
 // ---------- ONE CAR ----------
 export type Car = {
   track: Track // the road this car is driving on
+  spec: CarSpec // its sensors and setup
   x: number
   y: number
   angle: number
@@ -57,12 +45,17 @@ export type Car = {
   dead: boolean // true once the car has crashed
   steps: number // how many steps this attempt has lasted
   sinceProgress: number // steps since the last new checkpoint
-  grip: boolean // true = turning weakens above GRIP_SPEED
+  speedSum: number // for the average speed
+  steerChange: number // total change in steering, for smoothness
+  lastSteer: number
+  near: Segment[] // walls close to nearAt, refreshed as the car moves (see nearbyWalls)
+  nearAt: Point
 }
 
-export function createCar(track: Track = DEFAULT_TRACK, grip = USE_GRIP): Car {
+export function createCar(track: Track = DEFAULT_TRACK, spec: CarSpec = DEFAULT_SPEC): Car {
   const car: Car = {
     track,
+    spec,
     x: track.start.x,
     y: track.start.y,
     angle: track.start.angle,
@@ -72,7 +65,11 @@ export function createCar(track: Track = DEFAULT_TRACK, grip = USE_GRIP): Car {
     dead: false,
     steps: 0,
     sinceProgress: 0,
-    grip,
+    speedSum: 0,
+    steerChange: 0,
+    lastSteer: 0,
+    near: [],
+    nearAt: { x: Infinity, y: Infinity },
   }
   updateRays(car)
   return car
@@ -108,10 +105,14 @@ function updateProgress(car: Car) {
 }
 
 // Walls too far away to matter are skipped. A wall can only be seen by a ray, or touched
-// by the car, if its middle is within RAY_RANGE plus half a wall segment of the car, so
+// by the car, if its middle is within the ray range plus half a wall segment of the car, so
 // leaving the rest out gives exactly the same answers, just faster.
+// The list is gathered with SLACK extra reach and kept until the car has moved SLACK away,
+// so the whole track is only searched now and then instead of every step.
+const SLACK = 80
 function nearbyWalls(car: Car): Segment[] {
-  const reach = RAY_RANGE + car.track.longestWall / 2 + 1
+  if (Math.hypot(car.x - car.nearAt.x, car.y - car.nearAt.y) <= SLACK) return car.near
+  const reach = Math.max(car.spec.rayRange, CAR_RADIUS) + car.track.longestWall / 2 + 1 + SLACK
   const reachSq = reach * reach
   const near: Segment[] = []
   for (const w of car.track.walls) {
@@ -119,11 +120,13 @@ function nearbyWalls(car: Car): Segment[] {
     const dy = (w.a.y + w.b.y) / 2 - car.y
     if (dx * dx + dy * dy <= reachSq) near.push(w)
   }
+  car.near = near
+  car.nearAt = { x: car.x, y: car.y }
   return near
 }
 
 function updateRays(car: Car, near: Segment[] = nearbyWalls(car)) {
-  car.rays = RAY_ANGLES.map((a) => castRay(car.x, car.y, car.angle + a, RAY_RANGE, near))
+  car.rays = car.spec.rayAngles.map((a) => castRay(car.x, car.y, car.angle + a, car.spec.rayRange, near))
 }
 
 function hitsWall(near: Segment[], car: Car): boolean {
@@ -136,18 +139,22 @@ function hitsWall(near: Segment[], car: Car): boolean {
 // Advance one car by one 1/60-second step. A crash marks it dead (it does NOT reset).
 export function step(car: Car, input: Input) {
   if (car.dead) return
+  const { maxSpeed, gripSpeed } = car.spec
 
   car.speed += input.throttle * ACCEL
   car.speed *= FRICTION
-  if (car.speed > MAX_SPEED) car.speed = MAX_SPEED
+  if (car.speed > maxSpeed) car.speed = maxSpeed
   if (car.speed < MAX_REVERSE) car.speed = MAX_REVERSE
 
-  const turnScale = car.grip && car.speed > GRIP_SPEED ? Math.pow(GRIP_SPEED / car.speed, GRIP_POWER) : 1
+  const turnScale = car.speed > gripSpeed ? Math.pow(gripSpeed / car.speed, GRIP_POWER) : 1
   car.angle += input.steer * TURN_RATE * car.speed * turnScale
 
   car.x += Math.cos(car.angle) * car.speed
   car.y += Math.sin(car.angle) * car.speed
   car.steps++
+  car.speedSum += car.speed
+  car.steerChange += Math.abs(input.steer - car.lastSteer)
+  car.lastSteer = input.steer
 
   const near = nearbyWalls(car)
   if (hitsWall(near, car)) {
@@ -159,15 +166,19 @@ export function step(car: Car, input: Input) {
   updateRays(car, near)
 }
 
-// What the brain sees: 5 ray distances (0 to 1) and the speed
+// What the brain sees: each ray distance (0 to 1) and the speed
 export function getInputs(car: Car): number[] {
-  return [...car.rays.map((d) => d / RAY_RANGE), car.speed / MAX_SPEED]
+  return [...car.rays.map((d) => d / car.spec.rayRange), car.speed / car.spec.maxSpeed]
 }
 
-// The score evolution uses: whole checkpoints, plus a little extra credit (under 1)
-// for how close the car got to its next checkpoint. This breaks ties early on, when
-// most random brains collect zero checkpoints but some get closer than others.
-export function fitnessOf(car: Car): number {
+export function drive(car: Car, brain: Brain) {
+  const { outputs } = think(brain, getInputs(car))
+  step(car, { steer: outputs[0], throttle: outputs[1] })
+}
+
+// Progress: whole checkpoints, plus a little extra credit (under 1) for how close the car
+// got to its next one. This breaks ties early on, when most random brains collect none.
+export function progressOf(car: Car): number {
   const prev = checkpointPos(car.track, car.passed)
   const next = checkpointPos(car.track, car.passed + 1)
   const spacing = Math.hypot(next.x - prev.x, next.y - prev.y)
@@ -176,46 +187,35 @@ export function fitnessOf(car: Car): number {
   return car.passed + closeness * 0.99
 }
 
-// Run one brain from the start with no drawing. This is what evolution will call.
-export function runBrain(brain: Brain, track: Track = DEFAULT_TRACK, maxSteps: number = MAX_STEPS, grip = USE_GRIP) {
-  const car = createCar(track, grip)
-  while (!car.dead && car.steps < maxSteps && car.sinceProgress < STALL_STEPS) {
-    const { outputs } = think(brain, getInputs(car))
-    step(car, { steer: outputs[0], throttle: outputs[1] })
-  }
-  return {
-    checkpoints: car.passed,
-    fitness: fitnessOf(car),
-    steps: car.steps,
-    crashed: car.dead,
-  }
+// The score training uses: progress, adjusted by the player's driving style
+export const PACE_BONUS = 10 // checkpoints of bonus for driving at top speed the whole time
+export const CRASH_PENALTY = 15 // checkpoints lost for a crash at full safety
+export const JERK_PENALTY = 20 // checkpoints lost per unit of average steering change, at full smoothness
+export function fitnessOf(car: Car, reward: Reward): number {
+  const steps = Math.max(car.steps, 1)
+  const avgSpeed = Math.max(0, car.speedSum / steps)
+  return (
+    progressOf(car) +
+    reward.pace * PACE_BONUS * (avgSpeed / car.spec.maxSpeed) -
+    (car.dead ? reward.safety * CRASH_PENALTY : 0) -
+    reward.smooth * JERK_PENALTY * (car.steerChange / steps)
+  )
 }
 
-// A copy of the car turned to face another way, with its rays updated to match
-export function faceAngle(car: Car, angle: number): Car {
-  const copy: Car = { ...car, angle }
-  updateRays(copy)
-  return copy
+export type RunResult = { fitness: number; checkpoints: number; steps: number; crashed: boolean }
+
+// Run one brain from the start with no drawing. This is what training calls.
+export function runBrain(brain: Brain, track: Track, spec: CarSpec, reward: Reward, maxSteps = MAX_STEPS): RunResult {
+  const car = createCar(track, spec)
+  while (!car.dead && car.steps < maxSteps && car.sinceProgress < STALL_STEPS) drive(car, brain)
+  return { fitness: fitnessOf(car, reward), checkpoints: car.passed, steps: car.steps, crashed: car.dead }
 }
 
-// Where a brain would take this car next, run on a copy so the real car does not move.
-export function predictPath(car: Car, brain: Brain, steps = 150): { points: Point[]; crashed: boolean } {
-  const ghost: Car = { ...car, rays: [...car.rays] }
-  const points: Point[] = [{ x: ghost.x, y: ghost.y }]
-  for (let i = 0; i < steps && !ghost.dead; i++) {
-    const { outputs } = think(brain, getInputs(ghost))
-    step(ghost, { steer: outputs[0], throttle: outputs[1] })
-    points.push({ x: ghost.x, y: ghost.y })
-  }
-  return { points, crashed: ghost.dead }
-}
-
-// How many steps a brain needs to collect one full lap of checkpoints (null if it never does).
-export function lapSteps(brain: Brain, track: Track = DEFAULT_TRACK, grip = USE_GRIP): number | null {
-  const car = createCar(track, grip)
-  while (!car.dead && car.steps < 3000 && car.sinceProgress < STALL_STEPS && car.passed < CHECKPOINTS) {
-    const { outputs } = think(brain, getInputs(car))
-    step(car, { steer: outputs[0], throttle: outputs[1] })
-  }
-  return car.passed >= CHECKPOINTS ? car.steps : null
+// One race lap. time is in steps (60 per second), or null if the car did not finish.
+export type LapResult = { time: number | null; checkpoints: number; crashed: boolean }
+export function runLap(brain: Brain, track: Track, spec: CarSpec): LapResult {
+  const car = createCar(track, spec)
+  while (!car.dead && car.steps < RACE_STEPS && car.sinceProgress < STALL_STEPS && car.passed < CHECKPOINTS) drive(car, brain)
+  const finished = car.passed >= CHECKPOINTS
+  return { time: finished ? car.steps : null, checkpoints: Math.min(car.passed, CHECKPOINTS), crashed: car.dead }
 }

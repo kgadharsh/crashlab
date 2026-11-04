@@ -1,46 +1,46 @@
-# CrashLab: the next two weeks
+# CrashLab: race team
 
-Written 3 Nov 2026, after the first tests and a council review. This note wins over the roadmap until the stop date.
+Written 4 Nov 2026. This replaces every earlier plan, and it wins over the roadmap. Teaching is gone. The physics, tracks, evolution and training worker stay. The whole front end is rebuilt.
 
-## The one learning goal
+## The game
 
-After playing, a non-technical person can say:
+You run a race team. You set up a car, train its brain on a fixed budget, then send it to race on secret tracks. Nobody touches a weight or sees any maths. You win by making good engineering choices.
 
-> **"A neuron is a weighted vote on what the sensors see, and the car's driving is those votes added up."**
+**Loop:** Garage → Practice (training) → Race → Results and ghost replay → back to the Garage.
 
-Every slide, mission and button either helps someone say this sentence or gets cut. Evolution stays only as the short payoff at the end.
+## Look
 
-## What changes
+A racing game HUD: dark, bold and fast. Big lap timers, sector splits, telemetry bars and a timing tower. The car and track art stays top-down and 2D. Tracks are about 2400×1500, several screens big, with laps of roughly 5 km. The camera stays north-up and scrolls to follow the car, a little ahead of it, and a minimap shows the whole track. While training, it follows the lead car.
 
-1. **Driving becomes a warm-up.** It's optional and lasts about 30 seconds. After 3 crashes the car offers to take over, and nobody gets stuck there.
-2. **Lessons shrink from 22 slides to 6–8.** Each one has one idea and one thing to do. A slide that can't be made clear in 20 minutes gets deleted.
-3. **Honesty pass.** The app says plainly that a trained brain fails on some new tracks.
+## The garage (the build)
 
-## Frozen until the goal is met
+1. **Sensor package.** The number, angle and range of the rays. More vision means a bigger brain, which needs more of the budget to train.
+2. **Car setup.** Top speed against grip and acceleration. A fast car is harder to keep on the road.
+3. **Driving style.** Reward sliders for raw pace, staying alive and smooth lines. Training optimises whatever you choose.
+4. **Practice tracks.** Pick which tracks to train on, each tagged with what it has (hairpins, blocks, narrow sections). Choose them to get ready for unknown race tracks.
 
-These are not built, started or prototyped before the stop date:
 
-- Overfitting lesson (B6)
-- Hidden layers and XOR lab (B7)
-- Reward design (B8)
-- Crash detective (B9)
-- Pick-a-parent and Downhill (B5)
-- Shareable brains, leaderboard, 3D, new tracks or obstacles
+## Training
 
-## The test
+- **Fixed budget.** Everyone gets the same number of "garage hours", measured in car-laps simulated rather than seconds, so a faster laptop gives no advantage. More practice tracks use the budget faster, and a bigger brain (from more rays) has more weights to find, so it needs more generations to learn.
+- You can watch the generations, or skip to the end.
 
-- **Who:** at least 5 new people who know nothing about neural networks, mostly on phones, and none of them earlier testers.
-- **How:** watch live, or on a video call with screen sharing. Ask them to think aloud, and note where they stop or frown. Quiz scores come second.
-- **Questions:** a different set before and after, so seeing the same quiz twice can't raise the score.
-- **The key question afterwards:** "In your own words, what does a neuron do?" It counts as a pass if their answer includes weighing or combining what it senses.
+## Racing
 
-## Pass and stop
+- **Weekly Grand Prix.** A new set of secret tracks each week, with one leaderboard per race and championship points across a season.
+- **Always-on leaderboard.** A permanent hidden-track ranking you can enter at any time.
+- **Score:** tracks finished first, then total time.
+- **Ghost replays.** Watch your car against the leader's on the same track, with the time gap shown at each sector.
+- **Trust:** the simulation is deterministic. A server re-runs each submitted car on secret tracks, and the tracks never reach the browser.
 
-- **Pass:** at least 4 of 5 finish, and at least 3 of 5 explain a neuron correctly. Then ship: a README with the real numbers, a 90-second GIF, and a note on what didn't work.
-- **Not yet:** one more round of cutting and retesting, and that's all.
-- **Stop date: 17 Nov 2026.** If it hasn't passed by then, stop building and write an honest case study of what was tried, what was measured and what was learned.
+## Build order
 
-## Alongside, not instead
+- [x] **R1. Engine changes.** The sensor setup, car setup and reward weights become parameters, with a variable brain size. Car files store their full setup. The budget is counted in simulated driving steps. Code: `setup.ts`, `sim.ts`, `evolve.ts`, `trainWorker.ts`, `carFile.ts`, and `scripts/check.ts` for a headless check.
+- [ ] **R2. New front end: Garage and Practice.** HUD look, garage screens and training on a budget.
+- [ ] **R3. Local race day.** Sample race tracks, a results screen, a timing tower and ghost replays against your own best car.
+- [ ] **R4. Server.** Car upload, secret-track re-scoring, the always-on leaderboard and leader ghosts.
+- [ ] **R5. Weekly Grand Prix.** Rotating track sets, a leaderboard for each race, season points.
 
-- **Know the code.** By the stop date, be able to explain the genetic algorithm, tanh and the 47 weights without help.
-- **Data-science work, if time allows:** fix how trained brains do on unseen tracks (now 5–8 of 10) by using more varied tracks and choosing the best brain on held-out tracks. Run this plugged in, with rests between runs.
+## Alongside
+
+- Balance runs (does each setup choice really matter?) go one batch at a time, at low priority, with rests between runs.

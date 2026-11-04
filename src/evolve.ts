@@ -1,39 +1,35 @@
-import { runBrain, DEFAULT_TRACK, USE_GRIP, type Brain, type Track } from './sim'
+import type { RunResult, Track } from './sim'
 
 // A genome is just the brain's weights as one flat list of numbers.
 export type Genome = number[]
-// Anything that returns a number from 0 up to (but not including) 1, e.g. your seeded generator.
+// Anything that returns a number from 0 up to (but not including) 1, e.g. the seeded generator.
 export type Rng = () => number
+// Drive one genome round one track and say how it went
+export type Drive = (genome: Genome, track: Track) => RunResult
 
 export type Individual = {
   genome: Genome
-  fitness: number // the score evolution uses (checkpoints plus closeness to the next one)
-  checkpoints: number
-  steps: number
-  crashed: boolean
+  fitness: number // the score evolution uses (the mean over the tracks)
+  checkpoints: number // mean over the tracks
+  steps: number // total simulated steps over all the tracks (this is what the budget counts)
+  crashed: boolean // crashed on at least one track
 }
 
 export type Settings = {
-  genomeLength: number // 47 for the 6-5-2 brain
+  genomeLength: number
   populationSize: number
   eliteCount: number // best cars copied unchanged into the next generation
   tournamentSize: number // how many random cars compete to become a parent
   mutationRate: number // chance that any single weight gets nudged
   mutationSize: number // how big the nudge is
-  goodEnough: number // a best score at or above this counts as "learned"
-  patience: number // stop early after this many generations with no new best, once learned
-  grip?: boolean // true = cars drive with grip physics
 }
 
-export const DEFAULT_SETTINGS: Settings = {
-  genomeLength: 47,
+export const DEFAULT_SETTINGS: Omit<Settings, 'genomeLength'> = {
   populationSize: 100,
   eliteCount: 10,
   tournamentSize: 3,
   mutationRate: 0.2,
   mutationSize: 0.5,
-  goodEnough: 45,
-  patience: 8,
 }
 
 // A bell-curve random number (mostly small, sometimes bigger), built from two uniform ones
@@ -47,28 +43,17 @@ export function randomGenome(length: number, rng: Rng): Genome {
   return Array.from({ length }, () => rng() * 2 - 1)
 }
 
-export function initialPopulation(settings: Settings, rng: Rng): Genome[] {
-  return Array.from({ length: settings.populationSize }, () => randomGenome(settings.genomeLength, rng))
-}
-
-// Drive every genome around the track(s) and return them best first.
-// With several tracks, a genome's score is its average over all of them, so a brain
-// that only works on one track cannot win.
-export function scorePopulation(
-  genomes: Genome[],
-  makeBrain: (genome: Genome) => Brain,
-  tracks: Track[] = [DEFAULT_TRACK],
-  grip = USE_GRIP,
-): Individual[] {
+// Drive every genome round the tracks and return them best first.
+// A genome's score is its average over all the tracks, so one that only works on one cannot win.
+export function scorePopulation(genomes: Genome[], drive: Drive, tracks: Track[]): Individual[] {
   const scored = genomes.map((genome) => {
-    const brain = makeBrain(genome)
-    const runs = tracks.map((track) => runBrain(brain, track, undefined, grip))
-    const mean = (f: (r: (typeof runs)[number]) => number) => runs.reduce((sum, r) => sum + f(r), 0) / runs.length
+    const runs = tracks.map((track) => drive(genome, track))
+    const mean = (f: (r: RunResult) => number) => runs.reduce((sum, r) => sum + f(r), 0) / runs.length
     return {
       genome,
       fitness: mean((r) => r.fitness),
-      checkpoints: Math.round(mean((r) => r.checkpoints)),
-      steps: Math.round(mean((r) => r.steps)),
+      checkpoints: mean((r) => r.checkpoints),
+      steps: runs.reduce((sum, r) => sum + r.steps, 0),
       crashed: runs.some((r) => r.crashed),
     }
   })
@@ -88,22 +73,19 @@ function tournament(sorted: Individual[], size: number, rng: Rng): Individual {
 // Build the next generation from a scored one (best first).
 export function breed(sorted: Individual[], settings: Settings, rng: Rng): Genome[] {
   const next: Genome[] = []
-
-  // 1. The best cars survive unchanged, so we never lose our progress.
+  // 1. The best cars survive unchanged, so progress is never lost.
   for (let i = 0; i < settings.eliteCount; i++) next.push([...sorted[i].genome])
-
   // 2. Everyone else is a child of two tournament winners.
   while (next.length < settings.populationSize) {
     const a = tournament(sorted, settings.tournamentSize, rng)
     const b = tournament(sorted, settings.tournamentSize, rng)
-    const child = a.genome.map((gene, i) => {
-      // crossover: each weight comes from one parent or the other
-      let g = rng() < 0.5 ? gene : b.genome[i]
-      // mutation: now and then, nudge the weight a little
-      if (rng() < settings.mutationRate) g += gauss(rng) * settings.mutationSize
-      return g
-    })
-    next.push(child)
+    next.push(
+      a.genome.map((gene, i) => {
+        let g = rng() < 0.5 ? gene : b.genome[i] // crossover: each weight from one parent or the other
+        if (rng() < settings.mutationRate) g += gauss(rng) * settings.mutationSize // mutation
+        return g
+      }),
+    )
   }
   return next
 }
@@ -112,61 +94,28 @@ export type GenerationReport = {
   generation: number
   best: Individual
   meanFitness: number
+  steps: number // simulated steps this generation used
   population: Genome[] // every car of this generation, best first
 }
 
 // An evolution you can advance one generation at a time (so a viewer can watch each one).
-// tracks can be a function that hands each generation its own tracks: then scores from
-// different generations cannot be compared, so it never stops early.
-export function createEvolution(
-  makeBrain: (genome: Genome) => Brain,
-  rng: Rng,
-  generations: number,
-  settings: Settings = DEFAULT_SETTINGS,
-  tracks: Track[] | ((generation: number) => Track[]) = [DEFAULT_TRACK],
-) {
-  const changing = typeof tracks === 'function'
-  let genomes = initialPopulation(settings, rng)
+// tracks hands each generation its own tracks. The caller decides when to stop.
+export function createEvolution(rng: Rng, settings: Settings, drive: Drive, tracks: (generation: number) => Track[]) {
+  let genomes = Array.from({ length: settings.populationSize }, () => randomGenome(settings.genomeLength, rng))
   let gen = 0
-  let topScore = -Infinity
-  let lastImproved = 0
   return {
-    // Score the current generation, report it, and (unless finished) breed the next one.
-    step(): { report: GenerationReport; finished: boolean } {
-      const scored = scorePopulation(genomes, makeBrain, changing ? tracks(gen) : tracks, !!settings.grip)
-      const meanFitness = scored.reduce((sum, x) => sum + x.fitness, 0) / scored.length
-      const best = scored[0]
-      const report: GenerationReport = { generation: gen, best, meanFitness, population: scored.map((x) => x.genome) }
-      if (best.fitness > topScore + 1e-9) {
-        topScore = best.fitness
-        lastImproved = gen
+    step(): GenerationReport {
+      const scored = scorePopulation(genomes, drive, tracks(gen))
+      const report: GenerationReport = {
+        generation: gen,
+        best: scored[0],
+        meanFitness: scored.reduce((sum, x) => sum + x.fitness, 0) / scored.length,
+        steps: scored.reduce((sum, x) => sum + x.steps, 0),
+        population: scored.map((x) => x.genome),
       }
-      // Learned and no longer improving: more generations would only waste time
-      const finished =
-        gen + 1 >= generations || (!changing && topScore >= settings.goodEnough && gen - lastImproved >= settings.patience)
-      if (!finished) genomes = breed(scored, settings, rng)
+      genomes = breed(scored, settings, rng)
       gen++
-      return { report, finished }
+      return report
     },
   }
-}
-
-// Run the whole thing. onGeneration lets you print progress or draw it.
-export function evolve(
-  makeBrain: (genome: Genome) => Brain,
-  rng: Rng,
-  generations: number,
-  settings: Settings = DEFAULT_SETTINGS,
-  onGeneration?: (report: GenerationReport) => void,
-  tracks: Track[] = [DEFAULT_TRACK],
-): Individual {
-  const evolution = createEvolution(makeBrain, rng, generations, settings, tracks)
-  let best: Individual | undefined
-  for (;;) {
-    const { report, finished } = evolution.step()
-    best = report.best
-    onGeneration?.(report)
-    if (finished) break
-  }
-  return best
 }
