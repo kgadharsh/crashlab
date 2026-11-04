@@ -334,7 +334,7 @@ let worker: Worker | null = null
 let run: Run | null = null
 let lastRun: { spent: number; generations: number } | null = null // what the finished run used, for the budget panel
 
-type Swarm = { gen: number; trackId: number; track: Track; cars: Car[]; brains: Brain[]; done: boolean[]; hold: number; trails: { x: number; y: number }[][]; lead: number; switched: boolean; crashHold: number; speed: number; owed: number; frames: number }
+type Swarm = { gen: number; trackId: number; track: Track; cars: Car[]; brains: Brain[]; done: boolean[]; hold: number; trails: { x: number; y: number }[][]; lead: number; speed: number; owed: number; frames: number }
 let swarm: Swarm | null = null
 let waiting: { gen: number; genomes: number[][]; bestSteps: number } | null = null
 const VIEW_STEPS = 900 // each generation is shown for 15 seconds of driving
@@ -439,7 +439,7 @@ function makeSwarm(gen: number, genomes: number[][], build: Build, bestSteps: nu
   const track = practiceTrack(trackId)
   const brains = genomes.map((g) => genomeToBrain(g, shape))
   const cars = brains.map(() => createCar(track, spec))
-  return { gen, trackId, track, cars, brains, done: brains.map(() => false), hold: 0, trails: cars.map((c) => [{ x: c.x, y: c.y }]), lead: 0, switched: false, crashHold: 0, speed: paceFor(bestSteps), owed: 0, frames: 0 }
+  return { gen, trackId, track, cars, brains, done: brains.map(() => false), hold: 0, trails: cars.map((c) => [{ x: c.x, y: c.y }]), lead: 0, speed: paceFor(bestSteps), owed: 0, frames: 0 }
 }
 
 function stepSwarm() {
@@ -468,9 +468,10 @@ function stepSwarm() {
   // the fewer cars are left, the faster time runs (so the work per frame stays about the same)
   const sw = swarm
   const alive = sw.done.filter((d) => !d).length
-  // if cars outlast the best car's practice runs, speed up rather than drag past the planned time
+  // once the followed car has stopped, or the generation runs past its planned time, the rest
+  // plays at top speed, so the next generation (and its new car to follow) comes quickly
   sw.frames++
-  const late = sw.frames > SHOW_FRAMES * 1.5 || (sw.done[sw.lead] && alive < 5)
+  const late = sw.frames > SHOW_FRAMES * 1.5 || sw.done[sw.lead] || alive === 0
   sw.owed += late ? MAX_SPEED : sw.speed
   const steps = Math.floor(sw.owed)
   sw.owed -= steps
@@ -484,24 +485,10 @@ function stepSwarm() {
       if (c.dead || c.steps >= VIEW_STEPS || c.sinceProgress >= STALL_STEPS) sw.done[i] = true
     })
   }
-  pickLead(sw)
 }
-
-// The camera follows the generation's best car (cars come sorted by their score on all the
-// practice tracks). If it stops, the camera stays on the spot for half a second, then switches
-// once to the car furthest round the track, and stays with that one. So it never shows more than two.
-const CRASH_HOLD = 30 // frames
-function pickLead(sw: Swarm) {
-  if (sw.switched || !sw.done[sw.lead]) return
-  if (sw.crashHold++ < CRASH_HOLD) return
-  let best = -1
-  sw.cars.forEach((c, i) => {
-    if (!sw.done[i] && (best < 0 || c.passed > sw.cars[best].passed)) best = i
-  })
-  if (best < 0) return
-  sw.lead = best
-  sw.switched = true
-}
+// The camera follows one car per generation, the best one (cars come sorted by their score on
+// all the practice tracks), and never switches: if that car crashes, the view stays on the crash.
+// So the view only ever moves to a new car when a new generation starts at the start line.
 
 // ---------- TEST DRIVE ----------
 type TestDrive = { track: Track; car: Car; lastLap: number | null; bestLap: number | null; crashFrames: number; crashAt: { x: number; y: number } | null }
@@ -624,7 +611,9 @@ function renderPractice() {
 }
 
 // ---------- THE LEARNING GRAPH ----------
+let lastHistory: History = [] // the last graph drawn, so it can be redrawn
 function drawGraph(history: History) {
+  lastHistory = history
   const Wg = gcanvas.width
   const Hg = gcanvas.height
   const left = 48
@@ -637,11 +626,13 @@ function drawGraph(history: History) {
   gctx.fillStyle = COL.muted
   gctx.textAlign = 'left'
   gctx.textBaseline = 'alphabetic'
-  gctx.fillText('LAPS DRIVEN IN 40 S, PER GENERATION', left, 18)
-  gctx.fillStyle = COL.accent
-  gctx.fillText('— BEST CAR', left + 230, 18)
-  gctx.fillStyle = COL.tele
-  gctx.fillText('— AVERAGE CAR', left + 308, 18)
+  // the legend sits after the title, measured, so a wider fallback font never runs into it
+  let x0 = left
+  for (const [text, colour] of [['LAPS DRIVEN IN 40 S, PER GENERATION', COL.muted], ['— BEST CAR', COL.accent], ['— AVERAGE CAR', COL.tele]]) {
+    gctx.fillStyle = colour
+    gctx.fillText(text, x0, 18)
+    x0 += gctx.measureText(text).width + 16
+  }
   const maxY = Math.max(1, ...history.map((h) => h.best)) * 1.1
   const minY = 0
   const n = Math.max(history.length, 10)
@@ -717,7 +708,9 @@ function draw() {
   if (tab === 'race' && raceView) return raceView.draw()
   clear(ctx)
   const target = focusCar()
-  if (target) follow(cam, target)
+  // a stopped car needs no look-ahead: the view settles on where it stopped
+  const stopped = !!swarm && swarm.done[swarm.lead]
+  if (target) follow(cam, stopped ? { ...target, speed: 0 } : target)
   else fit(cam)
   if (swarm && run) {
     const sw = swarm
@@ -743,7 +736,7 @@ function draw() {
     hudText('WATCHING ' + TRACK_NAMES[sw.trackId].toUpperCase(), 16, 64, 16, COL.muted)
     hudText('SCORED ON ALL ' + run.build.practice.length + ' PRACTICE TRACKS', 16, 82, 13, COL.muted)
     hudText(alive + ' / ' + sw.cars.length + ' DRIVING', W - 16, H - 16, 18, COL.tele, 'right')
-    hudText(sw.switched ? 'BEST CAR STOPPED · FOLLOWING THE LEADER' : "FOLLOWING THIS GENERATION'S BEST CAR", W - 16, H - 38, 13, COL.accent, 'right')
+    hudText(sw.done[sw.lead] ? 'BEST CAR STOPPED · FINISHING THE GENERATION' : "FOLLOWING THIS GENERATION'S BEST CAR", W - 16, H - 38, 13, COL.accent, 'right')
     setStrip([
       ['Generation', String(sw.gen + 1)],
       ['Budget used', Math.round((100 * run.spent) / TRAINING_BUDGET) + '<small>%</small>'],
@@ -821,5 +814,7 @@ raceView = createRaceView({ ctx, cam, getCar: () => car, isStale: carIsStale, hu
 renderGarage()
 renderChip()
 drawGraph([])
+// the graph is only redrawn when it changes, so redraw it once the web fonts have arrived
+void document.fonts?.ready.then(() => drawGraph(run ? run.history.slice(0, run.shown) : lastHistory))
 setTab('garage')
 requestAnimationFrame(loop)
