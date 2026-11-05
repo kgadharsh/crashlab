@@ -75,9 +75,11 @@ export function raceCar(car: CarFile): RaceResult {
 export const better = (a: { finished: number; totalTime: number }, b: { finished: number; totalTime: number }) =>
   a.finished !== b.finished ? a.finished > b.finished : a.totalTime < b.totalTime
 
-// Medals: finishing gets you on the podium, speed gets you gold. Set 4 Nov 2026 from 80 trained
-// cars: 47 finished all 8, in 183 to 312 s (median 210), so gold is about the fastest quarter.
-export const GOLD_TIME = 200
+// Medals: finishing gets you on the podium, speed gets you gold. Set 5 Nov 2026 from 16 trained
+// cars (see docs/experiments.md): 9 finished all 8, in 143 to 156 s, and 149 s gives gold to about
+// the fastest quarter of all cars. Times barely differ between cars that finish, so revisit this
+// once players have raced. (It was 200 s until then, which made gold the same as finishing all 8.)
+export const GOLD_TIME = 149
 export const BRONZE_FINISHES = RACE_COUNT - 2
 export type Medal = 'gold' | 'silver' | 'bronze' | null
 export function medalFor(r: { finished: number; totalTime: number }): Medal {

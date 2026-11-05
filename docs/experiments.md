@@ -60,7 +60,7 @@ Training now picks the car this way (`src/training.ts`). The same 4 seeds chose 
 
 ## 5 Nov 2026: does a smaller budget cost Grand Prix medals?
 
-`scripts/budgetMedals.ts`, default build, the same seeds (11, 12, 13). At 40%, 50%, 60%, 80% and 100% of the budget, the car the app would pick was raced on the 8 Grand Prix tracks with the real race-day scoring from `src/race.ts` (tracks finished, then total time; gold is all 8 in under 200 s).
+`scripts/budgetMedals.ts`, default build, the same seeds (11, 12, 13). At 40%, 50%, 60%, 80% and 100% of the budget, the car the app would pick was raced on the 8 Grand Prix tracks with the real race-day scoring from `src/race.ts` (tracks finished, then total time; gold was all 8 in under 200 s at the time, see the calibration below).
 
 | Budget used | Seed 11 | Seed 12 | Seed 13 | Gold |
 |---|---|---|---|---|
@@ -92,5 +92,6 @@ Training now picks the car this way (`src/training.ts`). The same 4 seeds chose 
 - **Finishing times barely differ between cars.** They drive near top speed, so total time follows track length. The cars built for speed (the fast car) crashed instead: none of its 3 finished all 8.
 - **Share of all cars that would win gold:** 0% at 140 s or less, 38% at 150 s, 56% at 160 s and above.
 - **A 150 s line** would give 38% gold, 19% silver, 38% bronze and 6% no medal. But with a 13 s spread it would split cars that are within noise of each other (the default runs at 147, 148 and 148 s would win gold, the one at 151 s silver).
-- The 4 Nov line (200 s, from times of 183 to 312 s) predates the mirrored-track pick and is out of date. `GOLD_TIME` is not changed yet.
+- The 4 Nov line (200 s, from times of 183 to 312 s) predates the mirrored-track pick and was out of date.
+- **Decision (5 Nov 2026): `GOLD_TIME` is now 149 s**, set before any playtest. On these 16 cars it gives 4 gold, 5 silver, 6 bronze and 1 with no medal. The line at 150 s would give 6 gold, and at 148 s only 2. The default build's four times were 146.9, 148.2, 148.3 and 150.6 s, so three of them win gold and one gets silver. Revisit after the playtest, once real players have raced.
 - More practice tracks and wider vision are not safe upgrades: six tracks finished all 8 on 1 of 3 seeds and wide vision on 2 of 3, against 4 of 4 for the default. Three seeds is a small sample.

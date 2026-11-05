@@ -38,7 +38,7 @@ A racing game HUD: dark, bold and fast. Big lap timers, sector splits, telemetry
 
 - [x] **R1. Engine changes.** The sensor setup, car setup and reward weights become parameters, with a variable brain size. Car files store their full setup. The budget is counted in simulated driving steps. Code: `setup.ts`, `sim.ts`, `evolve.ts`, `trainWorker.ts`, `carFile.ts`, and `scripts/check.ts` for a headless check.
 - [x] **R2. New front end: Garage and Practice.** HUD look, garage screens and training on a budget.
-- [x] **R3. Local race day.** Grand Prix 1: 8 secret tracks, one in the style of each practice track plus a wild one (`src/race.ts`, `src/raceView.ts`). A replay with a timing tower, then a medal, a personal best and one piece of advice based on why the car failed. Gold: all 8 in under 200 s. Silver: all 8. Bronze: 6 or more. Ghost replays wait for R4.
+- [x] **R3. Local race day.** Grand Prix 1: 8 secret tracks, one in the style of each practice track plus a wild one (`src/race.ts`, `src/raceView.ts`). A replay with a timing tower, then a medal, a personal best and one piece of advice based on why the car failed. Gold: all 8 in under 149 s (set on 5 Nov 2026, see `docs/experiments.md`). Silver: all 8. Bronze: 6 or more. Ghost replays wait for R4.
 - [ ] **R4. Server.** Car upload, secret-track re-scoring, the always-on leaderboard and leader ghosts.
 - [ ] **R5. Weekly Grand Prix.** Rotating track sets, a leaderboard for each race, season points.
 
