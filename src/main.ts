@@ -81,6 +81,11 @@ function trackLine(id: number): string {
   return [km(f.length) + ' lap', plural(f.hairpins, 'tight bend'), km(f.longestStraight) + ' straight', plural(f.blocks, 'block')].join(' · ').toUpperCase()
 }
 
+// The training budget is counted in simulated driving steps, 60 per second. Players see it as hours of driving.
+function hours(steps: number) {
+  return Math.round(steps / 60 / 3600)
+}
+
 // ---------- PAGE ----------
 document.querySelector('#app')!.innerHTML = `
 <header class="top">
@@ -115,7 +120,7 @@ document.querySelector('#app')!.innerHTML = `
         <h2><span class="n">01</span>Sensors<span class="aside" id="weights"></span></h2>
         <label class="row"><span>Rays</span><input type="range" id="count" min="${LIMITS.count[0]}" max="${LIMITS.count[1]}" step="1" /><output id="countOut"></output></label>
         <label class="row"><span>Spread</span><input type="range" id="spread" min="${LIMITS.spread[0]}" max="${LIMITS.spread[1]}" step="5" /><output id="spreadOut"></output></label>
-        <p class="tip">Rays are the car's eyes: each one measures the distance to the road edge or a block. More rays show more, but every ray adds connections the brain has to learn, so training takes longer. Spread is how wide they look: a wide spread sees bends sooner, a narrow one sees straight ahead in more detail.</p>
+        <p class="tip">Rays are the car's eyes: each one measures the distance to the road edge or a block. More rays show more, but every ray adds connections the brain has to learn, so it needs more generations to learn them. Spread is how wide they look: a wide spread sees bends sooner, a narrow one sees straight ahead in more detail.</p>
       </div>
       <div class="panel">
         <h2><span class="n">02</span>Car setup</h2>
@@ -138,7 +143,7 @@ document.querySelector('#app')!.innerHTML = `
         <label class="row" style="grid-template-columns:auto 1fr"><span>Road</span><select id="weather" aria-label="Road the practice tracks are driven on"><option value="dry">Dry</option><option value="wet">Wet</option></select></label>
         <p class="tip" style="margin-top:2px">Grand Prix 2 is raced on a wet road. A car practised only on dry roads loses most of its grip there, so practise on wet roads to prepare for it.</p>
         <div class="tracks" id="tracks"></div>
-        <p class="tip">Race day uses tracks you have never seen. More practice tracks prepare the car better, but each generation costs more of the budget.</p>
+        <p class="tip">Race day uses tracks you have never seen. More practice tracks prepare the car better, but each generation uses more of the run's practice budget, so you get fewer generations.</p>
       </div>
       <button class="btn primary wide" id="toPractice">Go to practice →</button>
     </div>
@@ -147,6 +152,7 @@ document.querySelector('#app')!.innerHTML = `
         <h2>Training<span class="aside" id="trainState">ready</span></h2>
         <div class="budget"><div class="bar"><i id="budgetBar" style="width:0%"></i></div>
           <div class="legend"><span id="budgetUsed"></span><span id="budgetGen"></span></div></div>
+        <p class="tip">Practice budget: every run gets the same ${hours(TRAINING_BUDGET)} hours of simulated driving, shared by all ${POPULATION} cars and your practice tracks. It is counted in driving, not seconds, so a faster device gets no advantage. More practice tracks use it up faster, so you get fewer generations. Every new run starts with a full budget; Keep training uses ${Math.round(KEEP_TRAINING_SHARE * 100)}% of it.</p>
         <div class="actions">
           <button class="btn primary" id="train">Start training</button>
           <button class="btn" id="keep">Keep training</button>
@@ -749,7 +755,7 @@ function renderPractice() {
   const spent = run?.spent ?? lastRun?.spent ?? 0
   const total = run?.budget ?? lastRun?.budget ?? TRAINING_BUDGET
   $('budgetBar').style.width = (100 * spent) / total + '%'
-  $('budgetUsed').textContent = (spent / 1e6).toFixed(1) + ' of ' + (total / 1e6).toFixed(0) + 'M steps'
+  $('budgetUsed').textContent = hours(spent) + ' of ' + hours(total) + ' hours'
   $('budgetGen').textContent = run
     ? 'generation ' + run.history.length
     : lastRun
