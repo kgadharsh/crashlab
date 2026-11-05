@@ -17,7 +17,7 @@ A racing game HUD: dark, bold and fast. Big lap timers, sector splits, telemetry
 1. **Sensor package.** The number of rays and how wide they spread. More rays mean a bigger brain, which needs more of the budget to train. Ray range is fixed: a longer ray cost nothing, so it was not a real choice.
 2. **Car setup.** Top speed against grip and acceleration. A fast car is harder to keep on the road.
 3. **Driving style.** Reward sliders for raw pace, staying alive and smooth lines. Training optimises whatever you choose.
-4. **Practice tracks.** Pick 1 to 6 of 8 tracks, each with its own character (tight bends, long straights, wide sweepers, lots of blocks), tagged with features measured from the track. Choose them to get ready for unknown race tracks.
+4. **Practice tracks.** Pick 1 to 6 of 12 tracks, each with its own character (tight bends, long straights, wide sweepers, lots of blocks), tagged with features measured from the track. The last four have the feel of famous circuits (a very long straight, narrow twisty streets, flowing esses, a big fast loop); the track generator draws loops, so they are not copies. Choose them to get ready for unknown race tracks. The Grand Prix is built from the first eight only (`CORE_PRACTICE`), so adding practice tracks never changes its tracks or medals.
 5. **Road.** Dry or wet. Wet practice tracks lower the car's grip speed to 75%, so the tyres lose turning power sooner. Grand Prix 2 is wet, and a car practised only on dry roads finishes few of its tracks (see `docs/experiments.md`).
 
 
@@ -49,3 +49,13 @@ A racing game HUD: dark, bold and fast. Big lap timers, sector splits, telemetry
 ## Alongside
 
 - Balance runs (does each setup choice really matter?) go one batch at a time, at low priority, with rests between runs.
+
+## Added after the first playtest (6 Nov 2026)
+
+Each of these came from something a tester said in round 1.
+
+- **Track board** (Practice). After every training, and when a car is loaded, the car drives one lap of each of the 12 practice tracks, with a medal for each: gold at or under the par time, silver within 8% of it, bronze for finishing (`src/board.ts`). Tapping a track starts a test drive on it. This answers "I want to move to the next map after perfecting one" and "a car that wins on all the maps", and it says which map to try next. Par times come from one trained default car trimmed by 3% (see `docs/experiments.md`); a wet road adds 12%.
+- **Stars and car designs.** A track medal is worth 1, 2 or 3 stars (bronze, silver, gold) on each road, and a Grand Prix medal 3, 6 or 10. Stars unlock four extra car designs (`src/looks.ts`, drawn in `src/draw.ts`) at 12, 30, 48 and 70 stars out of 92. Designs only change how the car looks. This is the "rewards" and "more car designs" ask, and the first design unlocks with a first trained car.
+- **What the car sees, thinks and does.** During a test drive a box in the corner draws the rays as bars, the five hidden neurons as dots and the steering and gas outputs, so the link from sensors to decisions can be watched. The training replay also says each generation is bred from the best of the one before.
+- **Fewest generations.** A car remembers how many generations of training it has had in all. The race result shows it, and the best (lowest) count for each Grand Prix medal is kept, so a build that learns fast has something to chase.
+- **Numbered tabs.** Garage, Practice and Race are numbered 1, 2, 3 and larger, so the loop reads as steps.

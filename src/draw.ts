@@ -231,36 +231,134 @@ export function drawMinimap(g: CanvasRenderingContext2D, track: Track, cam: Came
 }
 
 // ---------- CARS ----------
-// A top-down race car: tyres, a tapered body, wings front and back, a dark cockpit
-export function drawCar(g: CanvasRenderingContext2D, c: { x: number; y: number; angle: number }, length: number, width: number, body: string) {
+// A top-down race car: tyres, a body, wings front and back, a dark cockpit. look is the player's chosen design
+// (see looks.ts): the designs differ only in shape, never in how the car drives.
+export function drawCar(g: CanvasRenderingContext2D, c: { x: number; y: number; angle: number }, length: number, width: number, body: string, look = 0) {
   const L = length / 2
   const Wd = width / 2
   const tyre = Math.max(2, width * 0.2)
   g.save()
   g.translate(c.x, c.y)
   g.rotate(c.angle)
-  g.fillStyle = '#020304'
-  for (const x of [L * 0.3, -L * 0.8]) {
-    g.fillRect(x, -Wd, L * 0.42, tyre)
-    g.fillRect(x, Wd - tyre, L * 0.42, tyre)
+  const poly = (pts: number[][]) => {
+    g.beginPath()
+    pts.forEach(([x, y], i) => (i ? g.lineTo(x * L, y * Wd) : g.moveTo(x * L, y * Wd)))
+    g.closePath()
+    g.fill()
   }
-  g.fillStyle = body
-  g.fillRect(L * 0.72, -Wd * 0.8, L * 0.16, Wd * 1.6)
-  g.fillRect(-L, -Wd * 0.85, L * 0.2, Wd * 1.7)
-  g.beginPath()
-  g.moveTo(L, 0)
-  g.lineTo(L * 0.2, -Wd * 0.34)
-  g.lineTo(-L * 0.1, -Wd * 0.72)
-  g.lineTo(-L * 0.85, -Wd * 0.5)
-  g.lineTo(-L * 0.85, Wd * 0.5)
-  g.lineTo(-L * 0.1, Wd * 0.72)
-  g.lineTo(L * 0.2, Wd * 0.34)
-  g.closePath()
-  g.fill()
-  g.fillStyle = COL.ground
-  g.beginPath()
-  g.ellipse(-L * 0.12, 0, L * 0.24, Wd * 0.3, 0, 0, Math.PI * 2)
-  g.fill()
+  const wheels = (front: number, back: number, spread: number) => {
+    g.fillStyle = '#020304'
+    for (const x of [L * front, L * back]) {
+      g.fillRect(x, -Wd * spread, L * 0.42, tyre)
+      g.fillRect(x, Wd * spread - tyre, L * 0.42, tyre)
+    }
+  }
+  const cockpit = (x: number, rx: number, ry: number) => {
+    g.fillStyle = COL.ground
+    g.beginPath()
+    g.ellipse(L * x, 0, L * rx, Wd * ry, 0, 0, Math.PI * 2)
+    g.fill()
+  }
+  if (look === 1) {
+    // Arrow: a long pointed nose and a wide rear wing
+    wheels(0.3, -0.8, 1)
+    g.fillStyle = body
+    g.fillRect(L * 0.62, -Wd * 0.9, L * 0.14, Wd * 1.8)
+    g.fillRect(-L, -Wd * 1.05, L * 0.2, Wd * 2.1)
+    poly([[1.1, 0], [0.1, -0.3], [-0.2, -0.55], [-0.85, -0.45], [-0.85, 0.45], [-0.2, 0.55], [0.1, 0.3]])
+    cockpit(-0.12, 0.22, 0.26)
+  } else if (look === 2) {
+    // Wedge: a flat triangle with side pods
+    wheels(0.25, -0.8, 1)
+    g.fillStyle = body
+    g.fillRect(L * 0.78, -Wd * 0.95, L * 0.12, Wd * 1.9)
+    g.fillRect(-L, -Wd * 0.9, L * 0.18, Wd * 1.8)
+    poly([[1, 0], [-0.9, -0.95], [-0.9, 0.95]])
+    g.fillStyle = 'rgba(0,0,0,0.28)'
+    g.fillRect(-L * 0.45, -Wd * 0.8, L * 0.5, Wd * 0.2)
+    g.fillRect(-L * 0.45, Wd * 0.6, L * 0.5, Wd * 0.2)
+    cockpit(-0.05, 0.22, 0.28)
+  } else if (look === 3) {
+    // Needle: very long and thin, with wide wings and wheels pushed out
+    wheels(0.35, -0.85, 1.1)
+    g.fillStyle = body
+    g.fillRect(L * 0.82, -Wd * 1.1, L * 0.14, Wd * 2.2)
+    g.fillRect(-L * 1.05, -Wd * 1, L * 0.18, Wd * 2)
+    poly([[1.05, 0], [0.4, -0.2], [-0.95, -0.28], [-0.95, 0.28], [0.4, 0.2]])
+    cockpit(-0.05, 0.2, 0.2)
+  } else if (look === 4) {
+    // Hyper: wide and aggressive, with twin tail fins and a pale stripe
+    wheels(0.25, -0.85, 1.05)
+    g.fillStyle = body
+    g.fillRect(L * 0.7, -Wd * 1, L * 0.16, Wd * 2)
+    g.fillRect(-L * 1.02, -Wd * 1.1, L * 0.22, Wd * 0.5)
+    g.fillRect(-L * 1.02, Wd * 0.6, L * 0.22, Wd * 0.5)
+    poly([[1, 0], [0.55, -0.45], [0.05, -0.85], [-0.8, -0.8], [-0.95, -0.35], [-0.95, 0.35], [-0.8, 0.8], [0.05, 0.85], [0.55, 0.45]])
+    g.fillStyle = 'rgba(255,255,255,0.8)'
+    g.fillRect(-L * 0.9, -Wd * 0.07, L * 1.8, Wd * 0.14)
+    cockpit(-0.05, 0.24, 0.3)
+  } else {
+    // Classic
+    wheels(0.3, -0.8, 1)
+    g.fillStyle = body
+    g.fillRect(L * 0.72, -Wd * 0.8, L * 0.16, Wd * 1.6)
+    g.fillRect(-L, -Wd * 0.85, L * 0.2, Wd * 1.7)
+    poly([[1, 0], [0.2, -0.34], [-0.1, -0.72], [-0.85, -0.5], [-0.85, 0.5], [-0.1, 0.72], [0.2, 0.34]])
+    cockpit(-0.12, 0.24, 0.3)
+  }
+  g.restore()
+}
+
+// What a car sees, thinks and does, drawn small: the rays as bars (short means something is close), the hidden
+// neurons as dots (amber is positive, cyan negative, brighter is stronger) and the two outputs as bars.
+export type Thought = { inputs: number[]; hidden: number[]; outputs: number[] }
+export function drawBrain(g: CanvasRenderingContext2D, t: Thought, x: number, y: number, w: number, h: number) {
+  g.save()
+  g.fillStyle = 'rgba(7,9,12,0.78)'
+  g.fillRect(x, y, w, h)
+  g.strokeStyle = COL.road
+  g.lineWidth = 1
+  g.strokeRect(x + 0.5, y + 0.5, w - 1, h - 1)
+  g.font = '700 11px "Barlow Condensed", sans-serif'
+  g.textBaseline = 'alphabetic'
+  g.fillStyle = COL.muted
+  const colW = (w - 24) / 3
+  const cols = [x + 8, x + 8 + colW + 4, x + 8 + 2 * (colW + 4)]
+  ;['SEES', 'THINKS', 'DOES'].forEach((label, i) => g.fillText(label, cols[i], y + 15))
+  const top = y + 24
+  const bottom = y + h - 8
+  // sees: one bar per ray, then the car's own speed
+  const rays = t.inputs.slice(0, -1)
+  const rowH = Math.min(11, (bottom - top) / (rays.length + 1))
+  rays.forEach((d, i) => {
+    const near = d < 0.35
+    g.fillStyle = near ? COL.bad : COL.tele
+    g.fillRect(cols[0], top + i * rowH, Math.max(2, colW * Math.min(1, d)), rowH - 3)
+  })
+  g.fillStyle = COL.accent
+  g.fillRect(cols[0], top + rays.length * rowH, Math.max(2, colW * Math.min(1, t.inputs[t.inputs.length - 1])), rowH - 3)
+  // thinks: one dot per hidden neuron
+  const step = (bottom - top) / t.hidden.length
+  t.hidden.forEach((a, i) => {
+    const cy = top + step * (i + 0.5)
+    g.fillStyle = a >= 0 ? `rgba(255,179,26,${0.2 + 0.8 * Math.abs(a)})` : `rgba(63,208,255,${0.2 + 0.8 * Math.abs(a)})`
+    g.beginPath()
+    g.arc(cols[1] + colW / 2, cy, Math.min(7, step * 0.38), 0, Math.PI * 2)
+    g.fill()
+  })
+  // does: steering (left or right of the middle) and throttle (from the left)
+  const bar = (label: string, value: number, row: number, centred: boolean) => {
+    const by = top + row * 30
+    g.fillStyle = COL.muted
+    g.fillText(label, cols[2], by + 8)
+    g.fillStyle = COL.road
+    g.fillRect(cols[2], by + 12, colW, 8)
+    g.fillStyle = COL.accent
+    if (centred) g.fillRect(cols[2] + colW / 2 + Math.min(0, value) * (colW / 2), by + 12, Math.abs(value) * (colW / 2), 8)
+    else g.fillRect(cols[2], by + 12, Math.max(0, value) * colW, 8)
+  }
+  bar('STEER', t.outputs[0] ?? 0, 0, true)
+  bar('GAS', t.outputs[1] ?? 0, 1, false)
   g.restore()
 }
 

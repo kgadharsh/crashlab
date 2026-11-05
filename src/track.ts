@@ -306,9 +306,26 @@ export const PRACTICE: { name: string; seed: number; style: TrackStyle | null }[
   { name: 'Chicanes', seed: 601, style: { kMin: 9, kMax: 14, size: 0.1, fall: 0.2, squash: [0.6, 0.72], blocks: 5 } },
   { name: 'Technical', seed: 606, style: { kMin: 2, kMax: 14, size: 0.36, fall: 0.8, squash: [0.55, 0.75], blocks: 8 } },
   { name: 'Grand Loop', seed: 607, style: { kMin: 2, kMax: 10, size: 0.18, fall: 0.9, squash: [0.6, 0.75], blocks: 6 } },
+  // Four more, with the feel of famous circuits (the generator draws loops, so these are not copies of real ones).
+  // They are only for practice and the track board: the Grand Prix is built from the first eight (CORE_PRACTICE).
+  { name: 'Temple Straight', seed: 802, style: { kMin: 2, kMax: 12, size: 0.07, fall: 0.9, squash: [0.34, 0.4], blocks: 3 } }, // a very long straight into a tight bend
+  { name: 'Harbour Streets', seed: 815, style: { kMin: 3, kMax: 9, size: 0.3, fall: 0.35, squash: [0.5, 0.65], blocks: 9 } }, // twisty and walled in
+  { name: 'Flowing Esses', seed: 802, style: { kMin: 5, kMax: 8, size: 0.22, fall: 0.4, squash: [0.55, 0.7], blocks: 4 } }, // bend after bend
+  { name: 'Stadium Loop', seed: 803, style: { kMin: 2, kMax: 5, size: 0.26, fall: 0.3, squash: [0.45, 0.55], blocks: 3 } }, // big, fast and open
 ]
+// The first eight practice tracks are the original set. The Grand Prix tracks are made from their styles
+// (see race.ts), so tracks added after them must never change that set or its medals.
+export const CORE_PRACTICE = 8
 export const PRACTICE_COUNT = PRACTICE.length
 const practice: Track[] = []
+// A practice track on a dry or a wet road. The wet ones are made once and kept, so a track is always the same object.
+const wetPractice = new Map<number, Track>()
+export function practiceOnRoad(id: number, wet: boolean): Track {
+  if (!wet) return practiceTrack(id)
+  let t = wetPractice.get(id)
+  if (!t) wetPractice.set(id, (t = wetTrack(practiceTrack(id))))
+  return t
+}
 export function practiceTrack(id: number): Track {
   const p = PRACTICE[id]
   return (practice[id] ??= p.style ? makeStyledTrack(p.seed, p.style) : DEFAULT_TRACK)

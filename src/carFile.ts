@@ -6,7 +6,8 @@ const FORMAT = 'crashlab-car'
 const VERSION = 3 // 3: ray range is no longer part of a build
 const MAX_WEIGHT = 1000 // anything bigger is certainly not a real brain
 
-export type CarFile = { name: string; build: Build; genome: number[] }
+// generations: how many generations of training the brain has had in all (left out when unknown, e.g. a car saved before this was kept)
+export type CarFile = { name: string; build: Build; genome: number[]; generations?: number }
 
 export function carToJson(car: CarFile): string {
   return JSON.stringify({ format: FORMAT, version: VERSION, ...car })
@@ -21,7 +22,7 @@ export function carFromJson(text: string): CarFile | { error: string } {
   } catch {
     return { error: 'That file is not valid JSON.' }
   }
-  const d = data as { format?: unknown; version?: unknown; name?: unknown; build?: unknown; genome?: unknown }
+  const d = data as { format?: unknown; version?: unknown; name?: unknown; build?: unknown; genome?: unknown; generations?: unknown }
   if (!d || typeof d !== 'object' || d.format !== FORMAT) return { error: 'That file is not a CrashLab car.' }
   if (d.version !== VERSION) return { error: 'That car was saved by a different version of CrashLab.' }
   const problem = buildProblem(d.build, PRACTICE_COUNT)
@@ -33,5 +34,7 @@ export function carFromJson(text: string): CarFile | { error: string } {
     if (typeof w !== 'number' || !Number.isFinite(w) || Math.abs(w) > MAX_WEIGHT) return { error: 'That car has a weight that is not a sensible number.' }
   }
   const name = typeof d.name === 'string' ? d.name.slice(0, 40) : 'Unnamed'
-  return { name, build, genome: d.genome as number[] }
+  const car: CarFile = { name, build, genome: d.genome as number[] }
+  if (typeof d.generations === 'number' && Number.isInteger(d.generations) && d.generations > 0 && d.generations < 100000) car.generations = d.generations
+  return car
 }

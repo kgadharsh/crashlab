@@ -162,3 +162,11 @@ Built from this: the **Keep training** button (30% of the budget, needs the same
 - **One thread is untouched:** `scripts/bench.ts` gives the same fingerprints as before (`7d5eb8664a03` for default, `9c724097a6dd` for wide), and `scripts/scorerCheck.ts` shows the Scorer path matching the plain one.
 - **If a helper fails**, the scorer falls back to one thread with the same result (tested with helpers given a broken build). A helper that does not answer for 30 s is dropped the same way.
 - **Not measured:** phones. They report more cores than they have fast ones, and the page's own drawing competes for them, so the gain there may be smaller. One earlier full run through the app took about 70 s and did not repeat in three later runs; I could not tell why, so treat single timings as rough.
+
+## 6 Nov 2026: par times for the track board
+
+`src/board.ts`. A trained default car (5 rays, 120°, four practice tracks, dry) drove one lap of each of the 12 practice tracks. Its lap times, trimmed by 3%, are the gold times: 14.6, 18.6, 16.3, 16.4, 15.1, 22.7, 19.4, 17.4, 15.3, 20.6, 18.6 and 17.6 s in track order. Silver is within 8% of gold, bronze is finishing, and a wet road adds 12% (the wet laps that finished took 8% to 12% longer than the dry ones).
+
+- That car finished all 12 dry laps and got silver on all of them by construction, which is about 24 stars from a first training. The first design unlocks at 12 stars for that reason.
+- **Not tested:** only one car and one training went into the par times. Other seeds and builds may land above or below them, so gold may turn out too easy or too hard. The wet par is dry par times 1.12 for every track, including ones the car could not finish when wet.
+- Adding the four new practice tracks left the benchmark fingerprint (Grand Prix result included) unchanged, because the Grand Prix is built from the first eight practice styles only.

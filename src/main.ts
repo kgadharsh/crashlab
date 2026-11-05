@@ -1,14 +1,17 @@
 import './style.css'
-import { GOLD_TIME, GRAND_PRIXES, RACE_COUNT, raceCar } from './race'
+import { GOLD_TIME, GRAND_PRIXES, RACE_COUNT, medalFor, raceCar } from './race'
 import { carFromChallenge, challengeCode } from './challenge'
 import { DEFAULT_BUILD, KEEP_TRAINING_SHARE, LIMITS, POPULATION, REPLAY_EVERY, TRAINING_BUDGET, buildProblem, cleanBuild, genomeLength, shapeOf, specOf, type Build, type Weather } from './setup'
-import { CHECKPOINTS, STALL_STEPS, createCar, drive, type Brain, type Car } from './sim'
-import { PRACTICE, PRACTICE_COUNT, practiceTrack, trackFeatures, trackStats, wetTrack, type Track } from './track'
+import { CHECKPOINTS, STALL_STEPS, createCar, drive, getInputs, type Brain, type Car } from './sim'
+import { think } from './brain'
+import { PRACTICE, PRACTICE_COUNT, practiceOnRoad, practiceTrack, trackFeatures, trackStats, type Track } from './track'
 import { genomeToBrain } from './genome'
 import { carFromJson, carToJson, type CarFile } from './carFile'
-import { createRaceView, type Challenge } from './raceView'
+import { createRaceView, loadBest, type Challenge } from './raceView'
+import { bestOn, driveLap, loadMedals, parFor, recordLaps, totalStars, type Lap } from './board'
+import { LOOKS, isUnlocked, loadLook, nextLook, saveLook } from './looks'
 import { hasRaced, logEvent, playtestNotes } from './playLog'
-import { COL, H, W, clear, drawCar, drawCrash, drawMinimap, drawRays, drawSensorFan, drawThumb, drawTrack, fanFrame, fit, follow, lookAt, newCamera, withCamera } from './draw'
+import { COL, H, W, clear, drawBrain, drawCar, drawCrash, drawMinimap, drawRays, drawSensorFan, drawThumb, drawTrack, fanFrame, fit, follow, lookAt, newCamera, withCamera } from './draw'
 
 // ---------- SAVED STATE ----------
 const KEYS = { draft: 'crashlab.draft', car: 'crashlab.car', previous: 'crashlab.previous', challenge: 'crashlab.challenge' }
@@ -43,6 +46,8 @@ let carBrain: Brain | null = car ? genomeToBrain(car.genome, shapeOf(car.build.s
 const savedPrevious = load<string>(KEYS.previous)
 const parsedPrevious = savedPrevious ? carFromJson(savedPrevious) : null
 let previousCar: CarFile | null = parsedPrevious && !('error' in parsedPrevious) ? parsedPrevious : null
+// The car design the player chose (they only change how the car looks)
+let look = loadLook()
 function rememberPrevious(c: CarFile | null) {
   previousCar = c
   save(KEYS.previous, c ? carToJson(c) : null)
@@ -91,9 +96,9 @@ document.querySelector('#app')!.innerHTML = `
 <header class="top">
   <div class="brand">CRASH<span>LAB</span></div>
   <nav class="tabs" role="tablist">
-    <button class="tab" data-tab="garage" role="tab">Garage</button>
-    <button class="tab" data-tab="practice" role="tab">Practice</button>
-    <button class="tab" data-tab="race" role="tab">Race</button>
+    <button class="tab" data-tab="garage" role="tab"><span class="tnum">1</span>Garage</button>
+    <button class="tab" data-tab="practice" role="tab"><span class="tnum">2</span>Practice</button>
+    <button class="tab" data-tab="race" role="tab"><span class="tnum">3</span>Race</button>
   </nav>
   <div class="chip" id="chip"></div>
 </header>
@@ -115,6 +120,11 @@ document.querySelector('#app')!.innerHTML = `
       </div>
       <div class="panel name">
         <input id="name" maxlength="24" aria-label="Car name" spellcheck="false" />
+      </div>
+      <div class="panel">
+        <h2>Car design<span class="aside" id="starCount"></span></h2>
+        <div class="looks" id="looks"></div>
+        <p class="tip" id="lookTip"></p>
       </div>
       <div class="panel">
         <h2><span class="n">01</span>Sensors<span class="aside" id="weights"></span></h2>
@@ -166,6 +176,12 @@ document.querySelector('#app')!.innerHTML = `
         <p class="msg" id="trainMsg"></p>
         <p class="tip" id="trainTip" hidden></p>
       </div>
+      <div class="panel" id="boardPanel">
+        <h2>Track board<span class="aside" id="boardCount"></span></h2>
+        <div class="board" id="board"></div>
+        <p class="tip" id="boardNext"></p>
+        <p class="tip" id="boardStars"></p>
+      </div>
       <div class="panel">
         <h2>Setup<span class="aside"><button class="btn small" id="toGarage">Edit</button></span></h2>
         <dl class="spec" id="spec"></dl>
@@ -173,6 +189,7 @@ document.querySelector('#app')!.innerHTML = `
       <div class="panel">
         <h2>Your car</h2>
         <p class="tip" id="carState" style="margin-top:0"></p>
+        <p class="tip">During a test drive, the box in the corner shows what the car sees (its rays), thinks (five neurons) and does (steering and gas).</p>
         <div class="actions">
           <select id="driveTrack" aria-label="Track for the test drive"></select>
           <button class="btn" id="testDrive">Test drive</button>
@@ -263,6 +280,7 @@ let tab: Tab = 'garage'
 function setTab(t: Tab) {
   tab = t
   if (t === 'race') hideNudge()
+  if (t === 'garage') renderLooks()
   document.querySelectorAll<HTMLButtonElement>('.tab[data-tab]').forEach((btn) => {
     btn.classList.toggle('on', btn.dataset.tab === t)
     btn.setAttribute('aria-selected', String(btn.dataset.tab === t))
@@ -320,14 +338,8 @@ weatherSel.addEventListener('change', () => {
   else delete b.weather // dry is the same as nothing
   changed()
 })
-// A practice track on the road a build practises on; the wet ones are made once and kept
-const wetPractice = new Map<number, Track>()
-function practiceOn(id: number, weather?: Weather): Track {
-  if (weather !== 'wet') return practiceTrack(id)
-  let t = wetPractice.get(id)
-  if (!t) wetPractice.set(id, (t = wetTrack(practiceTrack(id))))
-  return t
-}
+// A practice track on the road a build practises on
+const practiceOn = (id: number, weather?: Weather): Track => practiceOnRoad(id, weather === 'wet')
 
 // The practice track picker
 const trackGrid = $('tracks')
@@ -493,7 +505,9 @@ function finishTraining(f: Finish) {
   lastRun = { spent: r.spent, generations: f.generations, budget: r.budget }
   logEvent({ k: 'train', secs: r.secs ?? runSeconds(r), generations: f.generations, keep: r.keep, wet: r.build.weather === 'wet', rays: r.build.sensors.count, practice: r.build.practice.length })
   if (car) rememberPrevious(car) // the car this run replaces, in case the new one is worse
-  car = { name: r.name, build: r.build, genome: f.genome }
+  // the generations the brain has had in all: carrying on adds to the car's count (unknown if the old car's was)
+  const total = r.keep ? (car?.generations !== undefined ? car.generations + f.generations : undefined) : f.generations
+  car = { name: r.name, build: r.build, genome: f.genome, ...(total !== undefined ? { generations: total } : {}) }
   carBrain = genomeToBrain(f.genome, shapeOf(r.build.sensors))
   save(KEYS.car, carToJson(car))
   drawGraph(r.history)
@@ -735,6 +749,167 @@ function tickTestDrive() {
   }
 }
 
+// ---------- STARS, CAR DESIGNS AND THE TRACK BOARD ----------
+// Medals earn stars. Stars unlock car designs. The track board shows how the current car drives every practice
+// track, which is also how a player sees whether it can win on all of them.
+const gpMedals = () =>
+  GRAND_PRIXES.map((gp) => {
+    const best = loadBest(gp)
+    return best ? medalFor(best, gp) : null
+  })
+const starCount = () => totalStars(loadMedals(), gpMedals())
+
+const lookGrid = $('looks')
+const lookButtons: HTMLButtonElement[] = LOOKS.map((l, i) => {
+  const btn = document.createElement('button')
+  btn.type = 'button'
+  btn.className = 'look'
+  const cv = document.createElement('canvas')
+  cv.width = 120
+  cv.height = 64
+  btn.append(cv, document.createElement('span'))
+  btn.addEventListener('click', () => {
+    if (!isUnlocked(i, starCount())) {
+      $('lookTip').textContent = l.name + ' unlocks at ' + l.stars + ' stars. Medals on the Track board (Practice) and in the Grand Prix earn them.'
+      return
+    }
+    look = i
+    saveLook(i)
+    renderLooks()
+  })
+  lookGrid.appendChild(btn)
+  return btn
+})
+function renderLooks() {
+  const stars = starCount()
+  $('starCount').textContent = '★ ' + stars
+  lookButtons.forEach((btn, i) => {
+    const open = isUnlocked(i, stars)
+    btn.classList.toggle('on', i === look)
+    btn.classList.toggle('locked', !open)
+    btn.setAttribute('aria-pressed', String(i === look))
+    const cv = btn.querySelector('canvas')!
+    const g = cv.getContext('2d')!
+    g.clearRect(0, 0, cv.width, cv.height)
+    g.globalAlpha = open ? 1 : 0.3
+    drawCar(g, { x: 60, y: 32, angle: 0 }, 78, 42, COL.accent, i)
+    g.globalAlpha = 1
+    btn.querySelector('span')!.textContent = open ? LOOKS[i].name : LOOKS[i].name + '\n★ ' + LOOKS[i].stars
+  })
+  const next = nextLook(stars)
+  $('lookTip').textContent = next
+    ? 'Next design: ' + next.name + ', ' + next.need + ' more stars. A medal on a track is worth 1, 2 or 3 stars (bronze, silver, gold), and a Grand Prix medal 3, 6 or 10.'
+    : 'Every design is unlocked.'
+}
+
+type Board = { car: CarFile; brain: Brain; laps: (Lap | null)[]; next: number }
+let board: Board | null = null
+let boardMsg = '' // what the latest laps earned, such as a design unlocked
+let boardVersion = 0 // changes whenever the rows would look different, so they are only rebuilt then
+let boardShown = -1
+
+// Drive a lap of every practice track with the current car, one every few milliseconds so the page stays smooth
+function ensureBoard() {
+  if (!car || !carBrain) {
+    board = null
+    return
+  }
+  if ((board && board.car.genome === car.genome) || worker) return // already done for this car, or a training is running
+  const bd: Board = { car, brain: carBrain, laps: Array(PRACTICE_COUNT).fill(null), next: 0 }
+  board = bd
+  boardMsg = ''
+  boardVersion++
+  setTimeout(() => boardStep(bd), 0)
+}
+function boardStep(bd: Board) {
+  if (board !== bd) return // another car has come along
+  bd.laps[bd.next] = driveLap(bd.car, bd.brain, bd.next)
+  bd.next++
+  boardVersion++
+  if (bd.next >= PRACTICE_COUNT) finishBoard(bd)
+  else setTimeout(() => boardStep(bd), 20)
+  renderBoard()
+}
+function finishBoard(bd: Board) {
+  const before = starCount()
+  const { gained } = recordLaps(bd.laps as Lap[], bd.car.build.weather === 'wet')
+  const after = starCount()
+  const unlocked = LOOKS.filter((l) => l.stars > before && l.stars <= after).map((l) => l.name)
+  boardMsg = unlocked.length ? 'New design unlocked: ' + unlocked.join(', ') + '. Pick it in the Garage.' : gained ? 'These laps earned ' + gained + ' more stars.' : ''
+  boardVersion++
+  renderLooks()
+}
+
+const dot = (medal: string | null | undefined) => {
+  const i = document.createElement('i')
+  i.className = 'dot ' + (medal ?? 'none')
+  i.title = medal ?? 'no medal'
+  return i
+}
+function renderBoard() {
+  if (tab !== 'practice') return
+  const wet = car?.build.weather === 'wet'
+  const medals = loadMedals()
+  const laps = board?.laps ?? []
+  const done = laps.filter((l): l is Lap => !!l)
+  const finished = done.filter((l) => l.time !== null).length
+  $('boardCount').textContent = !car ? '' : done.length < PRACTICE_COUNT ? 'driving laps…' : finished + ' of ' + PRACTICE_COUNT + ' finished'
+  const rebuild = boardShown !== boardVersion || !car !== !$('board').querySelector('.brow:not(:disabled)')
+  boardShown = boardVersion
+  if (rebuild) paintRows()
+  paintNotes()
+  function paintRows() {
+  const head = document.createElement('div')
+  head.className = 'bhead'
+  head.append(...['TRACK', 'THIS CAR', 'BEST'].map((t) => Object.assign(document.createElement('span'), { textContent: t })))
+  $('board').replaceChildren(
+    head,
+    ...TRACK_NAMES.map((name, id) => {
+      const row = document.createElement('button')
+      row.type = 'button'
+      row.className = 'brow'
+      row.disabled = !car
+      const lap = laps[id]
+      const result = document.createElement('span')
+      result.className = 'bt' + (lap && lap.time === null ? ' bad' : '')
+      result.textContent = !car ? '–' : !lap ? '…' : lap.time !== null ? lap.time.toFixed(1) + ' s' : 'crashed at ' + Math.round(lap.progress * 100) + '%'
+      const mine = document.createElement('span')
+      mine.className = 'bm'
+      mine.append(dot(lap?.medal), result)
+      const best = document.createElement('span')
+      best.className = 'bb'
+      best.append(dot(bestOn(medals, id, wet)?.medal))
+      const label = document.createElement('span')
+      label.className = 'bn'
+      label.textContent = name
+      row.append(label, mine, best)
+      row.addEventListener('click', () => {
+        driveSelect.value = String(id)
+        startTestDrive()
+      })
+      return row
+    }),
+  )
+  }
+  function paintNotes() {
+  const unmedalled = TRACK_NAMES.findIndex((_, id) => !bestOn(medals, id, wet))
+  const noGold = TRACK_NAMES.findIndex((_, id) => bestOn(medals, id, wet)?.medal !== 'gold')
+  const target = unmedalled >= 0 ? unmedalled : noGold
+  const sweep = car && done.length === PRACTICE_COUNT && finished === PRACTICE_COUNT ? 'Clean sweep: this car finished every track. ' : ''
+  $('boardNext').textContent = !car
+    ? 'Train a car to see how it drives every track. Tap a track to watch its lap.'
+    : sweep +
+      (target < 0
+        ? 'Gold on every track: the board is mastered.'
+        : unmedalled >= 0
+          ? 'Next map: ' + TRACK_NAMES[target] + '. Finish a lap there to earn its first medal.'
+          : 'Next: ' + TRACK_NAMES[target] + '. Your best is ' + bestOn(medals, target, wet)!.medal + ' (' + bestOn(medals, target, wet)!.time.toFixed(1) + ' s); gold is ' + parFor(target, wet).toFixed(1) + ' s or faster.')
+  const stars = starCount()
+  const next = nextLook(stars)
+  $('boardStars').textContent = (boardMsg ? boardMsg + ' ' : '') + '★ ' + stars + (next ? ' · next design: ' + next.name + ' at ★ ' + (stars + next.need) : ' · every design unlocked')
+  }
+}
+
 // ---------- SAVE AND LOAD ----------
 function carMsg(text: string, bad = false) {
   const m = $('carMsg')
@@ -822,6 +997,8 @@ function renderPractice() {
   $('testDrive').textContent = test ? 'Stop driving' : 'Test drive'
   $<HTMLButtonElement>('saveCar').disabled = !car
   $<HTMLButtonElement>('shareCar').disabled = !car
+  ensureBoard()
+  renderBoard()
 }
 
 // ---------- THE LEARNING GRAPH ----------
@@ -1009,13 +1186,14 @@ function draw() {
       sw.cars.forEach((c) => c.dead && drawCrash(ctx, c.x, c.y))
       sw.cars.forEach((c, i) => !c.dead && i !== sw.lead && drawCar(ctx, c, 26, 14, COL.swarm))
       const lead = sw.cars[sw.lead]
-      if (!lead.dead) drawCar(ctx, lead, 34, 18, COL.accent) // the followed car on top
+      if (!lead.dead) drawCar(ctx, lead, 34, 18, COL.accent, look) // the followed car on top
     })
     drawMinimap(ctx, sw.track, cam, sw.cars[sw.lead], sw.cars.filter((_, i) => !sw.done[i] && i !== sw.lead))
     const alive = sw.done.filter((d) => !d).length
     hudText('GEN ' + (sw.gen + 1), 16, 42, 36)
     hudText('REPLAY ON ' + TRACK_NAMES[sw.trackId].toUpperCase() + ' · TRAINING IS ON GEN ' + run.history.length, 16, 64, 16, COL.muted)
     hudText('SCORED ON ALL ' + run.build.practice.length + ' PRACTICE TRACKS', 16, 82, 13, COL.muted)
+    hudText('EACH GENERATION IS BRED FROM THE BEST CARS OF THE ONE BEFORE', 16, 100, 13, COL.muted)
     hudText(sw.cars.length === 1 ? 'BEST OF ' + sw.genomes.length + ' CARS' : alive + ' / ' + sw.cars.length + ' DRIVING', W - 16, H - 16, 18, COL.tele, 'right')
     const status = run.judging
       ? 'TRAINING DONE · PICKING YOUR CAR'
@@ -1040,10 +1218,15 @@ function draw() {
       if (t.crashFrames > 0 && t.crashAt) drawCrash(ctx, t.crashAt.x, t.crashAt.y)
       else {
         drawRays(ctx, t.car)
-        drawCar(ctx, t.car, 34, 18, COL.accent)
+        drawCar(ctx, t.car, 34, 18, COL.accent, look)
       }
     })
     drawMinimap(ctx, t.track, cam, t.car)
+    if (t.crashFrames === 0 && carBrain) {
+      const inputs = getInputs(t.car)
+      const thought = think(carBrain, inputs)
+      drawBrain(ctx, { inputs, hidden: thought.hidden, outputs: thought.outputs }, W - 296, 12, 284, 132)
+    }
     hudText(time(t.car.steps / 60), 16, 50, 46)
     hudText('LAST ' + time(t.lastLap) + '    BEST ' + time(t.bestLap), 16, 74, 16, COL.muted)
     if (t.crashFrames > 0) hudText('CRASHED', W / 2, H / 2, 40, COL.bad, 'center')
@@ -1072,7 +1255,7 @@ function draw() {
     drawTrack(ctx, p.track)
     if (zoomedIn) drawSensorFan(ctx, p, cam.zoom)
     drawRays(ctx, p)
-    drawCar(ctx, p, 34, 18, COL.accent)
+    drawCar(ctx, p, 34, 18, COL.accent, look)
   })
   if (zoomedIn) {
     hudText(b.sensors.count + ' RAYS', 16, 38, 26)
@@ -1114,7 +1297,7 @@ function loop(now: number) {
   requestAnimationFrame(loop)
 }
 
-raceView = createRaceView({ ctx, cam, getCar: () => car, isStale: carIsStale, getChallenge: () => challenge, goTo: setTab, hudText, setStrip })
+raceView = createRaceView({ ctx, cam, getCar: () => car, isStale: carIsStale, getChallenge: () => challenge, getLook: () => look, goTo: setTab, hudText, setStrip })
 
 // ---------- CHALLENGE LINKS ----------
 // Share: the car goes into a link, so a friend can race it with no server.
@@ -1178,6 +1361,7 @@ window.addEventListener('hashchange', () => {
 takeChallenge()
 raceView.render()
 renderGarage()
+renderLooks()
 renderChip()
 drawGraph([])
 // the graph is only redrawn when it changes, so redraw it once the web fonts have arrived

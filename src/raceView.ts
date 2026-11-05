@@ -9,6 +9,7 @@ import {
   type GrandPrix, type Medal, type RaceResult, type TrackResult,
 } from './race'
 import { logEvent } from './playLog'
+import { loadFewest, recordFewest } from './board'
 import { COL, H, W, clear, drawCar, drawCrash, drawMinimap, drawRays, drawTrack, follow, withCamera, type Camera } from './draw'
 
 // A friend's car to beat (with its result in each Grand Prix on this device), or why their link could not be used
@@ -20,6 +21,7 @@ export type RaceDeps = {
   getCar: () => CarFile | null
   isStale: () => boolean
   getChallenge: () => Challenge | null
+  getLook: () => number
   goTo: (tab: 'garage' | 'practice') => void
   hudText: (text: string, x: number, y: number, size: number, colour?: string, align?: CanvasTextAlign) => void
   setStrip: (cells: [string, string][]) => void
@@ -45,7 +47,7 @@ const SPEEDS = [1, 4, 16]
 const HOLD = 90 // 1.5 seconds on each finished lap
 const MEDAL_COLOUR: Record<Exclude<Medal, null>, string> = { gold: '#ffcc33', silver: '#c7ced8', bronze: '#cd8a4f' }
 
-function loadBest(gp: GrandPrix): Best | null {
+export function loadBest(gp: GrandPrix): Best | null {
   try {
     const text = localStorage.getItem(bestKey(gp))
     return text ? (JSON.parse(text) as Best) : null
@@ -140,6 +142,8 @@ export function createRaceView(d: RaceDeps) {
     r.index = RACE_COUNT - 1
     r.summary = summarise(r.results)
     logEvent({ k: 'race', gp: r.gp.name, finished: r.summary.finished, time: r.summary.totalTime, medal: medalFor(r.summary, r.gp), of: RACE_COUNT })
+    const medal = medalFor(r.summary, r.gp)
+    if (medal && r.car.generations) recordFewest(r.gp.id, medal, r.car.generations)
     if (!best || better(r.summary, best)) {
       best = { finished: r.summary.finished, totalTime: r.summary.totalTime, name: r.car.name }
       saveBest(r.gp, best)
@@ -237,7 +241,8 @@ export function createRaceView(d: RaceDeps) {
       const m = $('medal')
       m.textContent = medal ? medal.toUpperCase() : 'NO MEDAL'
       m.style.color = medal ? MEDAL_COLOUR[medal] : COL.muted
-      $('resultLine').textContent = s.finished + ' of ' + RACE_COUNT + ' finished · ' + s.totalTime.toFixed(1) + ' s total'
+      const gens = live!.car.generations
+      $('resultLine').textContent = s.finished + ' of ' + RACE_COUNT + ' finished · ' + s.totalTime.toFixed(1) + ' s total' + (gens ? ' · trained for ' + gens + ' generations' : '')
       $('advice').textContent = adviceFor(s, live!.gp, live!.car.build.weather === 'wet')
     }
     // a friend's challenge, and how your latest race compares with it
@@ -254,9 +259,12 @@ export function createRaceView(d: RaceDeps) {
         (car ? ' Race your car on the same tracks and beat it.' : ' Train a car in Practice, then race it here.')
       $('challengeVs').textContent = live?.summary ? versus(live.summary, rival, ch.car.name) : ''
     }
-    $('pb').textContent = best
-      ? (live?.newBest ? 'New personal best! ' : 'Personal best: ') + best.finished + '/' + RACE_COUNT + ' · ' + best.totalTime.toFixed(1) + ' s · ' + best.name
-      : 'No personal best yet.'
+    const fewest = loadFewest(gp().id)
+    const fewestText = (['gold', 'silver', 'bronze'] as const).filter((m) => fewest[m] !== undefined).map((m) => m + ' in ' + fewest[m]).join(' · ')
+    $('pb').textContent =
+      (best
+        ? (live?.newBest ? 'New personal best! ' : 'Personal best: ') + best.finished + '/' + RACE_COUNT + ' · ' + best.totalTime.toFixed(1) + ' s · ' + best.name
+        : 'No personal best yet.') + (fewestText ? '. Fewest generations to a medal: ' + fewestText + '.' : '')
   }
 
   // ---------- THE BIG SCREEN ----------
@@ -279,7 +287,7 @@ export function createRaceView(d: RaceDeps) {
       if (result?.at) drawCrash(ctx, result.at.x, result.at.y)
       if (!lap.dead) {
         if (!result) drawRays(ctx, lap)
-        drawCar(ctx, lap, 34, 18, COL.accent)
+        drawCar(ctx, lap, 34, 18, COL.accent, d.getLook())
       }
     })
     drawMinimap(ctx, lap.track, cam, lap)

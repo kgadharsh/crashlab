@@ -4,7 +4,7 @@
 import type { Point } from './sensors'
 import { genomeToBrain } from './genome'
 import { CAR_RADIUS, CHECKPOINTS, RACE_STEPS, STALL_STEPS, createCar, drive, type Brain, type Car } from './sim'
-import { BLOCK_HALF, HAIRPIN_RADIUS, PRACTICE, bendRadii, makeStyledTrack, styleFor, wetTrack, type Track } from './track'
+import { BLOCK_HALF, CORE_PRACTICE, HAIRPIN_RADIUS, PRACTICE, bendRadii, makeStyledTrack, styleFor, wetTrack, type Track } from './track'
 import { shapeOf, specOf, type CarSpec } from './setup'
 import type { CarFile } from './carFile'
 
@@ -12,7 +12,7 @@ import type { CarFile } from './carFile'
 // One track in the style of each practice track (but a different shape), plus one wild one.
 // Players never see these before the race.
 // The same eight tracks are raced twice: on a dry road (Grand Prix 1) and on a wet one (Grand Prix 2).
-const RACE_STYLES = [...PRACTICE.slice(1).map((p) => p.style!), styleFor(0.9)]
+const RACE_STYLES = [...PRACTICE.slice(1, CORE_PRACTICE).map((p) => p.style!), styleFor(0.9)]
 export const RACE_COUNT = RACE_STYLES.length
 const raceTracks: Track[] = []
 const wetRaceTracks: Track[] = []
