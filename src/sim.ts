@@ -1,4 +1,4 @@
-import { castRay, type Point, type Segment } from './sensors'
+import { castRay, type Point } from './sensors'
 import { think, type Brain } from './brain'
 import { CHECKPOINTS, CHECKPOINT_STRIDE, DEFAULT_TRACK, POINTS, type Track } from './track'
 import { DEFAULT_SPEC, type CarSpec, type Reward } from './setup'
@@ -23,15 +23,6 @@ export const STALL_STEPS = 300 // 5 seconds without a new checkpoint ends an att
 export const MAX_STEPS = 2400 // 40 seconds is the longest training attempt (about one lap)
 export const RACE_STEPS = 6000 // 100 seconds is the longest race lap
 
-function distToSegment(px: number, py: number, s: Segment): number {
-  const dx = s.b.x - s.a.x
-  const dy = s.b.y - s.a.y
-  const lenSq = dx * dx + dy * dy
-  let t = lenSq === 0 ? 0 : ((px - s.a.x) * dx + (py - s.a.y) * dy) / lenSq
-  t = Math.max(0, Math.min(1, t))
-  return Math.hypot(px - (s.a.x + t * dx), py - (s.a.y + t * dy))
-}
-
 // ---------- ONE CAR ----------
 export type Car = {
   track: Track // the road this car is driving on
@@ -48,7 +39,8 @@ export type Car = {
   speedSum: number // for the average speed
   steerChange: number // total change in steering, for smoothness
   lastSteer: number
-  near: Segment[] // walls close to nearAt, refreshed as the car moves (see nearbyWalls)
+  near: Float64Array // walls a ray could reach from nearAt, refreshed as the car moves (see nearbyWalls)
+  touch: Float64Array // the few of them the car itself could touch (the crash test only needs these)
   nearAt: Point
 }
 
@@ -68,7 +60,8 @@ export function createCar(track: Track = DEFAULT_TRACK, spec: CarSpec = DEFAULT_
     speedSum: 0,
     steerChange: 0,
     lastSteer: 0,
-    near: [],
+    near: new Float64Array(0),
+    touch: new Float64Array(0),
     nearAt: { x: Infinity, y: Infinity },
   }
   updateRays(car)
@@ -90,12 +83,26 @@ function movingForward(car: Car, index: number): boolean {
   return Math.cos(car.angle) * tx + Math.sin(car.angle) * ty > 0
 }
 
+// Math.hypot is about ten times slower than a square root, and these distance checks run for every
+// wall on every step. So work out the squared distance first: if it is clearly inside or outside
+// the radius, that settles it (-1 inside, 1 outside). Only a close call (0) goes on to ask Math.hypot,
+// so every answer is exactly the one Math.hypot alone would give.
+function side(dx: number, dy: number, radius: number): -1 | 0 | 1 {
+  const distSq = dx * dx + dy * dy
+  const inner = radius - 1e-6
+  const outer = radius + 1e-6
+  if (distSq < inner * inner) return -1
+  if (distSq > outer * outer) return 1
+  return 0
+}
+
 function updateProgress(car: Car) {
   let gained = false
   for (let k = 0; k < CHECKPOINTS; k++) {
     const index = ((car.passed + 1) % CHECKPOINTS) * CHECKPOINT_STRIDE
     const target = car.track.centerline[index]
-    if (Math.hypot(car.x - target.x, car.y - target.y) > CHECKPOINT_RADIUS) break
+    const s = side(car.x - target.x, car.y - target.y, CHECKPOINT_RADIUS)
+    if (s > 0 || (s === 0 && Math.hypot(car.x - target.x, car.y - target.y) > CHECKPOINT_RADIUS)) break
     if (!movingForward(car, index)) break
     car.passed++
     gained = true
@@ -109,29 +116,96 @@ function updateProgress(car: Car) {
 // leaving the rest out gives exactly the same answers, just faster.
 // The list is gathered with SLACK extra reach and kept until the car has moved SLACK away,
 // so the whole track is only searched now and then instead of every step.
+// The car can only touch a wall whose middle is within CAR_RADIUS plus half a wall of it, a much
+// smaller reach than a ray's, so the crash test gets its own shorter list (touch), in the same order.
 const SLACK = 80
-function nearbyWalls(car: Car): Segment[] {
-  if (Math.hypot(car.x - car.nearAt.x, car.y - car.nearAt.y) <= SLACK) return car.near
-  const reach = Math.max(car.spec.rayRange, CAR_RADIUS) + car.track.longestWall / 2 + 1 + SLACK
-  const reachSq = reach * reach
-  const near: Segment[] = []
-  for (const w of car.track.walls) {
-    const dx = (w.a.x + w.b.x) / 2 - car.x
-    const dy = (w.a.y + w.b.y) / 2 - car.y
-    if (dx * dx + dy * dy <= reachSq) near.push(w)
+
+// The walls are kept as flat numbers, which the maths reads much faster than a list of objects:
+// each wall's middle (x, y) for the search, and its start (x, y) and length (x, y) for the rays and
+// the crash test. Worked out once per track.
+type WallData = { count: number; middle: Float64Array; flat: Float64Array }
+const wallData = new WeakMap<Track, WallData>()
+function wallsOf(track: Track): WallData {
+  let data = wallData.get(track)
+  if (!data || data.count !== track.walls.length) {
+    const middle = new Float64Array(track.walls.length * 2)
+    const flat = new Float64Array(track.walls.length * 4)
+    track.walls.forEach((w, i) => {
+      middle[2 * i] = (w.a.x + w.b.x) / 2
+      middle[2 * i + 1] = (w.a.y + w.b.y) / 2
+      flat[4 * i] = w.a.x
+      flat[4 * i + 1] = w.a.y
+      flat[4 * i + 2] = w.b.x - w.a.x
+      flat[4 * i + 3] = w.b.y - w.a.y
+    })
+    data = { count: track.walls.length, middle, flat }
+    wallData.set(track, data)
   }
-  car.near = near
-  car.nearAt = { x: car.x, y: car.y }
-  return near
+  return data
 }
 
-function updateRays(car: Car, near: Segment[] = nearbyWalls(car)) {
+// Wall numbers picked during a search, reused so a search allocates next to nothing
+let nearPick = new Int32Array(0)
+let touchPick = new Int32Array(0)
+function pack(flat: Float64Array, pick: Int32Array, n: number): Float64Array {
+  const out = new Float64Array(n * 4)
+  for (let k = 0; k < n; k++) {
+    const i = pick[k] * 4
+    out[4 * k] = flat[i]
+    out[4 * k + 1] = flat[i + 1]
+    out[4 * k + 2] = flat[i + 2]
+    out[4 * k + 3] = flat[i + 3]
+  }
+  return out
+}
+
+function nearbyWalls(car: Car): Float64Array {
+  const moved = side(car.x - car.nearAt.x, car.y - car.nearAt.y, SLACK)
+  if (moved < 0 || (moved === 0 && Math.hypot(car.x - car.nearAt.x, car.y - car.nearAt.y) <= SLACK)) return car.near
+  const { count, middle, flat } = wallsOf(car.track)
+  if (nearPick.length < count) {
+    nearPick = new Int32Array(count)
+    touchPick = new Int32Array(count)
+  }
+  const reach = Math.max(car.spec.rayRange, CAR_RADIUS) + car.track.longestWall / 2 + 1 + SLACK
+  const reachSq = reach * reach
+  const touchReach = CAR_RADIUS + car.track.longestWall / 2 + 1 + SLACK
+  const touchSq = touchReach * touchReach
+  let nearCount = 0
+  let touchCount = 0
+  for (let i = 0; i < count; i++) {
+    const dx = middle[2 * i] - car.x
+    const dy = middle[2 * i + 1] - car.y
+    const distSq = dx * dx + dy * dy
+    if (distSq <= reachSq) {
+      nearPick[nearCount++] = i
+      if (distSq <= touchSq) touchPick[touchCount++] = i
+    }
+  }
+  car.near = pack(flat, nearPick, nearCount)
+  car.touch = pack(flat, touchPick, touchCount)
+  car.nearAt = { x: car.x, y: car.y }
+  return car.near
+}
+
+function updateRays(car: Car, near: Float64Array = nearbyWalls(car)) {
   car.rays = car.spec.rayAngles.map((a) => castRay(car.x, car.y, car.angle + a, car.spec.rayRange, near))
 }
 
-function hitsWall(near: Segment[], car: Car): boolean {
-  for (const w of near) {
-    if (distToSegment(car.x, car.y, w) < CAR_RADIUS) return true
+// Is the car touching any of these walls? (the distance from the car's middle to the wall segment)
+function hitsWall(walls: Float64Array, car: Car): boolean {
+  for (let k = 0; k < walls.length; k += 4) {
+    const ax = walls[k]
+    const ay = walls[k + 1]
+    const dx = walls[k + 2]
+    const dy = walls[k + 3]
+    const lenSq = dx * dx + dy * dy
+    let t = lenSq === 0 ? 0 : ((car.x - ax) * dx + (car.y - ay) * dy) / lenSq
+    t = Math.max(0, Math.min(1, t))
+    const rx = car.x - (ax + t * dx)
+    const ry = car.y - (ay + t * dy)
+    const s = side(rx, ry, CAR_RADIUS)
+    if (s < 0 || (s === 0 && Math.hypot(rx, ry) < CAR_RADIUS)) return true
   }
   return false
 }
@@ -157,7 +231,7 @@ export function step(car: Car, input: Input) {
   car.lastSteer = input.steer
 
   const near = nearbyWalls(car)
-  if (hitsWall(near, car)) {
+  if (hitsWall(car.touch, car)) {
     car.dead = true
     return
   }
