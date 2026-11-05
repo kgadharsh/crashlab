@@ -408,7 +408,10 @@ let lastRun: { spent: number; generations: number; budget: number } | null = nul
 
 type Swarm = { gen: number; genomes: number[][]; bestSteps: number; trackId: number; track: Track; cars: Car[]; brains: Brain[]; done: boolean[]; hold: number; trails: { x: number; y: number }[][]; lead: number; speed: number; owed: number; frames: number; plays: number }
 let swarm: Swarm | null = null
-let waiting: { gen: number; genomes: number[][]; bestSteps: number } | null = null
+// The generations picked for replay (every REPLAY_EVERY-th), in order, waiting for their turn on screen.
+// If a slow device falls more than MAX_BACKLOG behind, the oldest are dropped.
+let waiting: { gen: number; genomes: number[][]; bestSteps: number }[] = []
+const MAX_BACKLOG = 4
 const VIEW_STEPS = 900 // a replayed generation drives for up to 15 seconds
 
 function trainMsg(text: string, bad = false) {
@@ -422,7 +425,7 @@ function stopTraining(text: string) {
   worker = null
   run = null
   swarm = null
-  waiting = null
+  waiting = []
   trainMsg(text)
   renderPractice()
 }
@@ -465,9 +468,12 @@ function startTraining(keep: boolean) {
     if (m.type === 'progress') {
       run.history.push({ best: m.checkpoints / CHECKPOINTS, mean: m.meanCheckpoints / CHECKPOINTS })
       run.spent = m.spent
-      // training never waits for the screen: the graph follows every generation, and the newest
-      // replayable generation waits its turn (an older one that was never shown is dropped)
-      if (run.watching && m.population) waiting = { gen: m.generation, genomes: m.population, bestSteps: m.bestSteps }
+      // training never waits for the screen: the graph follows every generation, and each
+      // replayable generation joins the queue to be shown in order
+      if (run.watching && m.population) {
+        waiting.push({ gen: m.generation, genomes: m.population, bestSteps: m.bestSteps })
+        if (waiting.length > MAX_BACKLOG) waiting.shift()
+      }
       drawGraph(run.history)
       renderPractice()
     } else if (m.type === 'judging') {
@@ -507,7 +513,7 @@ $('skip').addEventListener('click', () => {
   if (!worker || !run || !run.watching) return
   run.watching = false
   swarm = null
-  waiting = null
+  waiting = []
   drawGraph(run.history)
   trainMsg('Skipping the replays: finishing the training...')
   if (run.finish) finishTraining(run.finish)
@@ -555,7 +561,8 @@ bestOnly.addEventListener('change', () => {
 // the next one is ready. The worker says how long the best car lasted in practice: a generation
 // that crashes early plays at real time (and can be watched), and one that drives the full
 // distance plays a little faster than real time (and does not drag).
-const SHOW_FRAMES = 600 // about 10 seconds per replay
+const SHOW_FRAMES = 600 // a replay is paced to fill about 10 seconds...
+const MAX_CLIP_FRAMES = 360 // ...but after 6 seconds the rest is fast-forwarded, so the queue keeps up with training
 const MAX_SPEED = 12 // simulated steps per frame
 const paceFor = (bestSteps: number) => Math.min(MAX_SPEED, Math.max(1, Math.min(bestSteps, VIEW_STEPS) / SHOW_FRAMES))
 
@@ -586,9 +593,9 @@ function stepSwarm(frames: number) {
       finishTraining(run.finish)
       return
     }
-    if (waiting) {
-      swarm = makeSwarm(waiting.gen, waiting.genomes, run.build, waiting.bestSteps)
-      waiting = null
+    const next = waiting.shift()
+    if (next) {
+      swarm = makeSwarm(next.gen, next.genomes, run.build, next.bestSteps)
       follow(cam, swarm.cars[0], true)
     } else if (swarm) {
       // nothing newer is ready yet: show this generation again rather than leave the screen frozen
@@ -603,7 +610,7 @@ function stepSwarm(frames: number) {
   // once the followed car has stopped, or the replay runs past its planned time, or training
   // has finished, the rest plays at top speed
   sw.frames += frames
-  const late = sw.frames > SHOW_FRAMES * 1.5 || sw.done[sw.lead] || alive === 0 || !!run.finish
+  const late = sw.frames > MAX_CLIP_FRAMES || sw.done[sw.lead] || alive === 0 || !!run.finish
   sw.owed += (late ? MAX_SPEED : sw.speed) * frames
   const steps = Math.floor(sw.owed)
   sw.owed -= steps
