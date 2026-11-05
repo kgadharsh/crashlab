@@ -5,7 +5,7 @@ import { PRACTICE, PRACTICE_COUNT, practiceTrack, trackFeatures, trackStats, typ
 import { genomeToBrain } from './genome'
 import { carFromJson, carToJson, type CarFile } from './carFile'
 import { createRaceView } from './raceView'
-import { COL, H, W, clear, drawCar, drawCrash, drawMinimap, drawRays, drawThumb, drawTrack, fit, follow, newCamera, withCamera } from './draw'
+import { COL, H, W, clear, drawCar, drawCrash, drawMinimap, drawRays, drawSensorFan, drawThumb, drawTrack, fanFrame, fit, follow, lookAt, newCamera, withCamera } from './draw'
 
 // ---------- SAVED STATE ----------
 const KEYS = { draft: 'crashlab.draft', car: 'crashlab.car' }
@@ -233,6 +233,7 @@ function bindSlider(id: string, get: () => number, set: (v: number) => void, sca
 }
 bindSlider('count', () => b.sensors.count, (v) => (b.sensors.count = v))
 bindSlider('spread', () => b.sensors.spread, (v) => (b.sensors.spread = v))
+for (const id of ['count', 'spread']) input(id).addEventListener('input', () => (garageView = 'car'))
 bindSlider('balance', () => b.balance, (v) => (b.balance = v), 100)
 bindSlider('pace', () => b.reward.pace, (v) => (b.reward.pace = v), 100)
 bindSlider('safety', () => b.reward.safety, (v) => (b.reward.safety = v), 100)
@@ -242,6 +243,9 @@ bindSlider('smooth', () => b.reward.smooth, (v) => (b.reward.smooth = v), 100)
 const trackGrid = $('tracks')
 const thumbs: HTMLCanvasElement[] = []
 let focusTrack = b.practice[0] ?? 0 // the track shown on the big screen in the garage
+// The garage screen zooms in on the car's sensors (to choose rays and spread), and shows the whole
+// track when a track card is clicked (to choose practice tracks). Moving a sensor slider zooms back in.
+let garageView: 'car' | 'track' = 'car'
 for (let id = 0; id < PRACTICE_COUNT; id++) {
   const btn = document.createElement('button')
   btn.className = 'track'
@@ -260,6 +264,7 @@ for (let id = 0; id < PRACTICE_COUNT; id++) {
   btn.addEventListener('click', () => {
     const picked = b.practice.indexOf(id)
     focusTrack = id
+    garageView = 'track'
     if (picked >= 0) {
       if (b.practice.length > LIMITS.practice[0]) b.practice.splice(picked, 1)
     } else if (b.practice.length < LIMITS.practice[1]) {
@@ -723,8 +728,13 @@ function draw() {
   const target = focusCar()
   // a stopped car needs no look-ahead: the view settles on where it stopped
   const stopped = !!swarm && swarm.done[swarm.lead]
+  // in the garage the camera glides in on the car's sensors, or out to the whole track
+  const zoomedIn = tab === 'garage' && garageView === 'car'
   if (target) follow(cam, stopped ? { ...target, speed: 0 } : target)
-  else fit(cam)
+  else if (zoomedIn) {
+    const f = fanFrame(parked())
+    lookAt(cam, f.x, f.y, f.zoom)
+  } else fit(cam, tab !== 'garage')
   if (swarm && run) {
     const sw = swarm
     withCamera(ctx, cam, () => {
@@ -793,17 +803,27 @@ function draw() {
     ])
     return
   }
-  // the garage and idle practice: the whole track, with this setup's car on the start line
+  // the garage and idle practice: this setup's car on the start line, with its sensors zoomed in on
+  // (garage) or the whole track
   const p = parked()
   withCamera(ctx, cam, () => {
     drawTrack(ctx, p.track)
+    if (zoomedIn) drawSensorFan(ctx, p, cam.zoom)
     drawRays(ctx, p)
     drawCar(ctx, p, 34, 18, COL.accent)
   })
-  hudText(trackLine(focusTrack), W - 16, 30, 14, COL.muted, 'right')
-  const picked = b.practice.includes(focusTrack)
-  hudText(TRACK_NAMES[focusTrack].toUpperCase(), 16, 38, 26)
-  hudText(picked ? 'PRACTICE TRACK' : 'NOT PICKED', 16, 58, 14, picked ? COL.accent : COL.muted)
+  if (zoomedIn) {
+    hudText(b.sensors.count + ' RAYS', 16, 38, 26)
+    hudText(b.sensors.spread + '° SPREAD · RANGE ' + p.spec.rayRange, 16, 58, 14, COL.accent)
+    hudText(TRACK_NAMES[focusTrack].toUpperCase() + ' · START LINE', 16, 76, 13, COL.muted)
+    hudText('PICK A TRACK BELOW TO SEE IT WHOLE', W - 16, H - 16, 13, COL.muted, 'right')
+  } else {
+    hudText(trackLine(focusTrack), W - 16, 30, 14, COL.muted, 'right')
+    const picked = b.practice.includes(focusTrack)
+    hudText(TRACK_NAMES[focusTrack].toUpperCase(), 16, 38, 26)
+    hudText(picked ? 'PRACTICE TRACK' : 'NOT PICKED', 16, 58, 14, picked ? COL.accent : COL.muted)
+    if (tab === 'garage') hudText('MOVE RAYS OR SPREAD TO ZOOM BACK IN ON THE CAR', W - 16, H - 16, 13, COL.muted, 'right')
+  }
   setStrip([
     ['Brain', genomeLength(shapeOf(b.sensors)) + '<small> weights</small>'],
     ['Top speed', specOf(b).maxSpeed.toFixed(1)],

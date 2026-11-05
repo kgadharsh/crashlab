@@ -157,11 +157,17 @@ export function follow(cam: Camera, car: { x: number; y: number; angle: number; 
   cam.zoom += (FOLLOW_ZOOM - cam.zoom) * (snap ? 1 : 0.15)
 }
 
+// Ease the camera to a spot and zoom (snap: arrive at once)
+export function lookAt(cam: Camera, x: number, y: number, zoom: number, snap = false) {
+  const ease = snap ? 1 : 0.12
+  cam.x += (x - cam.x) * ease
+  cam.y += (y - cam.y) * ease
+  cam.zoom += (zoom - cam.zoom) * (snap ? 1 : 0.15)
+}
+
 // Show the whole world
-export function fit(cam: Camera) {
-  cam.x = WORLD.w / 2
-  cam.y = WORLD.h / 2
-  cam.zoom = FIT_ZOOM
+export function fit(cam: Camera, snap = true) {
+  lookAt(cam, WORLD.w / 2, WORLD.h / 2, FIT_ZOOM, snap)
 }
 
 // Paint in world coordinates through the camera
@@ -269,6 +275,92 @@ export function drawRays(g: CanvasRenderingContext2D, car: Car) {
     g.arc(x, y, 3, 0, Math.PI * 2)
     g.fill()
   })
+}
+
+// Where to point the camera so a car's whole sensor fan fills the screen: the middle of the fan,
+// and the zoom that fits it with room for the labels. The camera never rotates, so this works
+// out the same for any direction the car faces.
+const FAN_PAD = 44 // world units of room around the fan, for the angle labels
+const FAN_MAX_ZOOM = 1.6
+const TOP_ROOM = 90 // screen pixels kept clear at the top and bottom, for the text drawn there
+const BOTTOM_ROOM = 26
+export function fanFrame(car: Car): { x: number; y: number; zoom: number } {
+  const { rayAngles, rayRange } = car.spec
+  const from = car.angle + rayAngles[0]
+  const to = car.angle + rayAngles[rayAngles.length - 1]
+  const xs = [car.x]
+  const ys = [car.y]
+  for (let i = 0; i <= 16; i++) {
+    const a = from + ((to - from) * i) / 16
+    xs.push(car.x + Math.cos(a) * rayRange)
+    ys.push(car.y + Math.sin(a) * rayRange)
+  }
+  const x0 = Math.min(...xs) - FAN_PAD
+  const x1 = Math.max(...xs) + FAN_PAD
+  const y0 = Math.min(...ys) - FAN_PAD
+  const y1 = Math.max(...ys) + FAN_PAD
+  const zoom = Math.max(FIT_ZOOM, Math.min(FAN_MAX_ZOOM, W / (x1 - x0), (H - TOP_ROOM - BOTTOM_ROOM) / (y1 - y0)))
+  // the fan sits in the space between the text, so the camera aims a little above its middle
+  return { x: (x0 + x1) / 2, y: (y0 + y1) / 2 - (TOP_ROOM - BOTTOM_ROOM) / 2 / zoom, zoom }
+}
+
+// What a car's sensors cover, whatever is in the way: a faint fan out to full range, each ray as a
+// dashed line at full length, the spread as an arc between the outer rays, and each ray's angle
+// (0° is straight ahead, L and R are left and right of the car, whichever way it faces). The real rays (drawRays) are drawn over this and stop at walls.
+export function drawSensorFan(g: CanvasRenderingContext2D, car: Car, zoom: number) {
+  const { rayAngles, rayRange } = car.spec
+  const n = rayAngles.length
+  const px = 1 / zoom // one screen pixel, in world units
+  const from = car.angle + rayAngles[0]
+  const to = car.angle + rayAngles[n - 1]
+  g.save()
+  g.fillStyle = 'rgba(63,208,255,0.07)'
+  g.beginPath()
+  g.moveTo(car.x, car.y)
+  g.arc(car.x, car.y, rayRange, from, to)
+  g.closePath()
+  g.fill()
+
+  g.strokeStyle = 'rgba(63,208,255,0.4)'
+  g.lineWidth = px
+  g.setLineDash([5 * px, 5 * px])
+  for (const a of rayAngles) {
+    g.beginPath()
+    g.moveTo(car.x, car.y)
+    g.lineTo(car.x + Math.cos(car.angle + a) * rayRange, car.y + Math.sin(car.angle + a) * rayRange)
+    g.stroke()
+  }
+  g.setLineDash([])
+
+  // the spread, with its size in degrees on a dark chip so the rays do not run through it
+  const arcR = 64
+  g.strokeStyle = COL.accent
+  g.lineWidth = 2 * px
+  g.beginPath()
+  g.arc(car.x, car.y, arcR, from, to)
+  g.stroke()
+  g.font = '700 ' + 15 * px + 'px "Barlow Condensed", sans-serif'
+  g.textAlign = 'center'
+  g.textBaseline = 'middle'
+  const spread = Math.round(((rayAngles[n - 1] - rayAngles[0]) * 180) / Math.PI) + '°'
+  const cx = car.x + Math.cos(car.angle) * (arcR + 22 * px)
+  const cy = car.y + Math.sin(car.angle) * (arcR + 22 * px)
+  g.fillStyle = COL.ground
+  g.fillRect(cx - 20 * px, cy - 9 * px, 40 * px, 18 * px)
+  g.fillStyle = COL.accent
+  g.fillText(spread, cx, cy)
+
+  // every ray's angle if they are far enough apart to read, otherwise just the outer rays and the middle one
+  g.font = '700 ' + 13 * px + 'px "Barlow Condensed", sans-serif'
+  g.fillStyle = COL.muted
+  const apart = n < 2 || rayRange * Math.abs(rayAngles[1] - rayAngles[0]) * zoom >= 46
+  rayAngles.forEach((a, i) => {
+    if (!(apart || i === 0 || i === n - 1 || (n % 2 === 1 && i === (n - 1) / 2))) return
+    const deg = Math.round((a * 180) / Math.PI)
+    const r = rayRange + 15 * px
+    g.fillText((deg < 0 ? 'L' : deg > 0 ? 'R' : '') + Math.abs(deg) + '°', car.x + Math.cos(car.angle + a) * r, car.y + Math.sin(car.angle + a) * r)
+  })
+  g.restore()
 }
 
 export function drawCrash(g: CanvasRenderingContext2D, x: number, y: number) {
