@@ -1,15 +1,16 @@
 import './style.css'
-import { GOLD_TIME, RACE_COUNT } from './race'
+import { GOLD_TIME, RACE_COUNT, raceCar } from './race'
+import { carFromChallenge, challengeCode } from './challenge'
 import { DEFAULT_BUILD, KEEP_TRAINING_SHARE, LIMITS, POPULATION, REPLAY_EVERY, TRAINING_BUDGET, buildProblem, cleanBuild, genomeLength, shapeOf, specOf, type Build } from './setup'
 import { CHECKPOINTS, STALL_STEPS, createCar, drive, type Brain, type Car } from './sim'
 import { PRACTICE, PRACTICE_COUNT, practiceTrack, trackFeatures, trackStats, type Track } from './track'
 import { genomeToBrain } from './genome'
 import { carFromJson, carToJson, type CarFile } from './carFile'
-import { createRaceView } from './raceView'
+import { createRaceView, type Challenge } from './raceView'
 import { COL, H, W, clear, drawCar, drawCrash, drawMinimap, drawRays, drawSensorFan, drawThumb, drawTrack, fanFrame, fit, follow, lookAt, newCamera, withCamera } from './draw'
 
 // ---------- SAVED STATE ----------
-const KEYS = { draft: 'crashlab.draft', car: 'crashlab.car', previous: 'crashlab.previous' }
+const KEYS = { draft: 'crashlab.draft', car: 'crashlab.car', previous: 'crashlab.previous', challenge: 'crashlab.challenge' }
 function load<T>(key: string): T | null {
   try {
     const text = localStorage.getItem(key)
@@ -44,6 +45,12 @@ let previousCar: CarFile | null = parsedPrevious && !('error' in parsedPrevious)
 function rememberPrevious(c: CarFile | null) {
   previousCar = c
   save(KEYS.previous, c ? carToJson(c) : null)
+}
+// A friend's car to beat, from a challenge link. Its result is worked out on this device, so both cars run on the same engine.
+let challenge: Challenge | null = null
+function setChallenge(c: CarFile | null) {
+  challenge = c ? { car: c, result: raceCar(c) } : null
+  save(KEYS.challenge, c ? carToJson(c) : null)
 }
 
 const sameBuild = (a: Build, c: Build) => JSON.stringify(a) === JSON.stringify(c)
@@ -161,10 +168,17 @@ document.querySelector('#app')!.innerHTML = `
           <input type="file" id="file" accept=".json,application/json" hidden />
         </div>
         <div class="actions"><button class="btn" id="swapCar" hidden>Switch to previous car</button></div>
+        <div class="actions"><button class="btn" id="shareCar">Copy challenge link</button></div>
+        <input id="shareLink" readonly hidden aria-label="Challenge link" style="width:100%;margin-top:6px" />
         <p class="msg" id="carMsg"></p>
       </div>
     </div>
     <div id="race" class="side">
+      <div class="panel" id="challengePanel" hidden>
+        <h2>Challenge<span class="aside"><button class="btn small" id="challengeClear">Dismiss</button></span></h2>
+        <p class="tip" id="challengeLine" style="margin-top:0"></p>
+        <p class="tip" id="challengeVs" style="color:var(--text);font-weight:600"></p>
+      </div>
       <div class="panel">
         <h2>Grand Prix 1<span class="aside">8 secret tracks</span></h2>
         <p class="tip" style="margin-top:0">Your car drives 8 tracks it has never seen, once each. Most tracks finished wins, then the lowest total time.</p>
@@ -715,6 +729,7 @@ function renderPractice() {
   $<HTMLButtonElement>('testDrive').disabled = !car || training
   $('testDrive').textContent = test ? 'Stop driving' : 'Test drive'
   $<HTMLButtonElement>('saveCar').disabled = !car
+  $<HTMLButtonElement>('shareCar').disabled = !car
 }
 
 // ---------- THE LEARNING GRAPH ----------
@@ -1007,7 +1022,50 @@ function loop(now: number) {
   requestAnimationFrame(loop)
 }
 
-raceView = createRaceView({ ctx, cam, getCar: () => car, isStale: carIsStale, hudText, setStrip })
+raceView = createRaceView({ ctx, cam, getCar: () => car, isStale: carIsStale, getChallenge: () => challenge, hudText, setStrip })
+
+// ---------- CHALLENGE LINKS ----------
+// Share: the car goes into a link, so a friend can race it with no server
+$('shareCar').addEventListener('click', async () => {
+  if (!car) return
+  const link = location.origin + location.pathname + challengeCode(car)
+  const box = $<HTMLInputElement>('shareLink')
+  try {
+    await navigator.clipboard.writeText(link)
+    box.hidden = true
+    carMsg('Challenge link copied. Anyone who opens it can race ' + car.name + ' on the Grand Prix.')
+  } catch {
+    box.value = link // the browser would not copy for us: show the link to copy by hand
+    box.hidden = false
+    box.select()
+    carMsg('Copy this link and send it. Anyone who opens it can race your car.')
+  }
+})
+// Receive: a link brings a car to beat, or one remembered from earlier is brought back
+function takeChallenge() {
+  const fromLink = carFromChallenge(location.hash)
+  if (fromLink) {
+    history.replaceState(null, '', location.pathname + location.search) // the long code is not left in the address bar
+    if ('error' in fromLink) challenge = fromLink
+    else setChallenge(fromLink)
+    setTab('race')
+    raceView?.render()
+    return
+  }
+  const text = load<string>(KEYS.challenge)
+  const saved = text ? carFromJson(text) : null
+  if (saved && !('error' in saved)) challenge = { car: saved, result: raceCar(saved) }
+}
+$('challengeClear').addEventListener('click', () => {
+  challenge = null
+  save(KEYS.challenge, null)
+  raceView?.render()
+})
+window.addEventListener('hashchange', () => {
+  if (location.hash.startsWith('#challenge=')) takeChallenge()
+})
+takeChallenge()
+raceView.render()
 renderGarage()
 renderChip()
 drawGraph([])

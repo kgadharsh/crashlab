@@ -33,6 +33,7 @@ A racing game HUD: dark, bold and fast. Big lap timers, sector splits, telemetry
 - **Always-on leaderboard.** A permanent hidden-track ranking you can enter at any time.
 - **Score:** tracks finished first, then total time.
 - **Ghost replays.** Watch your car against the leader's on the same track, with the time gap shown at each sector.
+- **Challenge links (built, no server).** "Copy challenge link" puts your car in a web address (`src/challenge.ts`). A friend who opens it sees how that car does on the Grand Prix and can race their own car against it. The car is checked like any car file, and its result is worked out again on the friend's own device, so both cars run on the same engine.
 - **Trust:** the simulation is deterministic. A server re-runs each submitted car on secret tracks, and the tracks never reach the browser.
 
 ## Build order

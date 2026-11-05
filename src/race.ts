@@ -75,6 +75,18 @@ export function raceCar(car: CarFile): RaceResult {
 export const better = (a: { finished: number; totalTime: number }, b: { finished: number; totalTime: number }) =>
   a.finished !== b.finished ? a.finished > b.finished : a.totalTime < b.totalTime
 
+// Who won a head-to-head, in plain words, from "you" (the first result) against a named rival
+export function versus(mine: RaceResult, theirs: RaceResult, name: string): string {
+  const tracks = (n: number) => n + (n === 1 ? ' more track' : ' more tracks') + ' finished.'
+  if (better(mine, theirs)) {
+    return mine.finished > theirs.finished ? 'You beat ' + name + ': ' + tracks(mine.finished - theirs.finished) : 'You beat ' + name + ' by ' + (theirs.totalTime - mine.totalTime).toFixed(1) + ' s.'
+  }
+  if (better(theirs, mine)) {
+    return theirs.finished > mine.finished ? name + ' beat you: ' + tracks(theirs.finished - mine.finished) : name + ' beat you by ' + (mine.totalTime - theirs.totalTime).toFixed(1) + ' s.'
+  }
+  return 'A dead heat with ' + name + '.'
+}
+
 // Medals: finishing gets you on the podium, speed gets you gold. Set 5 Nov 2026 from 16 trained
 // cars (see docs/experiments.md): 9 finished all 8, in 143 to 156 s, and 149 s gives gold to about
 // the fastest quarter of all cars. Times barely differ between cars that finish, so revisit this

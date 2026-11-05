@@ -5,16 +5,20 @@ import { genomeToBrain } from './genome'
 import { CHECKPOINTS, createCar, drive, type Brain, type Car } from './sim'
 import { shapeOf, specOf, type CarSpec } from './setup'
 import {
-  CAUSE_LABEL, GRAND_PRIX, MEDAL_RULES, RACE_COUNT, adviceFor, better, finishLap, lapIsOver, medalFor, raceTrack, summarise,
+  CAUSE_LABEL, GRAND_PRIX, MEDAL_RULES, RACE_COUNT, adviceFor, better, finishLap, lapIsOver, medalFor, raceTrack, summarise, versus,
   type Medal, type RaceResult, type TrackResult,
 } from './race'
 import { COL, H, W, clear, drawCar, drawCrash, drawMinimap, drawRays, drawTrack, follow, withCamera, type Camera } from './draw'
+
+// A friend's car to beat (with its result on this device), or why their link could not be used
+export type Challenge = { car: CarFile; result: RaceResult } | { error: string }
 
 export type RaceDeps = {
   ctx: CanvasRenderingContext2D
   cam: Camera
   getCar: () => CarFile | null
   isStale: () => boolean
+  getChallenge: () => Challenge | null
   hudText: (text: string, x: number, y: number, size: number, colour?: string, align?: CanvasTextAlign) => void
   setStrip: (cells: [string, string][]) => void
 }
@@ -191,6 +195,20 @@ export function createRaceView(d: RaceDeps) {
       $('resultLine').textContent = s.finished + ' of ' + RACE_COUNT + ' finished · ' + s.totalTime.toFixed(1) + ' s total'
       $('advice').textContent = adviceFor(s)
     }
+    // a friend's challenge, and how your latest race compares with it
+    const ch = d.getChallenge()
+    $('challengePanel').hidden = !ch
+    if (ch && 'error' in ch) {
+      $('challengeLine').textContent = ch.error + ' Ask your friend to send it again.'
+      $('challengeVs').textContent = ''
+    } else if (ch) {
+      const rival = ch.result
+      const rivalMedal = medalFor(rival)
+      $('challengeLine').textContent =
+        ch.car.name + ' got ' + (rivalMedal ? rivalMedal.toUpperCase() + ': ' : '') + rival.finished + ' of ' + RACE_COUNT + ' finished · ' + rival.totalTime.toFixed(1) + ' s total.' +
+        (car ? ' Race your car on the same tracks and beat it.' : ' Train a car in Practice, then race it here.')
+      $('challengeVs').textContent = live?.summary ? versus(live.summary, rival, ch.car.name) : ''
+    }
     $('pb').textContent = best
       ? (live?.newBest ? 'New personal best! ' : 'Personal best: ') + best.finished + '/' + RACE_COUNT + ' · ' + best.totalTime.toFixed(1) + ' s · ' + best.name
       : 'No personal best yet.'
@@ -229,6 +247,8 @@ export function createRaceView(d: RaceDeps) {
       hudText(medal ? medal.toUpperCase() : 'NO MEDAL', W / 2, H / 2 - 16, 64, medal ? MEDAL_COLOUR[medal] : COL.muted, 'center')
       hudText(r.summary.finished + ' / ' + RACE_COUNT + ' FINISHED  ·  ' + r.summary.totalTime.toFixed(1) + ' S', W / 2, H / 2 + 22, 22, COL.text, 'center')
       if (r.newBest) hudText('NEW PERSONAL BEST', W / 2, H / 2 + 54, 18, COL.accent, 'center')
+      const ch = d.getChallenge()
+      if (ch && !('error' in ch)) hudText(versus(r.summary, ch.result, ch.car.name).toUpperCase(), W / 2, H / 2 + 86, 18, COL.text, 'center')
     } else {
       hudText('TRACK ' + (r.index + 1) + ' / ' + RACE_COUNT, 16, 42, 34)
       hudText(time(result?.time ?? lap.steps / 60), 16, 74, 30, result ? (result.time !== null ? COL.good : COL.bad) : COL.text)
