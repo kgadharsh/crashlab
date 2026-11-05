@@ -100,10 +100,18 @@ export type GenerationReport = {
   population: Genome[] // every car of this generation, best first
 }
 
+// A starting population built from one existing car: the car itself, then copies of it with the usual mutations
+export function populationFrom(start: Genome, settings: Settings, rng: Rng): Genome[] {
+  return Array.from({ length: settings.populationSize }, (_, i) =>
+    i === 0 ? [...start] : start.map((gene) => (rng() < settings.mutationRate ? gene + gauss(rng) * settings.mutationSize : gene)),
+  )
+}
+
 // An evolution you can advance one generation at a time (so a viewer can watch each one).
 // tracks hands each generation its own tracks. The caller decides when to stop.
-export function createEvolution(rng: Rng, settings: Settings, drive: Drive, tracks: (generation: number) => Track[]) {
-  let genomes = Array.from({ length: settings.populationSize }, () => randomGenome(settings.genomeLength, rng))
+// start: an existing car to carry on from, instead of beginning with random brains.
+export function createEvolution(rng: Rng, settings: Settings, drive: Drive, tracks: (generation: number) => Track[], start?: Genome) {
+  let genomes = start ? populationFrom(start, settings, rng) : Array.from({ length: settings.populationSize }, () => randomGenome(settings.genomeLength, rng))
   let gen = 0
   return {
     step(): GenerationReport {

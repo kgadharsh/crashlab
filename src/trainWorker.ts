@@ -6,7 +6,8 @@
 import { createTraining } from './training'
 import { REPLAY_EVERY, TRAINING_BUDGET, type Build } from './setup'
 
-type Message = { type: 'start'; build: Build; seed: number; watch: boolean }
+// start: an existing car to carry on from, and budget: how much to spend (both left out for a fresh run)
+type Message = { type: 'start'; build: Build; seed: number; watch: boolean; start?: number[]; budget?: number }
 
 const worker = self as unknown as {
   postMessage(message: unknown): void
@@ -14,7 +15,7 @@ const worker = self as unknown as {
 }
 
 // Run one generation and report it. Returns true when the budget is spent.
-function runOne(run: ReturnType<typeof createTraining>, watch: boolean): boolean {
+function runOne(run: ReturnType<typeof createTraining>, watch: boolean, budget: number): boolean {
   const { report, spent, finished } = run.step()
   const replay = watch && report.generation % REPLAY_EVERY === 0
   worker.postMessage({
@@ -26,7 +27,7 @@ function runOne(run: ReturnType<typeof createTraining>, watch: boolean): boolean
     meanCheckpoints: report.meanCheckpoints,
     bestSteps: report.best.steps / report.tracks, // how long the best car lasted, per track
     spent,
-    budget: TRAINING_BUDGET,
+    budget,
     population: replay ? report.population : null,
   })
   if (finished) {
@@ -39,6 +40,7 @@ function runOne(run: ReturnType<typeof createTraining>, watch: boolean): boolean
 worker.onmessage = (event) => {
   const m = event.data
   if (m.type !== 'start') return
-  const run = createTraining(m.build, m.seed)
-  while (!runOne(run, m.watch)) { /* keep going */ }
+  const budget = m.budget ?? TRAINING_BUDGET
+  const run = createTraining(m.build, m.seed, budget, m.start)
+  while (!runOne(run, m.watch, budget)) { /* keep going */ }
 }

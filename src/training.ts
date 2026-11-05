@@ -19,15 +19,18 @@ const FINAL_LAYOUTS = 2
 
 export type TrainingStep = { report: GenerationReport; spent: number; finished: boolean }
 
-export function createTraining(build: Build, seed: number, budget = TRAINING_BUDGET) {
+// start: an existing car to carry on training, instead of beginning from random brains. It also
+// competes in the final pick, so carrying on never hands back a car the judging scores worse.
+export function createTraining(build: Build, seed: number, budget = TRAINING_BUDGET, start?: number[]) {
   const spec = specOf(build)
   const shape = shapeOf(build.sensors)
+  if (start && start.length !== genomeLength(shape)) throw new Error('That car was built for different sensors')
   const trackRng = makeRng(seed + 77777) // separate, so the tracks drawn do not change the evolution's own luck
   const practice = build.practice.map(practiceTrack)
   const layouts = (tracks: Track[], count: number) => Array.from({ length: count }, () => tracks.map((t) => moveBlocks(t, trackRng))).flat()
   const drive: Drive = (genome, track) => runBrain(genomeToBrain(genome, shape), track, spec, build.reward)
   const settings = { ...DEFAULT_SETTINGS, populationSize: POPULATION, genomeLength: genomeLength(shape) }
-  const evolution = createEvolution(makeRng(seed), settings, drive, () => layouts(practice, 1))
+  const evolution = createEvolution(makeRng(seed), settings, drive, () => layouts(practice, 1), start)
   let spent = 0
   let generations = 0
   return {
@@ -41,7 +44,8 @@ export function createTraining(build: Build, seed: number, budget = TRAINING_BUD
     // Pick the car: the finalists drive the practice tracks and their mirrored and backwards versions
     winner(population: number[][]): number[] {
       const judging = practice.flatMap((t) => [t, ...trackVariants(t)])
-      return scorePopulation(population.slice(0, FINALISTS), drive, layouts(judging, FINAL_LAYOUTS))[0].genome
+      const finalists = start ? [start, ...population.slice(0, FINALISTS - 1)] : population.slice(0, FINALISTS)
+      return scorePopulation(finalists, drive, layouts(judging, FINAL_LAYOUTS))[0].genome
     },
     get generations() {
       return generations

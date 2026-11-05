@@ -94,4 +94,22 @@ Training now picks the car this way (`src/training.ts`). The same 4 seeds chose 
 - **A 150 s line** would give 38% gold, 19% silver, 38% bronze and 6% no medal. But with a 13 s spread it would split cars that are within noise of each other (the default runs at 147, 148 and 148 s would win gold, the one at 151 s silver).
 - The 4 Nov line (200 s, from times of 183 to 312 s) predates the mirrored-track pick and was out of date.
 - **Decision (5 Nov 2026): `GOLD_TIME` is now 149 s**, set before any playtest. On these 16 cars it gives 4 gold, 5 silver, 6 bronze and 1 with no medal. The line at 150 s would give 6 gold, and at 148 s only 2. The default build's four times were 146.9, 148.2, 148.3 and 150.6 s, so three of them win gold and one gets silver. Revisit after the playtest, once real players have raced.
-- More practice tracks and wider vision are not safe upgrades: six tracks finished all 8 on 1 of 3 seeds and wide vision on 2 of 3, against 4 of 4 for the default. Three seeds is a small sample.
+- More practice tracks and wider vision are not safe upgrades (but see the next section): six tracks finished all 8 on 1 of 3 seeds and wide vision on 2 of 3, against 4 of 4 for the default. Three seeds is a small sample.
+
+## 5 Nov 2026: does carrying on from a trained car help?
+
+`scripts/keepTraining.ts`, default build, seeds 21 to 24. Each car A is trained normally. Training then carries on from A with 30% of the budget (`KEEP_TRAINING_SHARE`), once on the same four tracks and once on six (adding two). The final pick includes A itself. All cars were raced on the Grand Prix.
+
+| Seed | Car A | Carried on, same 4 tracks | Carried on, 6 tracks | Six-track car from scratch |
+|---|---|---|---|---|
+| 21 | 8/8, 148.2 s | **7/8** | 8/8, 148.6 s | 7/8 |
+| 22 | 8/8, 148.3 s | 8/8, 147.4 s | 8/8, 147.3 s | 2/8 |
+| 23 | 8/8, 146.9 s | 8/8, 146.9 s | 8/8, 146.3 s | 8/8, 154.0 s |
+| 24 | 8/8, 150.6 s | 8/8, 148.3 s | 8/8, 148.8 s | not run |
+
+- **Adding tracks by carrying on never lost a track.** It beat car A on 3 of 4 seeds, by 0.6 to 1.8 s, and was 0.4 s slower on the fourth. On seed 24 it turned a silver (150.6 s) into a gold at the 149 s line.
+- **Starting a six-track car from scratch was much worse** (7/8, 2/8, then 8/8 in 154 s), and it takes the whole budget. Carrying on took about 9 to 16 generations.
+- **Carrying on over the same four tracks is riskier.** It beat car A on 2 of 4, tied on 1 (A was picked again), and lost a track on 1. The final pick only sees practice tracks and their mirrored versions, so it can choose a car that is worse on the Grand Prix.
+- Four seeds, default build only. Treat it as a direction.
+
+Built from this: the **Keep training** button (30% of the budget, needs the same number of rays) and **Switch to previous car**, because every run remembers the car it replaced and a worse result can be undone.

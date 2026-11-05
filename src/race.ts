@@ -109,6 +109,6 @@ export function adviceFor(result: RaceResult): string {
   const counts = new Map<Cause, number>()
   for (const t of result.tracks) if (t.cause) counts.set(t.cause, (counts.get(t.cause) ?? 0) + 1)
   const top = [...counts.entries()].sort((a, b) => b[1] - a[1])[0]
-  if (!top) return 'Every track finished. Now chase time: a faster setup or a pace bonus, but watch for new crashes.'
-  return ADVICE[top[0]]
+  if (!top) return 'Every track finished. Now chase time: a faster setup or a pace bonus, but watch for new crashes. Keep training in Practice can also shave a little off the time.'
+  return ADVICE[top[0]] + ' Then press Keep training in Practice to improve this car without starting over.'
 }

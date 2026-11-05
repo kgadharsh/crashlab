@@ -1,6 +1,6 @@
 import './style.css'
 import { GOLD_TIME, RACE_COUNT } from './race'
-import { DEFAULT_BUILD, LIMITS, POPULATION, REPLAY_EVERY, TRAINING_BUDGET, buildProblem, cleanBuild, genomeLength, shapeOf, specOf, type Build } from './setup'
+import { DEFAULT_BUILD, KEEP_TRAINING_SHARE, LIMITS, POPULATION, REPLAY_EVERY, TRAINING_BUDGET, buildProblem, cleanBuild, genomeLength, shapeOf, specOf, type Build } from './setup'
 import { CHECKPOINTS, STALL_STEPS, createCar, drive, type Brain, type Car } from './sim'
 import { PRACTICE, PRACTICE_COUNT, practiceTrack, trackFeatures, trackStats, type Track } from './track'
 import { genomeToBrain } from './genome'
@@ -9,7 +9,7 @@ import { createRaceView } from './raceView'
 import { COL, H, W, clear, drawCar, drawCrash, drawMinimap, drawRays, drawSensorFan, drawThumb, drawTrack, fanFrame, fit, follow, lookAt, newCamera, withCamera } from './draw'
 
 // ---------- SAVED STATE ----------
-const KEYS = { draft: 'crashlab.draft', car: 'crashlab.car' }
+const KEYS = { draft: 'crashlab.draft', car: 'crashlab.car', previous: 'crashlab.previous' }
 function load<T>(key: string): T | null {
   try {
     const text = localStorage.getItem(key)
@@ -37,6 +37,14 @@ const savedCar = load<string>(KEYS.car)
 const parsedCar = savedCar ? carFromJson(savedCar) : null
 let car: CarFile | null = parsedCar && !('error' in parsedCar) ? parsedCar : null
 let carBrain: Brain | null = car ? genomeToBrain(car.genome, shapeOf(car.build.sensors)) : null
+// The car before the latest training run, so a run that turns out worse can be undone
+const savedPrevious = load<string>(KEYS.previous)
+const parsedPrevious = savedPrevious ? carFromJson(savedPrevious) : null
+let previousCar: CarFile | null = parsedPrevious && !('error' in parsedPrevious) ? parsedPrevious : null
+function rememberPrevious(c: CarFile | null) {
+  previousCar = c
+  save(KEYS.previous, c ? carToJson(c) : null)
+}
 
 const sameBuild = (a: Build, c: Build) => JSON.stringify(a) === JSON.stringify(c)
 const carIsStale = () => !!car && !sameBuild(car.build, draft.build)
@@ -125,8 +133,10 @@ document.querySelector('#app')!.innerHTML = `
           <div class="legend"><span id="budgetUsed"></span><span id="budgetGen"></span></div></div>
         <div class="actions">
           <button class="btn primary" id="train">Start training</button>
+          <button class="btn" id="keep">Keep training</button>
           <button class="btn" id="skip" hidden>Skip to the end</button>
         </div>
+        <p class="tip" id="keepHint" style="margin-top:8px"></p>
         <label class="row" style="grid-template-columns:auto 1fr;margin-top:10px"><input type="checkbox" id="watchAll" checked /><span>Replay every ${REPLAY_EVERY}th generation</span></label>
         <label class="row" style="grid-template-columns:auto 1fr"><input type="checkbox" id="bestOnly" /><span>Show only the best car (lighter on phones)</span></label>
         <label class="row" style="grid-template-columns:auto 1fr"><span>Watch on</span><select id="watchTrack" aria-label="Practice track to watch"></select></label>
@@ -150,6 +160,7 @@ document.querySelector('#app')!.innerHTML = `
           <button class="btn" id="loadCar">Load car</button>
           <input type="file" id="file" accept=".json,application/json" hidden />
         </div>
+        <div class="actions"><button class="btn" id="swapCar" hidden>Switch to previous car</button></div>
         <p class="msg" id="carMsg"></p>
       </div>
     </div>
@@ -337,7 +348,7 @@ function renderChip() {
 // ---------- TRAINING ----------
 type History = { best: number; mean: number }[] // laps driven in one practice attempt: the best car, and the average car
 type Finish = { genome: number[]; generations: number }
-type Run = { build: Build; name: string; history: History; watching: boolean; judging: boolean; finish: Finish | null; spent: number; startedAt: number; tipStart: number }
+type Run = { build: Build; name: string; history: History; watching: boolean; judging: boolean; finish: Finish | null; spent: number; budget: number; keep: boolean; startedAt: number; tipStart: number }
 
 // Tips shown while training runs, a new one every few seconds. Each one is something that helps
 // build a faster car, and none is more than a sentence.
@@ -352,13 +363,14 @@ const TIPS = [
   'Race day counts tracks finished first, then total time. Gold needs all ' + RACE_COUNT + ' tracks in under ' + GOLD_TIME + ' seconds.',
   'You can tune your next car in the Garage while this one trains.',
   'Your old car stays yours until the new one finishes, so you can race it on the Race tab in the meantime.',
+  'Keep training carries on from your car in about a third of the time, so you can add a practice track or change your style without starting over.',
 ]
 const TIP_SECONDS = 9
 const currentTip = (r: Run) => TIPS[(r.tipStart + Math.floor((performance.now() - r.startedAt) / (TIP_SECONDS * 1000))) % TIPS.length]
 
 let worker: Worker | null = null
 let run: Run | null = null
-let lastRun: { spent: number; generations: number } | null = null // what the finished run used, for the budget panel
+let lastRun: { spent: number; generations: number; budget: number } | null = null // what the finished run used, for the budget panel
 
 type Swarm = { gen: number; genomes: number[][]; bestSteps: number; trackId: number; track: Track; cars: Car[]; brains: Brain[]; done: boolean[]; hold: number; trails: { x: number; y: number }[][]; lead: number; speed: number; owed: number; frames: number; plays: number }
 let swarm: Swarm | null = null
@@ -383,29 +395,35 @@ function stopTraining(text: string) {
 
 function finishTraining(f: Finish) {
   const r = run!
-  lastRun = { spent: r.spent, generations: f.generations }
+  lastRun = { spent: r.spent, generations: f.generations, budget: r.budget }
+  if (car) rememberPrevious(car) // the car this run replaces, in case the new one is worse
   car = { name: r.name, build: r.build, genome: f.genome }
   carBrain = genomeToBrain(f.genome, shapeOf(r.build.sensors))
   save(KEYS.car, carToJson(car))
   drawGraph(r.history)
   // the test drive only starts if you are watching it; from another tab the car is simply ready
   const here = tab === 'practice'
-  stopTraining('Done: ' + f.generations + ' generations. ' + (here ? 'Here is your car on its first test drive.' : 'Your new car is ready: test drive it in Practice, or race it.'))
+  const worse = r.keep ? ' If it feels worse, switch back with "Switch to previous car" under Your car.' : ''
+  stopTraining('Done: ' + f.generations + ' generations. ' + (here ? 'Here is your car on its first test drive.' : 'Your new car is ready: test drive it in Practice, or race it.') + worse)
   renderChip()
   raceView?.render()
   if (here) startTestDrive()
 }
 
-$('train').addEventListener('click', () => {
-  if (worker) {
-    stopTraining('Training stopped. Your car from before is unchanged.')
-    return
-  }
+// Keep training carries on from the car you have, so its brain must be the same size as the garage's
+const canKeepTraining = () => !!car && genomeLength(shapeOf(b.sensors)) === car.genome.length
+
+// keep: carry on from your car with a share of the budget, instead of starting from random brains
+function startTraining(keep: boolean) {
+  if (worker) return
+  if (keep && !canKeepTraining()) return
   stopTestDrive()
   const watch = input('watchAll').checked
-  run = { build: clone(b), name: draft.name, history: [], watching: watch, judging: false, finish: null, spent: 0, startedAt: performance.now(), tipStart: Math.floor(Math.random() * TIPS.length) }
+  const budget = keep ? TRAINING_BUDGET * KEEP_TRAINING_SHARE : TRAINING_BUDGET
+  run = { build: clone(b), name: draft.name, history: [], watching: watch, judging: false, finish: null, spent: 0, budget, keep, startedAt: performance.now(), tipStart: Math.floor(Math.random() * TIPS.length) }
   drawGraph([])
-  trainMsg(watch ? 'Training at full speed. Every ' + REPLAY_EVERY + 'th generation is replayed here.' : 'Training at full speed...')
+  const pace = watch ? 'Every ' + REPLAY_EVERY + 'th generation is replayed here.' : ''
+  trainMsg(keep ? 'Carrying on from your car at full speed. ' + pace : watch ? 'Training at full speed. ' + pace : 'Training at full speed...')
   worker = new Worker(new URL('./trainWorker.ts', import.meta.url), { type: 'module' })
   worker.onmessage = (event: MessageEvent) => {
     const m = event.data
@@ -427,8 +445,28 @@ $('train').addEventListener('click', () => {
     }
   }
   worker.onerror = () => stopTraining('Training failed. Try again.')
-  worker.postMessage({ type: 'start', build: run.build, seed: Math.floor(Math.random() * 1e9), watch })
+  worker.postMessage({ type: 'start', build: run.build, seed: Math.floor(Math.random() * 1e9), watch, budget, start: keep ? car!.genome : undefined })
   renderPractice()
+}
+
+$('train').addEventListener('click', () => {
+  if (worker) stopTraining('Training stopped. Your car from before is unchanged.')
+  else startTraining(false)
+})
+$('keep').addEventListener('click', () => startTraining(true))
+
+// Swap back to the car before the latest run (and again, to go forward: the two cars trade places)
+$('swapCar').addEventListener('click', () => {
+  if (worker || !previousCar || !car) return
+  const now = car
+  car = previousCar
+  carBrain = genomeToBrain(car.genome, shapeOf(car.build.sensors))
+  save(KEYS.car, carToJson(car))
+  rememberPrevious(now)
+  stopTestDrive()
+  renderChip()
+  raceView?.render()
+  carMsg('Switched cars. Your other car is now the previous one.')
 })
 
 $('skip').addEventListener('click', () => {
@@ -631,8 +669,9 @@ function renderPractice() {
   renderWatchOptions()
   const training = !!worker
   const spent = run?.spent ?? lastRun?.spent ?? 0
-  $('budgetBar').style.width = (100 * spent) / TRAINING_BUDGET + '%'
-  $('budgetUsed').textContent = (spent / 1e6).toFixed(1) + ' of ' + (TRAINING_BUDGET / 1e6).toFixed(0) + 'M steps'
+  const total = run?.budget ?? lastRun?.budget ?? TRAINING_BUDGET
+  $('budgetBar').style.width = (100 * spent) / total + '%'
+  $('budgetUsed').textContent = (spent / 1e6).toFixed(1) + ' of ' + (total / 1e6).toFixed(0) + 'M steps'
   $('budgetGen').textContent = run
     ? 'generation ' + run.history.length
     : lastRun
@@ -641,6 +680,14 @@ function renderPractice() {
   $('trainState').textContent = training ? (run?.watching ? 'watching' : 'training') : 'ready'
   $('train').textContent = training ? 'Stop' : car ? 'Train a new car' : 'Start training'
   $('skip').hidden = !(training && run?.watching)
+  $<HTMLButtonElement>('keep').disabled = training || !canKeepTraining()
+  $('keepHint').textContent = !car
+    ? 'Keep training carries on from a car, so train one first.'
+    : !canKeepTraining()
+      ? 'Your car has a different number of rays from the garage, so it cannot be carried on. Train a new car instead.'
+      : 'Keep training carries on from your car in about a third of the time. Add practice tracks or change your driving style first, then press it. If the result is worse, switch back under Your car.'
+  $('swapCar').hidden = !previousCar
+  $<HTMLButtonElement>('swapCar').disabled = training
   const spec = specOf(b)
   const rows: [string, string][] = [
     ['Sensors', b.sensors.count + ' rays across ' + b.sensors.spread + '°'],
@@ -799,7 +846,7 @@ function updateTip() {
 function drawTrainingScreen(r: Run) {
   const gen = r.history.length
   const last = r.history[gen - 1]
-  const done = Math.min(1, r.spent / TRAINING_BUDGET)
+  const done = Math.min(1, r.spent / r.budget)
   const cx = W / 2
   const bar = 360
   ctx.strokeStyle = COL.accent // a turning arc, so the screen is clearly alive
@@ -809,7 +856,7 @@ function drawTrainingScreen(r: Run) {
   // the text is large because on a phone this whole screen is drawn small
   ctx.arc(cx, H / 2 - 128, 14, turn, turn + 4)
   ctx.stroke()
-  hudText(r.judging ? 'PICKING YOUR CAR' : 'TRAINING AT FULL SPEED', cx, H / 2 - 78, 24, COL.accent, 'center')
+  hudText(r.judging ? 'PICKING YOUR CAR' : r.keep ? 'CARRYING ON FROM YOUR CAR' : 'TRAINING AT FULL SPEED', cx, H / 2 - 78, 24, COL.accent, 'center')
   hudText('GEN ' + gen, cx, H / 2 - 4, 84, COL.text, 'center')
   ctx.fillStyle = COL.road
   ctx.fillRect(cx - bar / 2, H / 2 + 26, bar, 10)
@@ -874,7 +921,7 @@ function draw() {
     setStrip([
       ['Replaying gen', String(sw.gen + 1)],
       ['Training at gen', String(run.history.length)],
-      ['Budget used', Math.round((100 * run.spent) / TRAINING_BUDGET) + '<small>%</small>'],
+      ['Budget used', Math.round((100 * run.spent) / run.budget) + '<small>%</small>'],
       ['Best car', (run.history[sw.gen]?.best.toFixed(2) ?? '–') + '<small> laps</small>'],
     ])
     return
