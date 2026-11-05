@@ -3,7 +3,7 @@
 export type Look = { name: string; stars: number }
 export const LOOKS: Look[] = [
   { name: 'Classic', stars: 0 },
-  { name: 'Arrow', stars: 12 }, // a first trained car earns about 24 stars on the track board, so this one comes quickly
+  { name: 'Arrow', stars: 12 }, // a first trained car earns about 16 to 28 stars on the track board, so this one comes straight away
   { name: 'Wedge', stars: 30 },
   { name: 'Needle', stars: 48 },
   { name: 'Hyper', stars: 70 }, // of 92 in all: 12 tracks on each road at 3 stars, and 10 for each Grand Prix gold

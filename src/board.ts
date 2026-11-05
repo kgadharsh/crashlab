@@ -8,19 +8,21 @@ import { shapeOf, specOf } from './setup'
 import { practiceOnRoad } from './track'
 import type { Medal } from './race'
 
-// Par lap times in seconds on a dry road, one per practice track (in track order). They are the laps of one
-// trained default car, trimmed by 3%, so gold means beating what an ordinary car does there.
-// Only one car and one training went into them: they are a starting point and may need moving.
-export const PAR = [14.6, 18.6, 16.3, 16.4, 15.1, 22.7, 19.4, 17.4, 15.3, 20.6, 18.6, 17.6]
-const WET_FACTOR = 1.12 // a wet lap takes about 12% longer (measured on the cars that finished wet laps)
-const SILVER_SLACK = 1.08 // silver is within 8% of the gold time
+// Gold lap times in seconds on a dry road, one per practice track (in track order): 0.5% under the median lap of
+// the cars measured by scripts/boardCalibration.ts (four default trainings, and one each of wide vision, fast and
+// cautious, and six practice tracks, all on a dry road). Lap times cluster tightly, because cars drive near
+// top speed, so gold means clearly beating a typical car and silver means being typical.
+// Only seven cars went into them: see docs/experiments.md before trusting them.
+export const PAR = [15.0, 19.3, 16.7, 16.8, 15.4, 21.7, 18.9, 17.8, 15.5, 20.7, 19.5, 18.0]
+export const WET_FACTOR = 1.1 // a wet lap takes about 10% longer (the median over the laps that finished both ways)
+export const SILVER_SLACK = 1.055 // silver is within 5% of the median lap
 
 export type Lap = { id: number; time: number | null; progress: number; medal: Medal }
 
 // The gold time for a track on a dry or a wet road
 export const parFor = (id: number, wet: boolean) => (PAR[id] ?? Infinity) * (wet ? WET_FACTOR : 1)
 
-// Gold: at or under par. Silver: within 8% of it. Bronze: finished the lap.
+// Gold: at or under par. Silver: within 5.5% of it. Bronze: finished the lap.
 export function lapMedal(id: number, seconds: number | null, wet: boolean): Medal {
   if (seconds === null) return null
   const par = parFor(id, wet)
