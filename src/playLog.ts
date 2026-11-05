@@ -31,6 +31,8 @@ export function logEvent(entry: NewEntry) {
   }
 }
 
+export const hasRaced = () => read().some((e) => e.k === 'race')
+
 const mins = (ms: number) => (ms / 60000).toFixed(1) + ' min'
 
 // The text the tester pastes into the form. Plain lines, so it is readable as it is.

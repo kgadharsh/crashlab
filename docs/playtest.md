@@ -54,3 +54,11 @@ Have the tester press **Copy playtest notes** (Practice tab, under Your car) and
 Still send me what the form can't hold: your observer notes from this sheet, and a screenshot of their Garage setup and race result if you took them. I'll go through it with you and say what to fix first.
 
 Don't count a tester who never reached a first race as a "no" on racing again. Write down where they got stuck. That is its own finding.
+
+## Round 1 (5 Nov 2026)
+
+Six form responses arrived, none observed. Five testers never raced and one raced once, so the question above was not answered and R4 stays on hold. Every notes sheet was copied within about a minute of a training ending: after training the game did not point at the Race tab, and the form asked for the notes without mentioning racing.
+
+Changed for round 2: a bar at the bottom of the screen takes a player to the Race tab when a training ends; "Race your car" now sits at the top of the Race panel; the form asks testers to race before pasting; and "Copy playtest notes" says so if there has been no race yet. The form already created in Google needs its description and the first question's help text edited by hand to match `docs/playtest-form.gs`.
+
+For round 2, run at least two sessions in person, as described above. A form cannot show why someone stopped.

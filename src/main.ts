@@ -7,7 +7,7 @@ import { PRACTICE, PRACTICE_COUNT, practiceTrack, trackFeatures, trackStats, wet
 import { genomeToBrain } from './genome'
 import { carFromJson, carToJson, type CarFile } from './carFile'
 import { createRaceView, type Challenge } from './raceView'
-import { logEvent, playtestNotes } from './playLog'
+import { hasRaced, logEvent, playtestNotes } from './playLog'
 import { COL, H, W, clear, drawCar, drawCrash, drawMinimap, drawRays, drawSensorFan, drawThumb, drawTrack, fanFrame, fit, follow, lookAt, newCamera, withCamera } from './draw'
 
 // ---------- SAVED STATE ----------
@@ -186,14 +186,14 @@ document.querySelector('#app')!.innerHTML = `
       <div class="panel">
         <h2><span id="gpTitle">Grand Prix 1</span><span class="aside">8 secret tracks</span></h2>
         <div class="actions"><button class="btn small primary" id="gp0" aria-pressed="true">Dry road</button><button class="btn small" id="gp1" aria-pressed="false">Wet road</button></div>
-        <p class="tip" style="margin-top:8px">Your car drives 8 tracks it has never seen, once each. Most tracks finished wins, then the lowest total time. Grand Prix 2 is the same tracks on a wet road.</p>
-        <p class="tip" id="medalRules"></p>
         <div class="actions">
-          <button class="btn primary" id="raceGo">Race your car</button>
+          <button class="btn primary wide" id="raceGo">Race your car</button>
           <button class="btn" id="raceSpeed">Speed 4×</button>
           <button class="btn" id="raceSkip">Skip to results</button>
         </div>
         <p class="msg" id="raceMsg"></p>
+        <p class="tip" style="margin-top:8px">Your car drives 8 tracks it has never seen, once each. Most tracks finished wins, then the lowest total time. Grand Prix 2 is the same tracks on a wet road.</p>
+        <p class="tip" id="medalRules"></p>
       </div>
       <div class="panel">
         <h2>Timing<span class="aside" id="raceTotal"></span></h2>
@@ -208,7 +208,12 @@ document.querySelector('#app')!.innerHTML = `
       <p class="tip" id="pb"></p>
     </div>
   </aside>
-</main>`
+</main>
+<div class="nudge" id="raceNudge" role="status" hidden>
+  <p id="nudgeText"></p>
+  <button class="btn primary" id="nudgeGo">Race your car →</button>
+  <button class="btn small" id="nudgeClose" aria-label="Dismiss">✕</button>
+</div>`
 
 const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T
 const canvas = $<HTMLCanvasElement>('track')
@@ -217,11 +222,28 @@ const gcanvas = $<HTMLCanvasElement>('graph')
 const gctx = gcanvas.getContext('2d')!
 const strip = $('strip')
 
+// ---------- RACE NUDGE ----------
+// When a training ends, a bar at the bottom of the screen says the car is ready and takes the player to the Race tab.
+// Without it, nothing on the Practice screen says that racing is the next step.
+const nudge = $('raceNudge')
+function showNudge(carName: string) {
+  $('nudgeText').textContent = carName + ' is trained. Race it on 8 tracks it has never seen.'
+  nudge.hidden = false
+  document.body.classList.add('has-nudge') // keeps the bar from covering the last panel
+}
+function hideNudge() {
+  nudge.hidden = true
+  document.body.classList.remove('has-nudge')
+}
+$('nudgeGo').addEventListener('click', () => setTab('race'))
+$('nudgeClose').addEventListener('click', hideNudge)
+
 // ---------- TABS ----------
 type Tab = 'garage' | 'practice' | 'race'
 let tab: Tab = 'garage'
 function setTab(t: Tab) {
   tab = t
+  if (t === 'race') hideNudge()
   document.querySelectorAll<HTMLButtonElement>('.tab[data-tab]').forEach((btn) => {
     btn.classList.toggle('on', btn.dataset.tab === t)
     btn.setAttribute('aria-selected', String(btn.dataset.tab === t))
@@ -448,6 +470,7 @@ function finishTraining(f: Finish) {
   renderChip()
   raceView?.render()
   if (here) startTestDrive()
+  if (tab !== 'race') showNudge(car.name)
 }
 
 // Keep training carries on from the car you have, so its brain must be the same size as the garage's
@@ -457,6 +480,7 @@ const canKeepTraining = () => !!car && genomeLength(shapeOf(b.sensors)) === car.
 function startTraining(keep: boolean) {
   if (worker) return
   if (keep && !canKeepTraining()) return
+  hideNudge()
   stopTestDrive()
   const watch = input('watchAll').checked
   const budget = keep ? TRAINING_BUDGET * KEEP_TRAINING_SHARE : TRAINING_BUDGET
@@ -1079,15 +1103,17 @@ $('shareCar').addEventListener('click', async () => {
 // Playtest notes: what happened in this browser, copied to paste into the feedback form. Nothing is sent anywhere.
 $('notes').addEventListener('click', async () => {
   const text = playtestNotes(car?.build ?? null, car?.name ?? null)
+  // the notes are most useful after a race, and this button sits right under a fresh training
+  const raceFirst = hasRaced() ? '' : ' You have not raced yet: race your car on the Race tab first, then copy the notes again.'
   try {
     await navigator.clipboard.writeText(text)
-    carMsg('Notes copied. Paste them into the feedback form.')
+    carMsg('Notes copied. Paste them into the feedback form.' + raceFirst)
   } catch {
     const box = $<HTMLInputElement>('shareLink')
     box.value = text.replace(/\n/g, ' | ')
     box.hidden = false
     box.select()
-    carMsg('Copy this text into the feedback form.')
+    carMsg('Copy this text into the feedback form.' + raceFirst)
   }
 })
 // Receive: a link brings a car to beat, or one remembered from earlier is brought back

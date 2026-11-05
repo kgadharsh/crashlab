@@ -251,6 +251,31 @@ input[type='range']:focus-visible { outline: 2px solid var(--tele); outline-offs
 .btn:focus-visible { outline: 2px solid var(--tele); outline-offset: 2px; }
 .actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
 
+/* the bar that says a trained car is ready to race */
+.nudge {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 6;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 20px;
+  background: var(--panel-2);
+  border-top: 2px solid var(--accent);
+  box-shadow: 0 -8px 24px rgba(0, 0, 0, 0.5);
+}
+.nudge p { margin: 0; flex: 1; font-weight: 600; }
+.nudge .btn.primary { padding: 12px 18px; font-size: 15px; }
+body.has-nudge { padding-bottom: 76px; }
+@media (max-width: 960px) {
+  .nudge { flex-wrap: wrap; padding: 12px 16px; }
+  .nudge p { flex: 1 1 100%; }
+  .nudge .btn.primary { flex: 1; }
+  body.has-nudge { padding-bottom: 124px; }
+}
+
 /* budget */
 .budget { margin-top: 4px; }
 .budget .bar { height: 10px; }
