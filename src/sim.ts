@@ -5,7 +5,14 @@ import { DEFAULT_SPEC, type CarSpec, type Reward } from './setup'
 
 export { CHECKPOINTS, CHECKPOINT_STRIDE, DEFAULT_TRACK }
 export type { Track, Brain }
-export type Input = { throttle: number; steer: number }
+export type Input = { throttle: number; steer: number; boost?: boolean }
+
+// Nitro (an experiment, only for builds that ask for it): a limited charge, spent a step at a time,
+// that doubles acceleration and lifts top speed. Above the car's grip speed turning weakens as it
+// speeds up, so boosting in a bend is dangerous without any extra rule.
+export const NITRO_STEPS = 240 // 4 seconds of boost in a lap
+const NITRO_ACCEL = 2
+const NITRO_TOP = 1.35
 
 // ---------- FIXED PHYSICS (the same for every car) ----------
 export const CAR_RADIUS = 12
@@ -39,6 +46,7 @@ export type Car = {
   speedSum: number // for the average speed
   steerChange: number // total change in steering, for smoothness
   lastSteer: number
+  boost: number // nitro steps left
   near: Float64Array // walls a ray could reach from nearAt, refreshed as the car moves (see nearbyWalls)
   touch: Float64Array // the few of them the car itself could touch (the crash test only needs these)
   nearAt: Point
@@ -60,6 +68,7 @@ export function createCar(track: Track = DEFAULT_TRACK, spec: CarSpec = DEFAULT_
     speedSum: 0,
     steerChange: 0,
     lastSteer: 0,
+    boost: spec.nitro ? NITRO_STEPS : 0,
     near: new Float64Array(0),
     touch: new Float64Array(0),
     nearAt: { x: Infinity, y: Infinity },
@@ -213,10 +222,12 @@ function hitsWall(walls: Float64Array, car: Car): boolean {
 // Advance one car by one 1/60-second step. A crash marks it dead (it does NOT reset).
 export function step(car: Car, input: Input) {
   if (car.dead) return
-  const { maxSpeed } = car.spec
+  const boosting = input.boost === true && car.boost > 0
+  if (boosting) car.boost--
+  const maxSpeed = boosting ? car.spec.maxSpeed * NITRO_TOP : car.spec.maxSpeed
   const gripSpeed = car.spec.gripSpeed * (car.track.grip ?? 1) // a wet road lowers the speed the tyres can turn at
 
-  car.speed += input.throttle * ACCEL
+  car.speed += input.throttle * (boosting ? ACCEL * NITRO_ACCEL : ACCEL)
   car.speed *= FRICTION
   if (car.speed > maxSpeed) car.speed = maxSpeed
   if (car.speed < MAX_REVERSE) car.speed = MAX_REVERSE
@@ -243,12 +254,14 @@ export function step(car: Car, input: Input) {
 
 // What the brain sees: each ray distance (0 to 1) and the speed
 export function getInputs(car: Car): number[] {
-  return [...car.rays.map((d) => d / car.spec.rayRange), car.speed / car.spec.maxSpeed]
+  const inputs = [...car.rays.map((d) => d / car.spec.rayRange), car.speed / car.spec.maxSpeed]
+  if (car.spec.nitro) inputs.push(car.boost / NITRO_STEPS) // how much charge is left
+  return inputs
 }
 
 export function drive(car: Car, brain: Brain) {
   const { outputs } = think(brain, getInputs(car))
-  step(car, { steer: outputs[0], throttle: outputs[1] })
+  step(car, { steer: outputs[0], throttle: outputs[1], boost: car.spec.nitro && outputs[2] > 0 })
 }
 
 // Progress: whole checkpoints, plus a little extra credit (under 1) for how close the car

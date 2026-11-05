@@ -133,3 +133,17 @@ Built from this: the **Keep training** button (30% of the budget, needs the same
 - Three seeds, default build only.
 
 **Wet gold line (9 cars practised on wet roads, seeds 21 to 29, on the wet Grand Prix):** only 2 finished all 8 (183.7 s and 188.2 s), 4 got bronze (6 or 7 tracks), and 3 got nothing (5, 1 and 1 tracks; two of those were bad training runs). The wet Grand Prix is much harder than the dry one. `WET_GOLD_TIME` is 190 s: any line from 188 s up makes gold mean "finish all 8", and there are too few finishers to split them. Revisit after the playtest.
+
+## 5 Nov 2026: can a network learn nitro?
+
+`scripts/nitroCheck.ts`, default build with nitro (`perks: { nitro: true }`, off by default and not offered in the garage). The brain gets one more input (charge left) and one more output (boost). A lap has 240 steps of boost (4 s), which doubles acceleration and lifts top speed by 35%. Above the car's grip speed, turning weakens as it speeds up, so boosting in a bend is dangerous with no extra rule. Dry Grand Prix, seeds 21 to 23. The same seeds without nitro finished 8/8 in 148.2, 148.3 and 146.9 s. Cars without nitro are bit-identical to before (benchmark fingerprints unchanged).
+
+| Seed | Generations | Grand Prix | Boost charge used per lap | Boost on straights (straights are 64% of the road) |
+|---|---|---|---|---|
+| 21 | 109 | 8/8, 148.0 s | 0% | none used |
+| 22 | 113 | **7/8** | 92% | 77% |
+| 23 | 123 | 8/8, 148.1 s | 0% | none used |
+
+- **Two of three brains never touched the boost button**, so they drove like the no-nitro cars. Evolution did not find it in about 110 generations.
+- **The one brain that did use it** spent 92% of the charge, 77% of it on straights (a little better than the 64% a random choice would give), but crashed on one track and finished 7/8.
+- **Verdict: not worth building as it stands.** The brain does not reliably learn to use it in the fixed budget, and when it does the result is not clearly faster. Things to try if it is revisited: start the boost output slightly positive so cars discover it, reward finishing time more, or give nitro cars a bigger budget. Three seeds, default build only.

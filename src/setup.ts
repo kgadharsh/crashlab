@@ -26,6 +26,7 @@ export type Build = {
   reward: Reward
   practice: number[] // ids of the practice tracks to train on
   weather?: Weather // left out means dry, so every earlier car and build stays valid
+  perks?: { nitro?: boolean } // an experiment (scripts/nitroCheck.ts), not a garage choice: it is not saved with a car
 }
 
 export const LIMITS = {
@@ -52,7 +53,8 @@ export const REPLAY_EVERY = 10 // while watching, every 10th generation is repla
 export const HIDDEN = 5
 export const OUTPUTS = 2 // steering, throttle
 export type Shape = { inputs: number; hidden: number; outputs: number }
-export const shapeOf = (s: Sensors): Shape => ({ inputs: s.count + 1, hidden: HIDDEN, outputs: OUTPUTS }) // rays + speed
+// rays + speed; with nitro also the charge left, and a boost output
+export const shapeOf = (s: Sensors, nitro = false): Shape => ({ inputs: s.count + 1 + (nitro ? 1 : 0), hidden: HIDDEN, outputs: OUTPUTS + (nitro ? 1 : 0) })
 export const genomeLength = (sh: Shape) => sh.hidden * sh.inputs + sh.hidden + sh.outputs * sh.hidden + sh.outputs
 
 // ---------- WHAT THE CHOICES DO TO THE CAR ----------
@@ -61,6 +63,7 @@ export type CarSpec = {
   rayRange: number
   maxSpeed: number
   gripSpeed: number // above this speed the tyres lose turning power
+  nitro: boolean // the car has a limited boost, and its brain a button for it
 }
 
 const lerp = (a: number, b: number, t: number) => a + (b - a) * t
@@ -77,6 +80,7 @@ export function specOf(b: Build): CarSpec {
     rayRange: RAY_RANGE,
     maxSpeed: lerp(5, 7, b.balance),
     gripSpeed: lerp(3.5, 2.5, b.balance),
+    nitro: !!b.perks?.nitro,
   }
 }
 

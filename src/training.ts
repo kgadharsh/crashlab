@@ -23,7 +23,7 @@ export type TrainingStep = { report: GenerationReport; spent: number; finished: 
 // competes in the final pick, so carrying on never hands back a car the judging scores worse.
 export function createTraining(build: Build, seed: number, budget = TRAINING_BUDGET, start?: number[]) {
   const spec = specOf(build)
-  const shape = shapeOf(build.sensors)
+  const shape = shapeOf(build.sensors, !!build.perks?.nitro)
   if (start && start.length !== genomeLength(shape)) throw new Error('That car was built for different sensors')
   const trackRng = makeRng(seed + 77777) // separate, so the tracks drawn do not change the evolution's own luck
   const dry = build.practice.map(practiceTrack)
