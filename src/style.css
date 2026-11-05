@@ -246,6 +246,7 @@ input[type='range']:focus-visible { outline: 2px solid var(--tele); outline-offs
 .btn.primary { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
 .btn.primary:hover:not(:disabled) { filter: brightness(1.08); }
 .btn.small { padding: 6px 10px; font-size: 12px; background: rgba(11,14,18,0.8); }
+.btn.small.primary { background: var(--accent); }
 .btn.wide { width: 100%; padding: 13px 14px; font-size: 16px; }
 .btn:focus-visible { outline: 2px solid var(--tele); outline-offset: 2px; }
 .actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
