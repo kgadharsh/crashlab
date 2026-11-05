@@ -12,6 +12,7 @@ export const H = 500
 export const COL = {
   ground: '#07090c',
   road: '#1b2027',
+  roadWet: '#16283a', // a wet road is bluer, with a sheen
   wall: '#5b6573',
   kerbA: '#e8ecf1',
   kerbB: '#d83a34',
@@ -80,8 +81,13 @@ function shapesOf(track: Track): Shapes {
 // Draw the track in world coordinates (call inside withCamera). detail = false for small pictures.
 export function drawTrack(g: CanvasRenderingContext2D, track: Track, detail = true) {
   const s = shapesOf(track)
-  g.fillStyle = COL.road
+  const wet = track.grip !== undefined && track.grip < 1
+  g.fillStyle = wet ? COL.roadWet : COL.road
   g.fill(s.road, 'evenodd')
+  if (wet) {
+    g.fillStyle = 'rgba(120,190,255,0.07)' // the sheen on a wet road
+    g.fill(s.road, 'evenodd')
+  }
   if (detail) {
     g.strokeStyle = 'rgba(255,255,255,0.08)'
     g.lineWidth = 2

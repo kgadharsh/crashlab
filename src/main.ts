@@ -1,9 +1,9 @@
 import './style.css'
-import { GOLD_TIME, RACE_COUNT, raceCar } from './race'
+import { GOLD_TIME, GRAND_PRIXES, RACE_COUNT, raceCar } from './race'
 import { carFromChallenge, challengeCode } from './challenge'
-import { DEFAULT_BUILD, KEEP_TRAINING_SHARE, LIMITS, POPULATION, REPLAY_EVERY, TRAINING_BUDGET, buildProblem, cleanBuild, genomeLength, shapeOf, specOf, type Build } from './setup'
+import { DEFAULT_BUILD, KEEP_TRAINING_SHARE, LIMITS, POPULATION, REPLAY_EVERY, TRAINING_BUDGET, buildProblem, cleanBuild, genomeLength, shapeOf, specOf, type Build, type Weather } from './setup'
 import { CHECKPOINTS, STALL_STEPS, createCar, drive, type Brain, type Car } from './sim'
-import { PRACTICE, PRACTICE_COUNT, practiceTrack, trackFeatures, trackStats, type Track } from './track'
+import { PRACTICE, PRACTICE_COUNT, practiceTrack, trackFeatures, trackStats, wetTrack, type Track } from './track'
 import { genomeToBrain } from './genome'
 import { carFromJson, carToJson, type CarFile } from './carFile'
 import { createRaceView, type Challenge } from './raceView'
@@ -49,7 +49,7 @@ function rememberPrevious(c: CarFile | null) {
 // A friend's car to beat, from a challenge link. Its result is worked out on this device, so both cars run on the same engine.
 let challenge: Challenge | null = null
 function setChallenge(c: CarFile | null) {
-  challenge = c ? { car: c, result: raceCar(c) } : null
+  challenge = c ? { car: c, results: GRAND_PRIXES.map((gp) => raceCar(c, gp)) } : null
   save(KEYS.challenge, c ? carToJson(c) : null)
 }
 
@@ -128,6 +128,8 @@ document.querySelector('#app')!.innerHTML = `
       </div>
       <div class="panel">
         <h2><span class="n">04</span>Practice tracks<span class="aside" id="pickCount"></span></h2>
+        <label class="row" style="grid-template-columns:auto 1fr"><span>Road</span><select id="weather" aria-label="Road the practice tracks are driven on"><option value="dry">Dry</option><option value="wet">Wet</option></select></label>
+        <p class="tip" style="margin-top:2px">Grand Prix 2 is raced on a wet road. A car practised only on dry roads loses most of its grip there, so practise on wet roads to prepare for it.</p>
         <div class="tracks" id="tracks"></div>
         <p class="tip">Race day uses tracks you have never seen. More practice tracks prepare the car better, but each generation costs more of the budget.</p>
       </div>
@@ -180,8 +182,9 @@ document.querySelector('#app')!.innerHTML = `
         <p class="tip" id="challengeVs" style="color:var(--text);font-weight:600"></p>
       </div>
       <div class="panel">
-        <h2>Grand Prix 1<span class="aside">8 secret tracks</span></h2>
-        <p class="tip" style="margin-top:0">Your car drives 8 tracks it has never seen, once each. Most tracks finished wins, then the lowest total time.</p>
+        <h2><span id="gpTitle">Grand Prix 1</span><span class="aside">8 secret tracks</span></h2>
+        <div class="actions"><button class="btn small primary" id="gp0" aria-pressed="true">Dry road</button><button class="btn small" id="gp1" aria-pressed="false">Wet road</button></div>
+        <p class="tip" style="margin-top:8px">Your car drives 8 tracks it has never seen, once each. Most tracks finished wins, then the lowest total time. Grand Prix 2 is the same tracks on a wet road.</p>
         <p class="tip" id="medalRules"></p>
         <div class="actions">
           <button class="btn primary" id="raceGo">Race your car</button>
@@ -266,6 +269,21 @@ bindSlider('balance', () => b.balance, (v) => (b.balance = v), 100)
 bindSlider('pace', () => b.reward.pace, (v) => (b.reward.pace = v), 100)
 bindSlider('safety', () => b.reward.safety, (v) => (b.reward.safety = v), 100)
 bindSlider('smooth', () => b.reward.smooth, (v) => (b.reward.smooth = v), 100)
+// The road the practice tracks are driven on (a wet road is what Grand Prix 2 is raced on)
+const weatherSel = $<HTMLSelectElement>('weather')
+weatherSel.addEventListener('change', () => {
+  if (weatherSel.value === 'wet') b.weather = 'wet'
+  else delete b.weather // dry is the same as nothing
+  changed()
+})
+// A practice track on the road a build practises on; the wet ones are made once and kept
+const wetPractice = new Map<number, Track>()
+function practiceOn(id: number, weather?: Weather): Track {
+  if (weather !== 'wet') return practiceTrack(id)
+  let t = wetPractice.get(id)
+  if (!t) wetPractice.set(id, (t = wetTrack(practiceTrack(id))))
+  return t
+}
 
 // The practice track picker
 const trackGrid = $('tracks')
@@ -331,6 +349,7 @@ function renderGarage() {
   $('safetyOut').textContent = pct(b.reward.safety)
   $('smoothOut').textContent = pct(b.reward.smooth)
   $('pickCount').textContent = b.practice.length + ' of ' + LIMITS.practice[1] + ' picked'
+  weatherSel.value = b.weather === 'wet' ? 'wet' : 'dry'
   trackGrid.querySelectorAll<HTMLButtonElement>('.track').forEach((btn) => {
     const id = Number(btn.dataset.id)
     const on = b.practice.includes(id)
@@ -378,6 +397,7 @@ const TIPS = [
   'You can tune your next car in the Garage while this one trains.',
   'Your old car stays yours until the new one finishes, so you can race it on the Race tab in the meantime.',
   'Keep training carries on from your car in about a third of the time, so you can add a practice track or change your style without starting over.',
+  'Race day has a wet Grand Prix too. A car practised only on dry roads struggles in the wet, so set Road to Wet in the Garage, or keep a separate car for each.',
 ]
 const TIP_SECONDS = 9
 const currentTip = (r: Run) => TIPS[(r.tipStart + Math.floor((performance.now() - r.startedAt) / (TIP_SECONDS * 1000))) % TIPS.length]
@@ -543,7 +563,7 @@ function makeSwarm(gen: number, genomes: number[][], build: Build, bestSteps: nu
   const shape = shapeOf(build.sensors)
   const spec = specOf(build)
   const trackId = Number(watchSelect.value)
-  const track = practiceTrack(trackId)
+  const track = practiceOn(trackId, build.weather)
   // best car only: the genomes come best first, so the first one is the generation's best car
   const brains = (input('bestOnly').checked ? genomes.slice(0, 1) : genomes).map((g) => genomeToBrain(g, shape))
   const cars = brains.map(() => createCar(track, spec))
@@ -610,7 +630,7 @@ TRACK_NAMES.forEach((n, i) => driveSelect.add(new Option(n, String(i))))
 
 function startTestDrive() {
   if (!car || !carBrain) return
-  const track = practiceTrack(Number(driveSelect.value))
+  const track = practiceOn(Number(driveSelect.value), car.build.weather) // a wet-trained car drives its test on a wet road
   test = { track, car: createCar(track, specOf(car.build)), lastLap: null, bestLap: null, crashFrames: 0, crashAt: null }
   follow(cam, test.car, true)
   renderPractice()
@@ -709,6 +729,7 @@ function renderPractice() {
     ['Top speed · cornering', spec.maxSpeed.toFixed(1) + ' · ' + spec.gripSpeed.toFixed(1)],
     ['Pace · crash · smooth', pct(b.reward.pace) + ' · ' + pct(b.reward.safety) + ' · ' + pct(b.reward.smooth)],
     ['Practice', b.practice.map((id) => TRACK_NAMES[id]).join(', ')],
+    ['Road', b.weather === 'wet' ? 'Wet' : 'Dry'],
   ]
   $('spec').replaceChildren(
     ...rows.flatMap(([k, v]) => {
@@ -804,8 +825,8 @@ function focusCar(): Car | null {
 }
 let parkedCache: { key: string; car: Car } | null = null
 function parked(): Car {
-  const key = JSON.stringify(b.sensors) + b.balance + ':' + focusTrack
-  if (!parkedCache || parkedCache.key !== key) parkedCache = { key, car: createCar(practiceTrack(focusTrack), specOf(b)) }
+  const key = JSON.stringify(b.sensors) + b.balance + ':' + focusTrack + ':' + (b.weather ?? 'dry')
+  if (!parkedCache || parkedCache.key !== key) parkedCache = { key, car: createCar(practiceOn(focusTrack, b.weather), specOf(b)) }
   return parkedCache.car
 }
 
@@ -1054,7 +1075,7 @@ function takeChallenge() {
   }
   const text = load<string>(KEYS.challenge)
   const saved = text ? carFromJson(text) : null
-  if (saved && !('error' in saved)) challenge = { car: saved, result: raceCar(saved) }
+  if (saved && !('error' in saved)) challenge = { car: saved, results: GRAND_PRIXES.map((gp) => raceCar(saved, gp)) }
 }
 $('challengeClear').addEventListener('click', () => {
   challenge = null

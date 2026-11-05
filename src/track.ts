@@ -17,7 +17,12 @@ export type Track = {
   blocks: Point[] // centres of the obstacles on the road
   longestWall: number // length of the longest wall segment (used to skip far-away walls)
   start: { x: number; y: number; angle: number }
+  grip?: number // how well the road holds the tyres: 1 or left out is dry, lower is wetter (it multiplies the car's grip speed)
 }
+
+// The same track on a wet road (it keeps its blocks, and so do its mirrored and backwards versions)
+export const WET_GRIP = 0.75
+export const wetTrack = (track: Track, grip = WET_GRIP): Track => ({ ...track, grip })
 
 function loopToSegments(loop: Point[]): Segment[] {
   return loop.map((p, i) => ({ a: p, b: loop[(i + 1) % loop.length] }))
@@ -372,7 +377,11 @@ export function trackVariants(track: Track): Track[] {
   const c = track.centerline
   const backwards = (pts: Point[]) => [pts[0], ...pts.slice(1).reverse()] // same start line, lap the other way
   const mirrored = c.map((p) => ({ x: WORLD.w - p.x, y: p.y }))
-  const variants = [mirrored, backwards(c), backwards(mirrored)].map((cl) => fromCenterline(cl, track.blocks.length))
+  const variants = [mirrored, backwards(c), backwards(mirrored)].map((cl) => {
+    const v = fromCenterline(cl, track.blocks.length)
+    if (track.grip !== undefined) v.grip = track.grip // a wet track's other versions are wet too
+    return v
+  })
   variantCache.set(track, variants)
   return variants
 }

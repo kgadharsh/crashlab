@@ -18,6 +18,7 @@ A racing game HUD: dark, bold and fast. Big lap timers, sector splits, telemetry
 2. **Car setup.** Top speed against grip and acceleration. A fast car is harder to keep on the road.
 3. **Driving style.** Reward sliders for raw pace, staying alive and smooth lines. Training optimises whatever you choose.
 4. **Practice tracks.** Pick 1 to 6 of 8 tracks, each with its own character (tight bends, long straights, wide sweepers, lots of blocks), tagged with features measured from the track. Choose them to get ready for unknown race tracks.
+5. **Road.** Dry or wet. Wet practice tracks lower the car's grip speed to 75%, so the tyres lose turning power sooner. Grand Prix 2 is wet, and a car practised only on dry roads finishes few of its tracks (see `docs/experiments.md`).
 
 
 ## Training
@@ -33,6 +34,7 @@ A racing game HUD: dark, bold and fast. Big lap timers, sector splits, telemetry
 - **Always-on leaderboard.** A permanent hidden-track ranking you can enter at any time.
 - **Score:** tracks finished first, then total time.
 - **Ghost replays.** Watch your car against the leader's on the same track, with the time gap shown at each sector.
+- **Two Grand Prix (built).** Grand Prix 1 is the eight tracks on a dry road, Grand Prix 2 the same tracks on a wet road. Each has its own medals and personal best, so one car cannot be best at both: a car practised dry wins the dry one in about 148 s, and a car practised wet does far better in the wet but is about 15 s slower on dry roads. Training on both at once was worse than either, so it is not offered. Gold is under 149 s dry and under 190 s wet.
 - **Challenge links (built, no server).** "Copy challenge link" puts your car in a web address (`src/challenge.ts`). A friend who opens it sees how that car does on the Grand Prix and can race their own car against it. The car is checked like any car file, and its result is worked out again on the friend's own device, so both cars run on the same engine.
 - **Trust:** the simulation is deterministic. A server re-runs each submitted car on secret tracks, and the tracks never reach the browser.
 

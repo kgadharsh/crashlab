@@ -113,3 +113,23 @@ Training now picks the car this way (`src/training.ts`). The same 4 seeds chose 
 - Four seeds, default build only. Treat it as a direction.
 
 Built from this: the **Keep training** button (30% of the budget, needs the same number of rays) and **Switch to previous car**, because every run remembers the car it replaced and a worse result can be undone.
+
+## 5 Nov 2026: is wet weather a real decision?
+
+`scripts/wetPilot.ts` and `scripts/wetCheck.ts`. A wet road multiplies the car's grip speed by 0.75 (`WET_GRIP` in `src/track.ts`), so the tyres lose turning power at lower speeds. Dry roads are unchanged: the benchmark fingerprints are identical.
+
+**Pilot (one car trained dry, seed 21, raced on the Grand Prix at different grip):** 8/8 at grip ×1 (148.2 s), 6/8 at ×0.9, 3/8 at ×0.8 and ×0.75, 2/8 at ×0.7, 1/8 at ×0.6, 0/8 at ×0.5. The failures are tight bends and block fields.
+
+**Main test (default build, seeds 21 to 23, full budget):** the car was trained practising on dry roads, on wet roads, and on both (two tracks per generation, so fewer generations), then raced on a dry and on a wet Grand Prix.
+
+| Practised on | Generations | Dry Grand Prix | Wet Grand Prix (finished) |
+|---|---|---|---|
+| Dry | 94 | 8/8 on all 3, at 147 to 148 s | 3, 2, 5 (mean 3.3) |
+| Wet | 102 | 8/8 on all 3, at 161 to 166 s | 6, 7, 8 (mean 7.0) |
+| Both | 68 | 5, 8, 7 (mean 6.7) | 3, 5, 5 (mean 4.3) |
+
+- **Wet practice more than doubles the wet result** (7.0 against 3.3 tracks finished) and a wet-trained car still finishes every dry track, only 13 to 19 s slower. So the road you practise on is a real decision.
+- **"Both" is worse than either choice on both roads.** Two tracks per generation leaves only about 68 generations, so it is dropped as an option.
+- Three seeds, default build only.
+
+**Wet gold line (9 cars practised on wet roads, seeds 21 to 29, on the wet Grand Prix):** only 2 finished all 8 (183.7 s and 188.2 s), 4 got bronze (6 or 7 tracks), and 3 got nothing (5, 1 and 1 tracks; two of those were bad training runs). The wet Grand Prix is much harder than the dry one. `WET_GOLD_TIME` is 190 s: any line from 188 s up makes gold mean "finish all 8", and there are too few finishers to split them. Revisit after the playtest.

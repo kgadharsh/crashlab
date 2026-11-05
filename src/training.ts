@@ -5,7 +5,7 @@ import { createEvolution, scorePopulation, DEFAULT_SETTINGS, type Drive, type Ge
 import { genomeToBrain } from './genome'
 import { makeRng } from './random'
 import { runBrain } from './sim'
-import { practiceTrack, moveBlocks, trackVariants, type Track } from './track'
+import { practiceTrack, moveBlocks, trackVariants, wetTrack, type Track } from './track'
 import { specOf, shapeOf, genomeLength, TRAINING_BUDGET, POPULATION, type Build } from './setup'
 
 // Each generation drives every chosen practice track, with its blocks moved to new spots,
@@ -26,7 +26,8 @@ export function createTraining(build: Build, seed: number, budget = TRAINING_BUD
   const shape = shapeOf(build.sensors)
   if (start && start.length !== genomeLength(shape)) throw new Error('That car was built for different sensors')
   const trackRng = makeRng(seed + 77777) // separate, so the tracks drawn do not change the evolution's own luck
-  const practice = build.practice.map(practiceTrack)
+  const dry = build.practice.map(practiceTrack)
+  const practice = build.weather === 'wet' ? dry.map((t) => wetTrack(t)) : build.weather === 'both' ? dry.flatMap((t) => [t, wetTrack(t)]) : dry
   const layouts = (tracks: Track[], count: number) => Array.from({ length: count }, () => tracks.map((t) => moveBlocks(t, trackRng))).flat()
   const drive: Drive = (genome, track) => runBrain(genomeToBrain(genome, shape), track, spec, build.reward)
   const settings = { ...DEFAULT_SETTINGS, populationSize: POPULATION, genomeLength: genomeLength(shape) }

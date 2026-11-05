@@ -213,7 +213,8 @@ function hitsWall(walls: Float64Array, car: Car): boolean {
 // Advance one car by one 1/60-second step. A crash marks it dead (it does NOT reset).
 export function step(car: Car, input: Input) {
   if (car.dead) return
-  const { maxSpeed, gripSpeed } = car.spec
+  const { maxSpeed } = car.spec
+  const gripSpeed = car.spec.gripSpeed * (car.track.grip ?? 1) // a wet road lowers the speed the tyres can turn at
 
   car.speed += input.throttle * ACCEL
   car.speed *= FRICTION

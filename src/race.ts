@@ -4,18 +4,22 @@
 import type { Point } from './sensors'
 import { genomeToBrain } from './genome'
 import { CAR_RADIUS, CHECKPOINTS, RACE_STEPS, STALL_STEPS, createCar, drive, type Brain, type Car } from './sim'
-import { BLOCK_HALF, HAIRPIN_RADIUS, PRACTICE, bendRadii, makeStyledTrack, styleFor, type Track } from './track'
+import { BLOCK_HALF, HAIRPIN_RADIUS, PRACTICE, bendRadii, makeStyledTrack, styleFor, wetTrack, type Track } from './track'
 import { shapeOf, specOf, type CarSpec } from './setup'
 import type { CarFile } from './carFile'
 
 // ---------- THE GRAND PRIX ----------
 // One track in the style of each practice track (but a different shape), plus one wild one.
 // Players never see these before the race.
-export const GRAND_PRIX = { id: 'gp1', name: 'Grand Prix 1' }
+// The same eight tracks are raced twice: on a dry road (Grand Prix 1) and on a wet one (Grand Prix 2).
 const RACE_STYLES = [...PRACTICE.slice(1).map((p) => p.style!), styleFor(0.9)]
 export const RACE_COUNT = RACE_STYLES.length
 const raceTracks: Track[] = []
-export const raceTrack = (i: number): Track => (raceTracks[i] ??= makeStyledTrack(7001 + i, RACE_STYLES[i]))
+const wetRaceTracks: Track[] = []
+export const raceTrack = (i: number, wet = false): Track => {
+  const dry = (raceTracks[i] ??= makeStyledTrack(7001 + i, RACE_STYLES[i]))
+  return wet ? (wetRaceTracks[i] ??= wetTrack(dry)) : dry
+}
 
 // ---------- ONE TRACK ----------
 export type Cause = 'block' | 'tight bend' | 'wall' | 'stuck' | 'too slow'
@@ -65,10 +69,10 @@ export function summarise(tracks: TrackResult[]): RaceResult {
   return { tracks, finished: done.length, totalTime: done.reduce((s, t) => s + t.time!, 0) }
 }
 
-export function raceCar(car: CarFile): RaceResult {
+export function raceCar(car: CarFile, gp: GrandPrix = GRAND_PRIXES[0]): RaceResult {
   const brain = genomeToBrain(car.genome, shapeOf(car.build.sensors))
   const spec = specOf(car.build)
-  return summarise(Array.from({ length: RACE_COUNT }, (_, i) => raceOne(brain, raceTrack(i), spec)))
+  return summarise(Array.from({ length: RACE_COUNT }, (_, i) => raceOne(brain, raceTrack(i, gp.wet), spec)))
 }
 
 // More tracks finished wins; among equals, the lower total time wins
@@ -92,13 +96,25 @@ export function versus(mine: RaceResult, theirs: RaceResult, name: string): stri
 // the fastest quarter of all cars. Times barely differ between cars that finish, so revisit this
 // once players have raced. (It was 200 s until then, which made gold the same as finishing all 8.)
 export const GOLD_TIME = 149
+// The wet Grand Prix is much harder: of 9 cars practised on wet roads, 2 finished all 8 (184 and 188 s),
+// 4 got bronze and 3 nothing (docs/experiments.md). Any line from 188 s up makes gold mean "finish all 8".
+export const WET_GOLD_TIME = 190
 export const BRONZE_FINISHES = RACE_COUNT - 2
+
+// Each Grand Prix has its own medals and personal best (the first keeps its old save key)
+export type GrandPrix = { id: string; name: string; wet: boolean; goldTime: number }
+export const GRAND_PRIXES: GrandPrix[] = [
+  { id: 'gp1', name: 'Grand Prix 1', wet: false, goldTime: GOLD_TIME },
+  { id: 'gp2', name: 'Grand Prix 2 · wet', wet: true, goldTime: WET_GOLD_TIME },
+]
+
 export type Medal = 'gold' | 'silver' | 'bronze' | null
-export function medalFor(r: { finished: number; totalTime: number }): Medal {
-  if (r.finished === RACE_COUNT) return r.totalTime <= GOLD_TIME ? 'gold' : 'silver'
+export function medalFor(r: { finished: number; totalTime: number }, gp: GrandPrix = GRAND_PRIXES[0]): Medal {
+  if (r.finished === RACE_COUNT) return r.totalTime <= gp.goldTime ? 'gold' : 'silver'
   return r.finished >= BRONZE_FINISHES ? 'bronze' : null
 }
-export const MEDAL_RULES = 'Gold: all ' + RACE_COUNT + ' in under ' + GOLD_TIME + ' s · Silver: all ' + RACE_COUNT + ' · Bronze: ' + BRONZE_FINISHES + ' or more'
+export const medalRules = (gp: GrandPrix = GRAND_PRIXES[0]) =>
+  'Gold: all ' + RACE_COUNT + ' in under ' + gp.goldTime + ' s · Silver: all ' + RACE_COUNT + ' · Bronze: ' + BRONZE_FINISHES + ' or more'
 
 // ---------- WHAT TO CHANGE ----------
 const ADVICE: Record<Cause, string> = {
@@ -117,10 +133,13 @@ export const CAUSE_LABEL: Record<Cause, string> = {
 }
 
 // One piece of advice, for the most common reason the car failed
-export function adviceFor(result: RaceResult): string {
+export function adviceFor(result: RaceResult, gp: GrandPrix = GRAND_PRIXES[0]): string {
   const counts = new Map<Cause, number>()
   for (const t of result.tracks) if (t.cause) counts.set(t.cause, (counts.get(t.cause) ?? 0) + 1)
   const top = [...counts.entries()].sort((a, b) => b[1] - a[1])[0]
   if (!top) return 'Every track finished. Now chase time: a faster setup or a pace bonus, but watch for new crashes. Keep training in Practice can also shave a little off the time.'
-  return ADVICE[top[0]] + ' Then press Keep training in Practice to improve this car without starting over.'
+  const again = ' Then press Keep training in Practice to improve this car without starting over.'
+  // on a wet road the tyres give up turning power sooner, whatever the track did to the car
+  if (gp.wet) return 'The wet road caught your car: the tyres lose grip at lower speeds. Set Road to Wet in the Garage so training practises on wet tracks.' + again
+  return ADVICE[top[0]] + again
 }

@@ -15,11 +15,17 @@ export type Reward = {
   smooth: number // a penalty for jerky steering
 }
 
+// The road the practice tracks are driven on. "both" trains on every track dry and wet, so each
+// generation costs twice as much of the budget.
+export type Weather = 'dry' | 'wet' | 'both'
+export const WEATHERS: Weather[] = ['dry', 'wet', 'both']
+
 export type Build = {
   sensors: Sensors
   balance: number // car setup: 0 = all grip, 1 = all top speed
   reward: Reward
   practice: number[] // ids of the practice tracks to train on
+  weather?: Weather // left out means dry, so every earlier car and build stays valid
 }
 
 export const LIMITS = {
@@ -92,6 +98,7 @@ export function buildProblem(b: unknown, practiceCount: number): string | null {
   const p = d.practice
   if (p.length < LIMITS.practice[0] || p.length > LIMITS.practice[1]) return 'wrong number of practice tracks'
   if (new Set(p).size !== p.length || p.some((id) => !Number.isInteger(id) || id < 0 || id >= practiceCount)) return 'unknown practice track'
+  if (d.weather !== undefined && !WEATHERS.includes(d.weather)) return 'unknown weather'
   return null
 }
 
@@ -102,5 +109,8 @@ export function cleanBuild(b: Build): Build {
     balance: b.balance,
     reward: { pace: b.reward.pace, safety: b.reward.safety, smooth: b.reward.smooth },
     practice: [...b.practice],
+    // dry is written as nothing, so a dry build looks the same as one saved before weather existed.
+    // ("both" was only an experiment and is not a garage choice, so a build that has it is read as dry)
+    ...(b.weather === 'wet' ? { weather: 'wet' as const } : {}),
   }
 }
