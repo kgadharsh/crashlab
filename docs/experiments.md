@@ -52,8 +52,26 @@ Training now picks the car this way (`src/training.ts`). The same 4 seeds chose 
 | 90% | 97 | 20, 20, 19 | 19.7 | 17.7 |
 | 100% | 104 | 20, 20, 20 | 20.0 | 19.7 |
 
-- **The picked car reached 20 of 20 at 50% of the budget in every seed and stayed there**, apart from one 19 at 90%. The last half of the budget bought no extra finishes.
-- **This test is capped at 20.** It counts finished tracks, not lap times, so it cannot show whether the later generations drive faster. Check race times, or the Grand Prix medals, before cutting the budget.
+- **The picked car reached 20 of 20 at 50% of the budget in every seed and stayed there**, apart from one 19 at 90%. The last half of the budget bought no extra finishes on these tracks.
+- **This test was too easy to settle the budget.** It counts finished tracks on plain unseen tracks and is capped at 20. The Grand Prix check below used the real race-day scoring and told a different story.
 - Early on the picks were shaky (8 of 20 at 10% for one seed, and a dip at 40%), so a much smaller budget would bring the training luck back.
 - **The pick helped on fresh seeds.** The picked car matched or beat the practice-best car at every checkpoint, and by a wide margin before 50%. This is not the same comparison as the earlier test, but it points the same way.
 - Three seeds only. Treat this as a direction.
+
+## 5 Nov 2026: does a smaller budget cost Grand Prix medals?
+
+`scripts/budgetMedals.ts`, default build, the same seeds (11, 12, 13). At 40%, 50%, 60%, 80% and 100% of the budget, the car the app would pick was raced on the 8 Grand Prix tracks with the real race-day scoring from `src/race.ts` (tracks finished, then total time; gold is all 8 in under 200 s).
+
+| Budget used | Seed 11 | Seed 12 | Seed 13 | Gold |
+|---|---|---|---|---|
+| 40% | 8/8, 163 s, gold | 7/8, bronze | 8/8, 175 s, gold | 2 of 3 |
+| 50% | 6/8, bronze | 5/8, none | 7/8, bronze | 0 of 3 |
+| 60% | 7/8, bronze | 5/8, none | 7/8, bronze | 0 of 3 |
+| 80% | 8/8, 148 s, gold | 8/8, 154 s, gold | 8/8, 150 s, gold | 3 of 3 |
+| 100% | 8/8, 148 s, gold | 8/8, 149 s, gold | 8/8, 150 s, gold | 3 of 3 |
+
+- **At 50% and 60% of the budget no seed finished all 8 tracks, and none won gold**, although the same cars finished 20 of 20 plain unseen tracks in the test above. The Grand Prix tracks (hairpins, block fields and a wild one) are harder, and the cars are not reliable on them until later.
+- **80% matched 100% on every seed**: all gold, within a few seconds of each other.
+- **40% did better than 50% and 60%** (2 gold), which does not fit a smooth curve. With three seeds, treat it as luck, and as a sign that a single run at a given budget can fool you.
+- **Verdict: do not cut the budget to 60%.** 80% looks safe but saves only about a fifth of the training time (roughly 20 seconds), and it rests on three seeds, so the budget stays at 30M steps for now.
+- Picking a car at each checkpoint uses the run's own track randomness, so the 100% row differs slightly from an unchecked run. The effect is small and the same at every budget.
