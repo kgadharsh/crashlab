@@ -226,7 +226,7 @@ document.querySelector('#app')!.innerHTML = `
 </main>
 <div class="nudge" id="raceNudge" role="status" hidden>
   <p id="nudgeText"></p>
-  <button class="btn primary" id="nudgeGo">Race your car →</button>
+  <button class="btn primary" id="nudgeGo">Race<span class="long"> your car</span> →</button>
   <button class="btn small" id="nudgeClose" aria-label="Dismiss">✕</button>
 </div>`
 
@@ -242,7 +242,11 @@ const strip = $('strip')
 // Without it, nothing on the Practice screen says that racing is the next step.
 const nudge = $('raceNudge')
 function showNudge(carName: string) {
-  $('nudgeText').textContent = carName + ' is trained. Race it on 8 tracks it has never seen.'
+  // the second sentence is left out on a phone, where the bar must stay small
+  const more = document.createElement('span')
+  more.className = 'more'
+  more.textContent = ' Race it on ' + RACE_COUNT + ' tracks it has never seen.'
+  $('nudgeText').replaceChildren(carName + ' is trained.', more)
   nudge.hidden = false
   document.body.classList.add('has-nudge') // keeps the bar from covering the last panel
 }

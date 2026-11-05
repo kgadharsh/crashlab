@@ -270,10 +270,12 @@ input[type='range']:focus-visible { outline: 2px solid var(--tele); outline-offs
 .nudge .btn.primary { padding: 12px 18px; font-size: 15px; }
 body.has-nudge { padding-bottom: 76px; }
 @media (max-width: 960px) {
-  .nudge { flex-wrap: wrap; padding: 12px 16px; }
-  .nudge p { flex: 1 1 100%; }
-  .nudge .btn.primary { flex: 1; }
-  body.has-nudge { padding-bottom: 124px; }
+  /* on a phone the bar is one short row, so it does not take a fifth of the screen */
+  .nudge { gap: 10px; padding: 10px 16px; }
+  .nudge p { font-size: 14px; line-height: 1.25; }
+  .nudge .more, .nudge .long { display: none; }
+  .nudge .btn.primary { flex: none; padding: 11px 16px; font-size: 14px; }
+  body.has-nudge { padding-bottom: 76px; }
 }
 
 /* budget */
@@ -313,8 +315,10 @@ select {
 
 @media (max-width: 960px) {
   .layout { grid-template-columns: minmax(0, 1fr); padding: 12px 16px 28px; }
-  .top { gap: 12px; padding: 10px 16px; flex-wrap: wrap; }
-  .chip { max-width: 100%; order: 3; margin-left: 0; flex-basis: 100%; }
+  .top { gap: 4px 12px; padding: 6px 16px; flex-wrap: wrap; }
+  .brand { font-size: 22px; }
+  .tab { padding: 6px 12px; }
+  .chip { max-width: 100%; order: 3; margin-left: 0; flex-basis: 100%; padding: 3px 8px; font-size: 11px; }
   .strip { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
 @media (max-width: 420px) {
