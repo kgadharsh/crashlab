@@ -339,7 +339,7 @@ let worker: Worker | null = null
 let run: Run | null = null
 let lastRun: { spent: number; generations: number } | null = null // what the finished run used, for the budget panel
 
-type Swarm = { gen: number; genomes: number[][]; bestSteps: number; trackId: number; track: Track; cars: Car[]; brains: Brain[]; done: boolean[]; hold: number; trails: { x: number; y: number }[][]; lead: number; speed: number; owed: number; frames: number }
+type Swarm = { gen: number; genomes: number[][]; bestSteps: number; trackId: number; track: Track; cars: Car[]; brains: Brain[]; done: boolean[]; hold: number; trails: { x: number; y: number }[][]; lead: number; speed: number; owed: number; frames: number; plays: number }
 let swarm: Swarm | null = null
 let waiting: { gen: number; genomes: number[][]; bestSteps: number } | null = null
 const VIEW_STEPS = 900 // a replayed generation drives for up to 15 seconds
@@ -453,21 +453,24 @@ const SHOW_FRAMES = 600 // about 10 seconds per replay
 const MAX_SPEED = 12 // simulated steps per frame
 const paceFor = (bestSteps: number) => Math.min(MAX_SPEED, Math.max(1, Math.min(bestSteps, VIEW_STEPS) / SHOW_FRAMES))
 
-function makeSwarm(gen: number, genomes: number[][], build: Build, bestSteps: number): Swarm {
+function makeSwarm(gen: number, genomes: number[][], build: Build, bestSteps: number, plays = 0): Swarm {
   const shape = shapeOf(build.sensors)
   const spec = specOf(build)
   const trackId = Number(watchSelect.value)
   const track = practiceTrack(trackId)
   const brains = genomes.map((g) => genomeToBrain(g, shape))
   const cars = brains.map(() => createCar(track, spec))
-  return { gen, genomes, bestSteps, trackId, track, cars, brains, done: brains.map(() => false), hold: 0, trails: cars.map((c) => [{ x: c.x, y: c.y }]), lead: 0, speed: paceFor(bestSteps), owed: 0, frames: 0 }
+  return { gen, genomes, bestSteps, trackId, track, cars, brains, done: brains.map(() => false), hold: 0, trails: cars.map((c) => [{ x: c.x, y: c.y }]), lead: 0, speed: paceFor(bestSteps), owed: 0, frames: 0, plays }
 }
 
-function stepSwarm() {
+// frames: how many 1/60-second frames of real time have passed since the last call. The replay
+// runs on the clock, not on the number of frames drawn, so a slow screen (a busy phone) drops
+// frames but does not turn the replay into slow motion.
+function stepSwarm(frames: number) {
   if (!worker || !run) return
   const over = swarm !== null && swarm.done.every(Boolean)
   if (swarm && over) {
-    swarm.hold++ // linger a moment so the end of the generation can be seen
+    swarm.hold += frames // linger a moment so the end of the generation can be seen
     if (swarm.hold < 20) return
   }
   if (!swarm || over) {
@@ -480,6 +483,10 @@ function stepSwarm() {
       swarm = makeSwarm(waiting.gen, waiting.genomes, run.build, waiting.bestSteps)
       waiting = null
       follow(cam, swarm.cars[0], true)
+    } else if (swarm) {
+      // nothing newer is ready yet: show this generation again rather than leave the screen frozen
+      swarm = makeSwarm(swarm.gen, swarm.genomes, run.build, swarm.bestSteps, swarm.plays + 1)
+      follow(cam, swarm.cars[0], true)
     }
   }
   if (!swarm) return
@@ -488,9 +495,9 @@ function stepSwarm() {
   const alive = sw.done.filter((d) => !d).length
   // once the followed car has stopped, or the replay runs past its planned time, or training
   // has finished, the rest plays at top speed
-  sw.frames++
+  sw.frames += frames
   const late = sw.frames > SHOW_FRAMES * 1.5 || sw.done[sw.lead] || alive === 0 || !!run.finish
-  sw.owed += late ? MAX_SPEED : sw.speed
+  sw.owed += (late ? MAX_SPEED : sw.speed) * frames
   const steps = Math.floor(sw.owed)
   sw.owed -= steps
   for (let k = 0; k < steps; k++) {
@@ -722,6 +729,36 @@ function setStrip(cells: [string, string][]) {
   strip.innerHTML = html
 }
 
+// Training with nothing to replay (replays are off, or the first one is not ready yet): a progress
+// screen, so it is clear that training is running and how far it has got.
+function drawTrainingScreen(r: Run) {
+  const gen = r.history.length
+  const last = r.history[gen - 1]
+  const done = Math.min(1, r.spent / TRAINING_BUDGET)
+  const cx = W / 2
+  const bar = 360
+  ctx.strokeStyle = COL.accent // a turning arc, so the screen is clearly alive
+  ctx.lineWidth = 3
+  ctx.beginPath()
+  const turn = performance.now() / 350
+  ctx.arc(cx, H / 2 - 112, 14, turn, turn + 4)
+  ctx.stroke()
+  hudText(r.judging ? 'PICKING YOUR CAR' : 'TRAINING AT FULL SPEED', cx, H / 2 - 66, 18, COL.accent, 'center')
+  hudText('GEN ' + gen, cx, H / 2 - 8, 72, COL.text, 'center')
+  ctx.fillStyle = COL.road
+  ctx.fillRect(cx - bar / 2, H / 2 + 24, bar, 10)
+  ctx.fillStyle = COL.accent
+  ctx.fillRect(cx - bar / 2, H / 2 + 24, bar * done, 10)
+  hudText(Math.round(100 * done) + '% OF THE BUDGET USED' + (last ? ' · BEST CAR ' + last.best.toFixed(2) + ' LAPS' : ''), cx, H / 2 + 62, 16, COL.muted, 'center')
+  hudText(r.watching ? 'THE FIRST REPLAY IS ON ITS WAY' : 'REPLAYS ARE OFF FOR THIS RUN · TICK THE BOX BEFORE STARTING TO WATCH THEM', cx, H - 24, 13, COL.muted, 'center')
+  setStrip([
+    ['Generation', String(gen)],
+    ['Budget used', Math.round(100 * done) + '<small>%</small>'],
+    ['Best car', (last ? last.best.toFixed(2) : '–') + '<small> laps</small>'],
+    ['Average car', (last ? last.mean.toFixed(2) : '–') + '<small> laps</small>'],
+  ])
+}
+
 function draw() {
   if (tab === 'race' && raceView) return raceView.draw()
   clear(ctx)
@@ -761,8 +798,8 @@ function draw() {
     hudText(alive + ' / ' + sw.cars.length + ' DRIVING', W - 16, H - 16, 18, COL.tele, 'right')
     const status = run.judging
       ? 'TRAINING DONE · PICKING YOUR CAR'
-      : alive === 0
-        ? 'WAITING FOR THE NEXT REPLAY'
+      : sw.plays > 0
+        ? 'SHOWING IT AGAIN · THE NEXT REPLAY IS STILL TRAINING'
         : sw.done[sw.lead]
           ? 'BEST CAR STOPPED · FINISHING THE REPLAY'
           : "FOLLOWING THIS GENERATION'S BEST CAR"
@@ -803,6 +840,10 @@ function draw() {
     ])
     return
   }
+  if (run && tab === 'practice') {
+    drawTrainingScreen(run)
+    return
+  }
   // the garage and idle practice: this setup's car on the start line, with its sensors zoomed in on
   // (garage) or the whole track
   const p = parked()
@@ -837,6 +878,7 @@ const STEP = 1000 / 60
 let lastTime = performance.now()
 let owed = 0
 function loop(now: number) {
+  const elapsed = Math.min(now - lastTime, 250)
   owed = Math.min(owed + now - lastTime, 250)
   lastTime = now
   while (owed >= STEP) {
@@ -844,7 +886,7 @@ function loop(now: number) {
     if (tab === 'race') raceView?.tick()
     owed -= STEP
   }
-  stepSwarm()
+  stepSwarm(Math.min(elapsed / STEP, 6)) // below 10 frames a second the replay slows down rather than stalling the screen
   buildOneThumb()
   draw()
   requestAnimationFrame(loop)
