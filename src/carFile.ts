@@ -28,7 +28,7 @@ export function carFromJson(text: string): CarFile | { error: string } {
   if (problem) return { error: 'That car has an illegal setup: ' + problem + '.' }
   const build = cleanBuild(d.build as Build)
   const length = genomeLength(shapeOf(build.sensors))
-  if (!Array.isArray(d.genome) || d.genome.length !== length) return { error: 'That car should have ' + length + ' weights.' }
+  if (!Array.isArray(d.genome) || d.genome.length !== length) return { error: 'That car should have ' + length + ' connections.' }
   for (const w of d.genome) {
     if (typeof w !== 'number' || !Number.isFinite(w) || Math.abs(w) > MAX_WEIGHT) return { error: 'That car has a weight that is not a sensible number.' }
   }

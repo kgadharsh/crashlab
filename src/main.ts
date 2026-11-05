@@ -216,7 +216,9 @@ document.querySelector('#app')!.innerHTML = `
         <div class="medal" id="medal"></div>
         <p class="tip" id="resultLine" style="margin-top:4px"></p>
         <p class="tip warn" id="advice"></p>
-        <div class="actions"><button class="btn small primary" id="resultGarage">Edit setup in Garage →</button><button class="btn small" id="resultPractice">Go to Practice →</button></div>
+        <div class="actions"><button class="btn small primary" id="resultGarage">Edit setup in Garage →</button><button class="btn small" id="resultPractice">Go to Practice →</button><button class="btn small" id="resultShare">Challenge a friend</button></div>
+        <input id="resultLink" readonly hidden aria-label="Challenge link" style="width:100%;margin-top:6px" />
+        <p class="msg" id="resultMsg"></p>
       </div>
       <p class="tip" id="pb"></p>
     </div>
@@ -1111,23 +1113,25 @@ function loop(now: number) {
 raceView = createRaceView({ ctx, cam, getCar: () => car, isStale: carIsStale, getChallenge: () => challenge, goTo: setTab, hudText, setStrip })
 
 // ---------- CHALLENGE LINKS ----------
-// Share: the car goes into a link, so a friend can race it with no server
-$('shareCar').addEventListener('click', async () => {
+// Share: the car goes into a link, so a friend can race it with no server.
+// It is offered under Your car in Practice, and under the result of a race, where the wish to show it off is greatest.
+async function shareCar(say: (text: string) => void, box: HTMLInputElement) {
   if (!car) return
   const link = location.origin + location.pathname + challengeCode(car)
-  const box = $<HTMLInputElement>('shareLink')
   try {
     await navigator.clipboard.writeText(link)
     logEvent({ k: 'share' })
     box.hidden = true
-    carMsg('Challenge link copied. Anyone who opens it can race ' + car.name + ' on the Grand Prix.')
+    say('Challenge link copied. Anyone who opens it can race ' + car.name + ' on the Grand Prix and try to beat it.')
   } catch {
     box.value = link // the browser would not copy for us: show the link to copy by hand
     box.hidden = false
     box.select()
-    carMsg('Copy this link and send it. Anyone who opens it can race your car.')
+    say('Copy this link and send it. Anyone who opens it can race your car.')
   }
-})
+}
+$('shareCar').addEventListener('click', () => shareCar(carMsg, $<HTMLInputElement>('shareLink')))
+$('resultShare').addEventListener('click', () => shareCar((text) => ($('resultMsg').textContent = text), $<HTMLInputElement>('resultLink')))
 // Playtest notes: what happened in this browser, copied to paste into the feedback form. Nothing is sent anywhere.
 $('notes').addEventListener('click', async () => {
   const text = playtestNotes(car?.build ?? null, car?.name ?? null)
@@ -1174,5 +1178,5 @@ renderChip()
 drawGraph([])
 // the graph is only redrawn when it changes, so redraw it once the web fonts have arrived
 void document.fonts?.ready.then(() => drawGraph(run ? run.history : lastHistory))
-setTab('garage')
+setTab(tab) // the Garage, unless a challenge link has already sent the player to the Race tab
 requestAnimationFrame(loop)

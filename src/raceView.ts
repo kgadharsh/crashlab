@@ -227,6 +227,11 @@ export function createRaceView(d: RaceDeps) {
     $('raceTotal').textContent = results.length ? sum.finished + '/' + results.length + ' finished · ' + sum.totalTime.toFixed(1) + ' s' : ''
     const s = live?.summary
     $('resultPanel').hidden = !s
+    if (!s) {
+      // a new race has started: the last result's share message is about an older race
+      $('resultMsg').textContent = ''
+      $('resultLink').hidden = true
+    }
     if (s) {
       const medal = medalFor(s, live!.gp)
       const m = $('medal')
