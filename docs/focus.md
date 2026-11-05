@@ -23,7 +23,7 @@ A racing game HUD: dark, bold and fast. Big lap timers, sector splits, telemetry
 ## Training
 
 - **Fixed budget.** Everyone gets the same number of "garage hours", measured in car-laps simulated rather than seconds, so a faster laptop gives no advantage. More practice tracks use the budget faster, and a bigger brain (from more rays) has more weights to find, so it needs more generations to learn.
-- You can watch the generations, or skip to the end. Each generation is shown for about 2 seconds, following its best car.
+- Training always runs at full speed, about 2 minutes on a laptop. You can watch every 10th generation replayed, each for about 10 seconds and following that generation's best car, or skip to the end. The graph and counters update every generation.
 - **Picking the car.** At the end, the best 20 cars drive mirrored and backwards versions of the practice tracks, and the best of them becomes your car. This cut the luck in training a lot (see `docs/experiments.md`).
 
 ## Racing

@@ -1,5 +1,5 @@
 import './style.css'
-import { DEFAULT_BUILD, LIMITS, POPULATION, TRAINING_BUDGET, buildProblem, cleanBuild, genomeLength, shapeOf, specOf, type Build } from './setup'
+import { DEFAULT_BUILD, LIMITS, POPULATION, REPLAY_EVERY, TRAINING_BUDGET, buildProblem, cleanBuild, genomeLength, shapeOf, specOf, type Build } from './setup'
 import { CHECKPOINTS, STALL_STEPS, createCar, drive, type Brain, type Car } from './sim'
 import { PRACTICE, PRACTICE_COUNT, practiceTrack, trackFeatures, trackStats, type Track } from './track'
 import { genomeToBrain } from './genome'
@@ -126,7 +126,7 @@ document.querySelector('#app')!.innerHTML = `
           <button class="btn primary" id="train">Start training</button>
           <button class="btn" id="skip" hidden>Skip to the end</button>
         </div>
-        <label class="row" style="grid-template-columns:auto 1fr;margin-top:10px"><input type="checkbox" id="watchAll" checked /><span>Watch every generation</span></label>
+        <label class="row" style="grid-template-columns:auto 1fr;margin-top:10px"><input type="checkbox" id="watchAll" checked /><span>Replay every ${REPLAY_EVERY}th generation</span></label>
         <label class="row" style="grid-template-columns:auto 1fr"><span>Watch on</span><select id="watchTrack" aria-label="Practice track to watch"></select></label>
         <p class="tip">Every generation is scored on all your practice tracks, with the blocks moved each time. The screen shows one of them.</p>
         <p class="msg" id="trainMsg"></p>
@@ -329,7 +329,7 @@ function renderChip() {
 // ---------- TRAINING ----------
 type History = { best: number; mean: number }[] // laps driven in one practice attempt: the best car, and the average car
 type Finish = { genome: number[]; generations: number }
-type Run = { build: Build; name: string; history: History; shown: number; watching: boolean; finish: Finish | null; spent: number }
+type Run = { build: Build; name: string; history: History; watching: boolean; judging: boolean; finish: Finish | null; spent: number }
 let worker: Worker | null = null
 let run: Run | null = null
 let lastRun: { spent: number; generations: number } | null = null // what the finished run used, for the budget panel
@@ -337,7 +337,7 @@ let lastRun: { spent: number; generations: number } | null = null // what the fi
 type Swarm = { gen: number; genomes: number[][]; bestSteps: number; trackId: number; track: Track; cars: Car[]; brains: Brain[]; done: boolean[]; hold: number; trails: { x: number; y: number }[][]; lead: number; speed: number; owed: number; frames: number }
 let swarm: Swarm | null = null
 let waiting: { gen: number; genomes: number[][]; bestSteps: number } | null = null
-const VIEW_STEPS = 900 // each generation is shown for 15 seconds of driving
+const VIEW_STEPS = 900 // a replayed generation drives for up to 15 seconds
 
 function trainMsg(text: string, bad = false) {
   const m = $('trainMsg')
@@ -375,9 +375,9 @@ $('train').addEventListener('click', () => {
   }
   stopTestDrive()
   const watch = input('watchAll').checked
-  run = { build: clone(b), name: draft.name, history: [], shown: 0, watching: watch, finish: null, spent: 0 }
+  run = { build: clone(b), name: draft.name, history: [], watching: watch, judging: false, finish: null, spent: 0 }
   drawGraph([])
-  trainMsg(watch ? 'Each generation is shown for 15 seconds of driving.' : 'Training at full speed...')
+  trainMsg(watch ? 'Training at full speed. Every ' + REPLAY_EVERY + 'th generation is replayed here.' : 'Training at full speed...')
   worker = new Worker(new URL('./trainWorker.ts', import.meta.url), { type: 'module' })
   worker.onmessage = (event: MessageEvent) => {
     const m = event.data
@@ -385,13 +385,13 @@ $('train').addEventListener('click', () => {
     if (m.type === 'progress') {
       run.history.push({ best: m.checkpoints / CHECKPOINTS, mean: m.meanCheckpoints / CHECKPOINTS })
       run.spent = m.spent
-      if (run.watching) waiting = { gen: m.generation, genomes: m.population, bestSteps: m.bestSteps }
-      else {
-        run.shown = run.history.length
-        drawGraph(run.history)
-      }
+      // training never waits for the screen: the graph follows every generation, and the newest
+      // replayable generation waits its turn (an older one that was never shown is dropped)
+      if (run.watching && m.population) waiting = { gen: m.generation, genomes: m.population, bestSteps: m.bestSteps }
+      drawGraph(run.history)
       renderPractice()
     } else if (m.type === 'judging') {
+      run.judging = true
       trainMsg('Picking your car: the best 20 drive mirrored and backwards versions of your practice tracks...')
     } else if (m.type === 'done') {
       run.finish = { genome: m.genome, generations: m.generations }
@@ -408,10 +408,8 @@ $('skip').addEventListener('click', () => {
   run.watching = false
   swarm = null
   waiting = null
-  run.shown = run.history.length
   drawGraph(run.history)
-  trainMsg('Skipping ahead: spending the rest of the budget...')
-  worker.postMessage({ type: 'free' })
+  trainMsg('Skipping the replays: finishing the training...')
   if (run.finish) finishTraining(run.finish)
   renderPractice()
 })
@@ -441,10 +439,12 @@ watchSelect.addEventListener('change', () => {
   }
 })
 
-// Every generation gets about the same time on screen. The worker says how long the best car
-// lasted in practice, so a generation that crashes early plays close to real time (and can be
-// watched), and one that drives the full distance plays fast (and does not drag).
-const SHOW_FRAMES = 120 // about 2 seconds per generation
+// Training runs flat out and every REPLAY_EVERY-th generation is replayed, so a replay has
+// about as long as those generations take to train (roughly 10 seconds on a laptop) and then
+// the next one is ready. The worker says how long the best car lasted in practice: a generation
+// that crashes early plays at real time (and can be watched), and one that drives the full
+// distance plays a little faster than real time (and does not drag).
+const SHOW_FRAMES = 600 // about 10 seconds per replay
 const MAX_SPEED = 12 // simulated steps per frame
 const paceFor = (bestSteps: number) => Math.min(MAX_SPEED, Math.max(1, Math.min(bestSteps, VIEW_STEPS) / SHOW_FRAMES))
 
@@ -466,28 +466,25 @@ function stepSwarm() {
     if (swarm.hold < 20) return
   }
   if (!swarm || over) {
+    if (run.watching && run.finish) {
+      // training is over: no more replays, on to the result
+      finishTraining(run.finish)
+      return
+    }
     if (waiting) {
       swarm = makeSwarm(waiting.gen, waiting.genomes, run.build, waiting.bestSteps)
       waiting = null
-      if (run.watching) {
-        run.shown = swarm.gen + 1
-        drawGraph(run.history.slice(0, run.shown))
-        if (!run.finish) worker.postMessage({ type: 'next' })
-        follow(cam, swarm.cars[0], true)
-      }
-    } else if (run.watching && run.finish) {
-      finishTraining(run.finish)
-      return
+      follow(cam, swarm.cars[0], true)
     }
   }
   if (!swarm) return
   // the fewer cars are left, the faster time runs (so the work per frame stays about the same)
   const sw = swarm
   const alive = sw.done.filter((d) => !d).length
-  // once the followed car has stopped, or the generation runs past its planned time, the rest
-  // plays at top speed, so the next generation (and its new car to follow) comes quickly
+  // once the followed car has stopped, or the replay runs past its planned time, or training
+  // has finished, the rest plays at top speed
   sw.frames++
-  const late = sw.frames > SHOW_FRAMES * 1.5 || sw.done[sw.lead] || alive === 0
+  const late = sw.frames > SHOW_FRAMES * 1.5 || sw.done[sw.lead] || alive === 0 || !!run.finish
   sw.owed += late ? MAX_SPEED : sw.speed
   const steps = Math.floor(sw.owed)
   sw.owed -= steps
@@ -749,15 +746,22 @@ function draw() {
     drawMinimap(ctx, sw.track, cam, sw.cars[sw.lead], sw.cars.filter((_, i) => !sw.done[i] && i !== sw.lead))
     const alive = sw.done.filter((d) => !d).length
     hudText('GEN ' + (sw.gen + 1), 16, 42, 36)
-    hudText('WATCHING ' + TRACK_NAMES[sw.trackId].toUpperCase(), 16, 64, 16, COL.muted)
+    hudText('REPLAY ON ' + TRACK_NAMES[sw.trackId].toUpperCase() + ' · TRAINING IS ON GEN ' + run.history.length, 16, 64, 16, COL.muted)
     hudText('SCORED ON ALL ' + run.build.practice.length + ' PRACTICE TRACKS', 16, 82, 13, COL.muted)
     hudText(alive + ' / ' + sw.cars.length + ' DRIVING', W - 16, H - 16, 18, COL.tele, 'right')
-    hudText(sw.done[sw.lead] ? 'BEST CAR STOPPED · FINISHING THE GENERATION' : "FOLLOWING THIS GENERATION'S BEST CAR", W - 16, H - 38, 13, COL.accent, 'right')
+    const status = run.judging
+      ? 'TRAINING DONE · PICKING YOUR CAR'
+      : alive === 0
+        ? 'WAITING FOR THE NEXT REPLAY'
+        : sw.done[sw.lead]
+          ? 'BEST CAR STOPPED · FINISHING THE REPLAY'
+          : "FOLLOWING THIS GENERATION'S BEST CAR"
+    hudText(status, W - 16, H - 38, 13, COL.accent, 'right')
     setStrip([
-      ['Generation', String(sw.gen + 1)],
+      ['Replaying gen', String(sw.gen + 1)],
+      ['Training at gen', String(run.history.length)],
       ['Budget used', Math.round((100 * run.spent) / TRAINING_BUDGET) + '<small>%</small>'],
       ['Best car', (run.history[sw.gen]?.best.toFixed(2) ?? '–') + '<small> laps</small>'],
-      ['Crashed', String(sw.cars.filter((c) => c.dead).length)],
     ])
     return
   }
@@ -831,6 +835,6 @@ renderGarage()
 renderChip()
 drawGraph([])
 // the graph is only redrawn when it changes, so redraw it once the web fonts have arrived
-void document.fonts?.ready.then(() => drawGraph(run ? run.history.slice(0, run.shown) : lastHistory))
+void document.fonts?.ready.then(() => drawGraph(run ? run.history : lastHistory))
 setTab('garage')
 requestAnimationFrame(loop)

@@ -39,6 +39,7 @@ export const DEFAULT_BUILD: Build = {
 // so a fast computer gives no advantage. More practice tracks spend it faster.
 export const TRAINING_BUDGET = 30_000_000 // about 2 minutes of training on a laptop
 export const POPULATION = 100
+export const REPLAY_EVERY = 10 // while watching, every 10th generation is replayed on screen
 
 // ---------- THE BRAIN'S SHAPE FOLLOWS THE SENSORS ----------
 export const HIDDEN = 5

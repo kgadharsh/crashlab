@@ -1,28 +1,22 @@
 // Runs training in the background so the page stays smooth.
 // Messages in:  { type: 'start', build, seed, watch }  begin a run
-//               { type: 'next' }   (watch mode) compute the next generation
-//               { type: 'free' }   (watch mode) stop waiting and finish as fast as possible
 // Messages out: { type: 'progress', ... } after every generation, then { type: 'done', ... }
+// Training always runs at full speed. When the player is watching, every REPLAY_EVERY-th
+// generation also carries its cars, so the page can replay it while training carries on.
 import { createTraining } from './training'
-import { TRAINING_BUDGET, type Build } from './setup'
+import { REPLAY_EVERY, TRAINING_BUDGET, type Build } from './setup'
 
-type Message =
-  | { type: 'start'; build: Build; seed: number; watch: boolean }
-  | { type: 'next' }
-  | { type: 'free' }
+type Message = { type: 'start'; build: Build; seed: number; watch: boolean }
 
 const worker = self as unknown as {
   postMessage(message: unknown): void
   onmessage: ((event: MessageEvent<Message>) => void) | null
 }
 
-let run: ReturnType<typeof createTraining> | null = null
-let watching = false
-
 // Run one generation and report it. Returns true when the budget is spent.
-function runOne(): boolean {
-  if (!run) return true
+function runOne(run: ReturnType<typeof createTraining>, watch: boolean): boolean {
   const { report, spent, finished } = run.step()
+  const replay = watch && report.generation % REPLAY_EVERY === 0
   worker.postMessage({
     type: 'progress',
     generation: report.generation,
@@ -33,27 +27,18 @@ function runOne(): boolean {
     bestSteps: report.best.steps / report.tracks, // how long the best car lasted, per track
     spent,
     budget: TRAINING_BUDGET,
-    population: report.population,
+    population: replay ? report.population : null,
   })
   if (finished) {
     worker.postMessage({ type: 'judging' })
     worker.postMessage({ type: 'done', genome: run.winner(report.population), generations: run.generations, spent })
-    run = null
   }
   return finished
 }
 
 worker.onmessage = (event) => {
   const m = event.data
-  if (m.type === 'start') {
-    run = createTraining(m.build, m.seed)
-    watching = m.watch
-    if (watching) runOne()
-    else while (!runOne()) { /* keep going */ }
-  } else if (m.type === 'next') {
-    if (watching) runOne()
-  } else if (m.type === 'free') {
-    watching = false
-    while (run && !runOne()) { /* keep going */ }
-  }
+  if (m.type !== 'start') return
+  const run = createTraining(m.build, m.seed)
+  while (!runOne(run, m.watch)) { /* keep going */ }
 }
