@@ -8,6 +8,7 @@ import {
   CAUSE_LABEL, GRAND_PRIXES, RACE_COUNT, adviceFor, better, finishLap, lapIsOver, medalFor, medalRules, raceTrack, summarise, versus,
   type GrandPrix, type Medal, type RaceResult, type TrackResult,
 } from './race'
+import { logEvent } from './playLog'
 import { COL, H, W, clear, drawCar, drawCrash, drawMinimap, drawRays, drawTrack, follow, withCamera, type Camera } from './draw'
 
 // A friend's car to beat (with its result in each Grand Prix on this device), or why their link could not be used
@@ -137,6 +138,7 @@ export function createRaceView(d: RaceDeps) {
   function finish(r: Live) {
     r.index = RACE_COUNT - 1
     r.summary = summarise(r.results)
+    logEvent({ k: 'race', gp: r.gp.name, finished: r.summary.finished, time: r.summary.totalTime, medal: medalFor(r.summary, r.gp), of: RACE_COUNT })
     if (!best || better(r.summary, best)) {
       best = { finished: r.summary.finished, totalTime: r.summary.totalTime, name: r.car.name }
       saveBest(r.gp, best)

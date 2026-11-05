@@ -7,6 +7,7 @@ import { PRACTICE, PRACTICE_COUNT, practiceTrack, trackFeatures, trackStats, wet
 import { genomeToBrain } from './genome'
 import { carFromJson, carToJson, type CarFile } from './carFile'
 import { createRaceView, type Challenge } from './raceView'
+import { logEvent, playtestNotes } from './playLog'
 import { COL, H, W, clear, drawCar, drawCrash, drawMinimap, drawRays, drawSensorFan, drawThumb, drawTrack, fanFrame, fit, follow, lookAt, newCamera, withCamera } from './draw'
 
 // ---------- SAVED STATE ----------
@@ -171,6 +172,7 @@ document.querySelector('#app')!.innerHTML = `
         </div>
         <div class="actions"><button class="btn" id="swapCar" hidden>Switch to previous car</button></div>
         <div class="actions"><button class="btn" id="shareCar">Copy challenge link</button></div>
+        <div class="actions"><button class="btn" id="notes">Copy playtest notes</button></div>
         <input id="shareLink" readonly hidden aria-label="Challenge link" style="width:100%;margin-top:6px" />
         <p class="msg" id="carMsg"></p>
       </div>
@@ -381,7 +383,7 @@ function renderChip() {
 // ---------- TRAINING ----------
 type History = { best: number; mean: number }[] // laps driven in one practice attempt: the best car, and the average car
 type Finish = { genome: number[]; generations: number }
-type Run = { build: Build; name: string; history: History; watching: boolean; judging: boolean; finish: Finish | null; spent: number; budget: number; keep: boolean; startedAt: number; tipStart: number }
+type Run = { build: Build; name: string; history: History; watching: boolean; judging: boolean; finish: Finish | null; spent: number; budget: number; keep: boolean; startedAt: number; tipStart: number; secs?: number }
 
 // Tips shown while training runs, a new one every few seconds. Each one is something that helps
 // build a faster car, and none is more than a sentence.
@@ -433,6 +435,7 @@ function stopTraining(text: string) {
 function finishTraining(f: Finish) {
   const r = run!
   lastRun = { spent: r.spent, generations: f.generations, budget: r.budget }
+  logEvent({ k: 'train', secs: r.secs ?? Math.round((performance.now() - r.startedAt) / 1000), generations: f.generations, keep: r.keep, wet: r.build.weather === 'wet', rays: r.build.sensors.count, practice: r.build.practice.length })
   if (car) rememberPrevious(car) // the car this run replaces, in case the new one is worse
   car = { name: r.name, build: r.build, genome: f.genome }
   carBrain = genomeToBrain(f.genome, shapeOf(r.build.sensors))
@@ -481,6 +484,7 @@ function startTraining(keep: boolean) {
       trainMsg('Picking your car: the best 20 drive mirrored and backwards versions of your practice tracks...')
     } else if (m.type === 'done') {
       run.finish = { genome: m.genome, generations: m.generations }
+      run.secs = Math.round((performance.now() - run.startedAt) / 1000)
       if (!run.watching) finishTraining(run.finish)
     }
   }
@@ -1060,6 +1064,7 @@ $('shareCar').addEventListener('click', async () => {
   const box = $<HTMLInputElement>('shareLink')
   try {
     await navigator.clipboard.writeText(link)
+    logEvent({ k: 'share' })
     box.hidden = true
     carMsg('Challenge link copied. Anyone who opens it can race ' + car.name + ' on the Grand Prix.')
   } catch {
@@ -1067,6 +1072,20 @@ $('shareCar').addEventListener('click', async () => {
     box.hidden = false
     box.select()
     carMsg('Copy this link and send it. Anyone who opens it can race your car.')
+  }
+})
+// Playtest notes: what happened in this browser, copied to paste into the feedback form. Nothing is sent anywhere.
+$('notes').addEventListener('click', async () => {
+  const text = playtestNotes(car?.build ?? null, car?.name ?? null)
+  try {
+    await navigator.clipboard.writeText(text)
+    carMsg('Notes copied. Paste them into the feedback form.')
+  } catch {
+    const box = $<HTMLInputElement>('shareLink')
+    box.value = text.replace(/\n/g, ' | ')
+    box.hidden = false
+    box.select()
+    carMsg('Copy this text into the feedback form.')
   }
 })
 // Receive: a link brings a car to beat, or one remembered from earlier is brought back

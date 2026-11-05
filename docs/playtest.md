@@ -7,7 +7,7 @@ Written 5 Nov 2026. Three people, about 20 minutes each. One question decides wh
 - **Who:** three people who might plausibly enjoy a racing, tinkering or strategy game, and who have not seen CrashLab. Not people who will be polite for 20 minutes.
 - **Device:** their own. Make sure at least one uses a phone. Training took about 2 minutes on one phone, so note how long it takes on theirs.
 - **Clean start:** a private window, so no saved car or setup is waiting. Link: https://kgadharsh.github.io/crashlab/
-- **Setup:** sit beside them, or share their screen on a call. Record it if they agree. Nothing is sent to us from the game: each player's car and results live only in their own browser.
+- **Setup:** sit beside them, or share their screen on a call. Record it if they agree. Nothing is sent to us from the game: each player's car and results live only in their own browser, until they press "Copy playtest notes" and paste it into the form.
 
 ## What to say (and nothing more)
 
@@ -39,8 +39,18 @@ Note the minute for each, and quote what they say.
 2. "What was the most confusing part?"
 3. "Would you play it again tomorrow? What would make you?"
 
+## What is new since this sheet was first written
+
+Watch for these too, and write down whether they find them alone:
+
+- **Two Grand Prix.** A second, wet one with its own medals. Do they notice the selector above the race? Do they try it?
+- **Road (Garage).** Dry or wet practice. Do they touch it, and do they link it to the wet Grand Prix?
+- **Challenge links.** "Copy challenge link" under Your car. Do they send it to anyone, or try a link someone sends them?
+
 ## After each session
 
-Send me: this sheet filled in, a screenshot of their Garage setup and of their race result, their device and browser, and minutes to their first race. I'll go through it with you and say what to fix first.
+Have the tester press **Copy playtest notes** (Practice tab, under Your car) and paste it into the feedback form. Create the form once with `docs/playtest-form.gs` (the steps are at the top of that file). The notes hold their device, minutes to the first race, training time, every race and medal, and whether they raced again, so you don't need to ask for those.
+
+Still send me what the form can't hold: your observer notes from this sheet, and a screenshot of their Garage setup and race result if you took them. I'll go through it with you and say what to fix first.
 
 Don't count a tester who never reached a first race as a "no" on racing again. Write down where they got stuck. That is its own finding.
