@@ -216,6 +216,7 @@ document.querySelector('#app')!.innerHTML = `
         <div class="medal" id="medal"></div>
         <p class="tip" id="resultLine" style="margin-top:4px"></p>
         <p class="tip warn" id="advice"></p>
+        <div class="actions"><button class="btn small primary" id="resultGarage">Edit setup in Garage →</button><button class="btn small" id="resultPractice">Go to Practice →</button></div>
       </div>
       <p class="tip" id="pb"></p>
     </div>
@@ -1093,7 +1094,7 @@ function loop(now: number) {
   requestAnimationFrame(loop)
 }
 
-raceView = createRaceView({ ctx, cam, getCar: () => car, isStale: carIsStale, getChallenge: () => challenge, hudText, setStrip })
+raceView = createRaceView({ ctx, cam, getCar: () => car, isStale: carIsStale, getChallenge: () => challenge, goTo: setTab, hudText, setStrip })
 
 // ---------- CHALLENGE LINKS ----------
 // Share: the car goes into a link, so a friend can race it with no server

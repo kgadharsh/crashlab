@@ -20,6 +20,7 @@ export type RaceDeps = {
   getCar: () => CarFile | null
   isStale: () => boolean
   getChallenge: () => Challenge | null
+  goTo: (tab: 'garage' | 'practice') => void
   hudText: (text: string, x: number, y: number, size: number, colour?: string, align?: CanvasTextAlign) => void
   setStrip: (cells: [string, string][]) => void
 }
@@ -232,7 +233,7 @@ export function createRaceView(d: RaceDeps) {
       m.textContent = medal ? medal.toUpperCase() : 'NO MEDAL'
       m.style.color = medal ? MEDAL_COLOUR[medal] : COL.muted
       $('resultLine').textContent = s.finished + ' of ' + RACE_COUNT + ' finished · ' + s.totalTime.toFixed(1) + ' s total'
-      $('advice').textContent = adviceFor(s, live!.gp)
+      $('advice').textContent = adviceFor(s, live!.gp, live!.car.build.weather === 'wet')
     }
     // a friend's challenge, and how your latest race compares with it
     const ch = d.getChallenge()
@@ -306,6 +307,8 @@ export function createRaceView(d: RaceDeps) {
   GRAND_PRIXES.forEach((_, i) => $('gp' + i).addEventListener('click', () => selectGp(i)))
   renderGp()
   $('raceGo').addEventListener('click', start)
+  $('resultGarage').addEventListener('click', () => d.goTo('garage'))
+  $('resultPractice').addEventListener('click', () => d.goTo('practice'))
   $('raceSkip').addEventListener('click', skip)
   $('raceSpeed').addEventListener('click', () => {
     speed = SPEEDS[(SPEEDS.indexOf(speed) + 1) % SPEEDS.length]
