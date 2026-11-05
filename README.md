@@ -10,7 +10,7 @@ It runs in the browser on a laptop or a phone. There's no server. Your car and y
 
 **Garage.** Pick how the car sees: how many rays, and how wide they spread. Pick its balance between top speed and grip, what it gets rewarded for, which practice tracks it learns on, and whether those tracks are dry or wet.
 
-**Practice.** The car trains on a fixed budget. A hundred cars drive the practice tracks, the best ones breed, and it repeats. That takes about a minute on a laptop and about two on a phone. You can watch every tenth generation, and "Keep training" carries on from the car you already have.
+**Practice.** The car trains on a fixed budget. A hundred cars drive the practice tracks, the best ones breed, and it repeats. That takes about half a minute on a laptop, which scores the cars on several processor cores at once, and longer on a phone. You can watch every tenth generation, and "Keep training" carries on from the car you already have.
 
 **Race.** The car drives eight secret tracks. There are two Grand Prix, a dry one and a wet one with less grip. Finish all eight, and fast, for a medal. Your best result is saved for each.
 

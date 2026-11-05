@@ -419,7 +419,21 @@ function renderChip() {
 // ---------- TRAINING ----------
 type History = { best: number; mean: number }[] // laps driven in one practice attempt: the best car, and the average car
 type Finish = { genome: number[]; generations: number }
-type Run = { build: Build; name: string; history: History; watching: boolean; judging: boolean; finish: Finish | null; spent: number; budget: number; keep: boolean; startedAt: number; tipStart: number; secs?: number }
+type Run = { build: Build; name: string; history: History; watching: boolean; judging: boolean; finish: Finish | null; spent: number; budget: number; keep: boolean; startedAt: number; awayAtStart: number; tipStart: number; secs?: number }
+
+// How long the page has been hidden in all (a phone asleep, another tab in front), so a training's time
+// counts only the time it ran on screen. Without this a run left while the phone slept reads as an hour.
+let hiddenTotal = 0
+let hiddenSince: number | null = document.hidden ? performance.now() : null
+const hiddenNow = () => hiddenTotal + (hiddenSince === null ? 0 : performance.now() - hiddenSince)
+document.addEventListener('visibilitychange', () => {
+  if (document.hidden) hiddenSince = performance.now()
+  else if (hiddenSince !== null) {
+    hiddenTotal += performance.now() - hiddenSince
+    hiddenSince = null
+  }
+})
+const runSeconds = (r: Run) => Math.round((performance.now() - r.startedAt - (hiddenNow() - r.awayAtStart)) / 1000)
 
 // Tips shown while training runs, a new one every few seconds. Each one is something that helps
 // build a faster car, and none is more than a sentence.
@@ -471,7 +485,7 @@ function stopTraining(text: string) {
 function finishTraining(f: Finish) {
   const r = run!
   lastRun = { spent: r.spent, generations: f.generations, budget: r.budget }
-  logEvent({ k: 'train', secs: r.secs ?? Math.round((performance.now() - r.startedAt) / 1000), generations: f.generations, keep: r.keep, wet: r.build.weather === 'wet', rays: r.build.sensors.count, practice: r.build.practice.length })
+  logEvent({ k: 'train', secs: r.secs ?? runSeconds(r), generations: f.generations, keep: r.keep, wet: r.build.weather === 'wet', rays: r.build.sensors.count, practice: r.build.practice.length })
   if (car) rememberPrevious(car) // the car this run replaces, in case the new one is worse
   car = { name: r.name, build: r.build, genome: f.genome }
   carBrain = genomeToBrain(f.genome, shapeOf(r.build.sensors))
@@ -498,7 +512,7 @@ function startTraining(keep: boolean) {
   stopTestDrive()
   const watch = input('watchAll').checked
   const budget = keep ? TRAINING_BUDGET * KEEP_TRAINING_SHARE : TRAINING_BUDGET
-  run = { build: clone(b), name: draft.name, history: [], watching: watch, judging: false, finish: null, spent: 0, budget, keep, startedAt: performance.now(), tipStart: Math.floor(Math.random() * TIPS.length) }
+  run = { build: clone(b), name: draft.name, history: [], watching: watch, judging: false, finish: null, spent: 0, budget, keep, startedAt: performance.now(), awayAtStart: hiddenNow(), tipStart: Math.floor(Math.random() * TIPS.length) }
   drawGraph([])
   const pace = watch ? 'Every ' + REPLAY_EVERY + 'th generation is replayed here.' : ''
   trainMsg(keep ? 'Carrying on from your car at full speed. ' + pace : watch ? 'Training at full speed. ' + pace : 'Training at full speed...')
@@ -522,7 +536,7 @@ function startTraining(keep: boolean) {
       trainMsg('Picking your car: the best 20 drive mirrored and backwards versions of your practice tracks...')
     } else if (m.type === 'done') {
       run.finish = { genome: m.genome, generations: m.generations }
-      run.secs = Math.round((performance.now() - run.startedAt) / 1000)
+      run.secs = runSeconds(run)
       if (!run.watching) finishTraining(run.finish)
     }
   }

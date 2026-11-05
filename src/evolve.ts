@@ -43,21 +43,28 @@ export function randomGenome(length: number, rng: Rng): Genome {
   return Array.from({ length }, () => rng() * 2 - 1)
 }
 
-// Drive every genome round the tracks and return them best first.
+// Drive one genome round all the tracks.
 // A genome's score is its average over all the tracks, so one that only works on one cannot win.
+// Each genome is scored on its own, so several threads can each score a share of the population.
+export function scoreOne(genome: Genome, drive: Drive, tracks: Track[]): Individual {
+  const runs = tracks.map((track) => drive(genome, track))
+  const mean = (f: (r: RunResult) => number) => runs.reduce((sum, r) => sum + f(r), 0) / runs.length
+  return {
+    genome,
+    fitness: mean((r) => r.fitness),
+    checkpoints: mean((r) => r.checkpoints),
+    steps: runs.reduce((sum, r) => sum + r.steps, 0),
+    crashed: runs.some((r) => r.crashed),
+  }
+}
+export const byFitness = (a: Individual, b: Individual) => b.fitness - a.fitness
+
+// Scores a whole population (best first), possibly on other threads
+export type Scorer = (genomes: Genome[], tracks: Track[]) => Promise<Individual[]>
+
+// Drive every genome round the tracks and return them best first.
 export function scorePopulation(genomes: Genome[], drive: Drive, tracks: Track[]): Individual[] {
-  const scored = genomes.map((genome) => {
-    const runs = tracks.map((track) => drive(genome, track))
-    const mean = (f: (r: RunResult) => number) => runs.reduce((sum, r) => sum + f(r), 0) / runs.length
-    return {
-      genome,
-      fitness: mean((r) => r.fitness),
-      checkpoints: mean((r) => r.checkpoints),
-      steps: runs.reduce((sum, r) => sum + r.steps, 0),
-      crashed: runs.some((r) => r.crashed),
-    }
-  })
-  return scored.sort((a, b) => b.fitness - a.fitness)
+  return genomes.map((genome) => scoreOne(genome, drive, tracks)).sort(byFitness)
 }
 
 // Pick a parent: a few random cars compete and the best of them wins.
@@ -113,22 +120,30 @@ export function populationFrom(start: Genome, settings: Settings, rng: Rng): Gen
 export function createEvolution(rng: Rng, settings: Settings, drive: Drive, tracks: (generation: number) => Track[], start?: Genome) {
   let genomes = start ? populationFrom(start, settings, rng) : Array.from({ length: settings.populationSize }, () => randomGenome(settings.genomeLength, rng))
   let gen = 0
+  // Report on a scored generation (best first) and breed the next one
+  function finish(drawn: Track[], scored: Individual[]): GenerationReport {
+    const report: GenerationReport = {
+      generation: gen,
+      best: scored[0],
+      meanFitness: scored.reduce((sum, x) => sum + x.fitness, 0) / scored.length,
+      meanCheckpoints: scored.reduce((sum, x) => sum + x.checkpoints, 0) / scored.length,
+      steps: scored.reduce((sum, x) => sum + x.steps, 0),
+      tracks: drawn.length,
+      population: scored.map((x) => x.genome),
+    }
+    genomes = breed(scored, settings, rng)
+    gen++
+    return report
+  }
   return {
     step(): GenerationReport {
       const drawn = tracks(gen)
-      const scored = scorePopulation(genomes, drive, drawn)
-      const report: GenerationReport = {
-        generation: gen,
-        best: scored[0],
-        meanFitness: scored.reduce((sum, x) => sum + x.fitness, 0) / scored.length,
-        meanCheckpoints: scored.reduce((sum, x) => sum + x.checkpoints, 0) / scored.length,
-        steps: scored.reduce((sum, x) => sum + x.steps, 0),
-        tracks: drawn.length,
-        population: scored.map((x) => x.genome),
-      }
-      genomes = breed(scored, settings, rng)
-      gen++
-      return report
+      return finish(drawn, scorePopulation(genomes, drive, drawn))
+    },
+    // The same generation, scored by a Scorer (which may use other threads). The cars are identical either way.
+    async stepWith(score: Scorer): Promise<GenerationReport> {
+      const drawn = tracks(gen)
+      return finish(drawn, await score(genomes, drawn))
     },
   }
 }

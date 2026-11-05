@@ -147,3 +147,18 @@ Built from this: the **Keep training** button (30% of the budget, needs the same
 - **Two of three brains never touched the boost button**, so they drove like the no-nitro cars. Evolution did not find it in about 110 generations.
 - **The one brain that did use it** spent 92% of the charge, 77% of it on straights (a little better than the 64% a random choice would give), but crashed on one track and finished 7/8.
 - **Verdict: not worth building as it stands.** The brain does not reliably learn to use it in the fixed budget, and when it does the result is not clearly faster. Things to try if it is revisited: start the boost output slightly positive so cars discover it, reward finishing time more, or give nitro cars a bigger budget. Three seeds, default build only.
+
+## 5 Nov 2026: does scoring cars on several threads change the cars, and how much faster is it?
+
+`src/scorePool.ts`, `src/scoreWorker.ts` and `scripts/scorerCheck.ts`. A car is scored on its own, so each generation's 100 cars are shared out between this thread and up to 3 helper workers (the device's cores minus one, at most 4 threads), then put back in order and sorted as before. The threads were checked in the browser on an 8-core laptop, training the same seed with the thread count set by hand and comparing a fingerprint of the picked car and every generation's scores.
+
+| Run | 1 thread | More threads | Same cars? |
+|---|---|---|---|
+| Default build, 4 practice tracks, 6M steps (dev build) | 16.1 s | 6.4 s (4 threads) | yes, identical fingerprint |
+| 9 rays, 180°, wet road, 6 practice tracks, 3M steps | 12.1 s | 5.7 s (3 threads) | yes |
+| Default build, 6M steps (production build) | 14.9 s | 5.4 s (4 threads) | yes, same fingerprint as the dev build |
+
+- **Same cars, 2.1 to 2.8 times faster.** A whole run through the app (30M steps, 4 threads, replays on, production build) took 22.7 s to the end of training, against about 75 s on one thread.
+- **One thread is untouched:** `scripts/bench.ts` gives the same fingerprints as before (`7d5eb8664a03` for default, `9c724097a6dd` for wide), and `scripts/scorerCheck.ts` shows the Scorer path matching the plain one.
+- **If a helper fails**, the scorer falls back to one thread with the same result (tested with helpers given a broken build). A helper that does not answer for 30 s is dropped the same way.
+- **Not measured:** phones. They report more cores than they have fast ones, and the page's own drawing competes for them, so the gain there may be smaller. One earlier full run through the app took about 70 s and did not repeat in three later runs; I could not tell why, so treat single timings as rough.

@@ -1,7 +1,7 @@
 // One training run: evolution on the player's practice tracks until the budget is spent.
 // The app runs this in a worker (trainWorker.ts); experiments in scripts/ run it directly,
 // so they measure exactly what players get.
-import { createEvolution, scorePopulation, DEFAULT_SETTINGS, type Drive, type GenerationReport } from './evolve'
+import { createEvolution, scorePopulation, DEFAULT_SETTINGS, type Drive, type GenerationReport, type Scorer } from './evolve'
 import { genomeToBrain } from './genome'
 import { makeRng } from './random'
 import { runBrain } from './sim'
@@ -19,34 +19,50 @@ const FINAL_LAYOUTS = 2
 
 export type TrainingStep = { report: GenerationReport; spent: number; finished: boolean }
 
+// How one genome drives one track for this build. The scoring helper threads build the same one, so a car scores the same anywhere.
+export function driverFor(build: Build): Drive {
+  const spec = specOf(build)
+  const shape = shapeOf(build.sensors, !!build.perks?.nitro)
+  return (genome, track) => runBrain(genomeToBrain(genome, shape), track, spec, build.reward)
+}
+
 // start: an existing car to carry on training, instead of beginning from random brains. It also
 // competes in the final pick, so carrying on never hands back a car the judging scores worse.
 export function createTraining(build: Build, seed: number, budget = TRAINING_BUDGET, start?: number[]) {
-  const spec = specOf(build)
   const shape = shapeOf(build.sensors, !!build.perks?.nitro)
   if (start && start.length !== genomeLength(shape)) throw new Error('That car was built for different sensors')
   const trackRng = makeRng(seed + 77777) // separate, so the tracks drawn do not change the evolution's own luck
   const dry = build.practice.map(practiceTrack)
   const practice = build.weather === 'wet' ? dry.map((t) => wetTrack(t)) : build.weather === 'both' ? dry.flatMap((t) => [t, wetTrack(t)]) : dry
   const layouts = (tracks: Track[], count: number) => Array.from({ length: count }, () => tracks.map((t) => moveBlocks(t, trackRng))).flat()
-  const drive: Drive = (genome, track) => runBrain(genomeToBrain(genome, shape), track, spec, build.reward)
+  const drive = driverFor(build)
   const settings = { ...DEFAULT_SETTINGS, populationSize: POPULATION, genomeLength: genomeLength(shape) }
   const evolution = createEvolution(makeRng(seed), settings, drive, () => layouts(practice, 1), start)
   let spent = 0
   let generations = 0
+  const advance = (report: GenerationReport): TrainingStep => {
+    spent += report.steps
+    generations++
+    return { report, spent: Math.min(spent, budget), finished: spent >= budget }
+  }
+  // The finalists, and the tracks they are judged on: the practice tracks and their mirrored and backwards versions
+  const finalists = (population: number[][]) => (start ? [start, ...population.slice(0, FINALISTS - 1)] : population.slice(0, FINALISTS))
+  const judgingTracks = () => layouts(practice.flatMap((t) => [t, ...trackVariants(t)]), FINAL_LAYOUTS)
   return {
     // Run one generation. finished is true once the budget is spent.
     step(): TrainingStep {
-      const report = evolution.step()
-      spent += report.steps
-      generations++
-      return { report, spent: Math.min(spent, budget), finished: spent >= budget }
+      return advance(evolution.step())
+    },
+    // The same, with a Scorer that may use other threads
+    async stepWith(score: Scorer): Promise<TrainingStep> {
+      return advance(await evolution.stepWith(score))
     },
     // Pick the car: the finalists drive the practice tracks and their mirrored and backwards versions
     winner(population: number[][]): number[] {
-      const judging = practice.flatMap((t) => [t, ...trackVariants(t)])
-      const finalists = start ? [start, ...population.slice(0, FINALISTS - 1)] : population.slice(0, FINALISTS)
-      return scorePopulation(finalists, drive, layouts(judging, FINAL_LAYOUTS))[0].genome
+      return scorePopulation(finalists(population), drive, judgingTracks())[0].genome
+    },
+    async winnerWith(population: number[][], score: Scorer): Promise<number[]> {
+      return (await score(finalists(population), judgingTracks()))[0].genome
     },
     get generations() {
       return generations
