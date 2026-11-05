@@ -1,4 +1,5 @@
 import './style.css'
+import { GOLD_TIME, RACE_COUNT } from './race'
 import { DEFAULT_BUILD, LIMITS, POPULATION, REPLAY_EVERY, TRAINING_BUDGET, buildProblem, cleanBuild, genomeLength, shapeOf, specOf, type Build } from './setup'
 import { CHECKPOINTS, STALL_STEPS, createCar, drive, type Brain, type Car } from './sim'
 import { PRACTICE, PRACTICE_COUNT, practiceTrack, trackFeatures, trackStats, type Track } from './track'
@@ -127,9 +128,11 @@ document.querySelector('#app')!.innerHTML = `
           <button class="btn" id="skip" hidden>Skip to the end</button>
         </div>
         <label class="row" style="grid-template-columns:auto 1fr;margin-top:10px"><input type="checkbox" id="watchAll" checked /><span>Replay every ${REPLAY_EVERY}th generation</span></label>
+        <label class="row" style="grid-template-columns:auto 1fr"><input type="checkbox" id="bestOnly" /><span>Show only the best car (lighter on phones)</span></label>
         <label class="row" style="grid-template-columns:auto 1fr"><span>Watch on</span><select id="watchTrack" aria-label="Practice track to watch"></select></label>
         <p class="tip">Every generation is scored on all your practice tracks, with the blocks moved each time. The screen shows one of them.</p>
         <p class="msg" id="trainMsg"></p>
+        <p class="tip" id="trainTip" hidden></p>
       </div>
       <div class="panel">
         <h2>Setup<span class="aside"><button class="btn small" id="toGarage">Edit</button></span></h2>
@@ -334,7 +337,25 @@ function renderChip() {
 // ---------- TRAINING ----------
 type History = { best: number; mean: number }[] // laps driven in one practice attempt: the best car, and the average car
 type Finish = { genome: number[]; generations: number }
-type Run = { build: Build; name: string; history: History; watching: boolean; judging: boolean; finish: Finish | null; spent: number }
+type Run = { build: Build; name: string; history: History; watching: boolean; judging: boolean; finish: Finish | null; spent: number; startedAt: number; tipStart: number }
+
+// Tips shown while training runs, a new one every few seconds. Each one is something that helps
+// build a faster car, and none is more than a sentence.
+const TIPS = [
+  'More practice tracks prepare the car better for tracks it has never seen, but every generation then costs more of the budget.',
+  'A wide spread sees bends sooner. A narrow spread sees straight ahead in more detail.',
+  'More rays see more, but every ray adds weights for the brain to learn, so training needs more generations.',
+  'A fast car has to brake earlier, because the tyres let go sooner.',
+  'A pace bonus keeps cars moving. A crash penalty teaches them to take bends carefully.',
+  'Blocks catch cars that see them too late. More rays, or a wider spread, spot them sooner.',
+  'Training has luck in it: the same setup can give a better or a worse car, so it can be worth training it twice.',
+  'Race day counts tracks finished first, then total time. Gold needs all ' + RACE_COUNT + ' tracks in under ' + GOLD_TIME + ' seconds.',
+  'You can tune your next car in the Garage while this one trains.',
+  'Your old car stays yours until the new one finishes, so you can race it on the Race tab in the meantime.',
+]
+const TIP_SECONDS = 9
+const currentTip = (r: Run) => TIPS[(r.tipStart + Math.floor((performance.now() - r.startedAt) / (TIP_SECONDS * 1000))) % TIPS.length]
+
 let worker: Worker | null = null
 let run: Run | null = null
 let lastRun: { spent: number; generations: number } | null = null // what the finished run used, for the budget panel
@@ -367,10 +388,12 @@ function finishTraining(f: Finish) {
   carBrain = genomeToBrain(f.genome, shapeOf(r.build.sensors))
   save(KEYS.car, carToJson(car))
   drawGraph(r.history)
-  stopTraining('Done: ' + f.generations + ' generations. Here is your car on its first test drive.')
+  // the test drive only starts if you are watching it; from another tab the car is simply ready
+  const here = tab === 'practice'
+  stopTraining('Done: ' + f.generations + ' generations. ' + (here ? 'Here is your car on its first test drive.' : 'Your new car is ready: test drive it in Practice, or race it.'))
   renderChip()
   raceView?.render()
-  startTestDrive()
+  if (here) startTestDrive()
 }
 
 $('train').addEventListener('click', () => {
@@ -380,7 +403,7 @@ $('train').addEventListener('click', () => {
   }
   stopTestDrive()
   const watch = input('watchAll').checked
-  run = { build: clone(b), name: draft.name, history: [], watching: watch, judging: false, finish: null, spent: 0 }
+  run = { build: clone(b), name: draft.name, history: [], watching: watch, judging: false, finish: null, spent: 0, startedAt: performance.now(), tipStart: Math.floor(Math.random() * TIPS.length) }
   drawGraph([])
   trainMsg(watch ? 'Training at full speed. Every ' + REPLAY_EVERY + 'th generation is replayed here.' : 'Training at full speed...')
   worker = new Worker(new URL('./trainWorker.ts', import.meta.url), { type: 'module' })
@@ -444,6 +467,17 @@ watchSelect.addEventListener('change', () => {
   }
 })
 
+// One car is far lighter to draw than a hundred, so touch screens start with only the best car
+// (and it can be switched either way at any time, even mid-replay)
+const bestOnly = input('bestOnly')
+bestOnly.checked = window.matchMedia('(pointer: coarse)').matches
+bestOnly.addEventListener('change', () => {
+  if (swarm && run) {
+    swarm = makeSwarm(swarm.gen, swarm.genomes, run.build, swarm.bestSteps, swarm.plays)
+    follow(cam, swarm.cars[0], true)
+  }
+})
+
 // Training runs flat out and every REPLAY_EVERY-th generation is replayed, so a replay has
 // about as long as those generations take to train (roughly 10 seconds on a laptop) and then
 // the next one is ready. The worker says how long the best car lasted in practice: a generation
@@ -458,7 +492,8 @@ function makeSwarm(gen: number, genomes: number[][], build: Build, bestSteps: nu
   const spec = specOf(build)
   const trackId = Number(watchSelect.value)
   const track = practiceTrack(trackId)
-  const brains = genomes.map((g) => genomeToBrain(g, shape))
+  // best car only: the genomes come best first, so the first one is the generation's best car
+  const brains = (input('bestOnly').checked ? genomes.slice(0, 1) : genomes).map((g) => genomeToBrain(g, shape))
   const cars = brains.map(() => createCar(track, spec))
   return { gen, genomes, bestSteps, trackId, track, cars, brains, done: brains.map(() => false), hold: 0, trails: cars.map((c) => [{ x: c.x, y: c.y }]), lead: 0, speed: paceFor(bestSteps), owed: 0, frames: 0, plays }
 }
@@ -702,7 +737,7 @@ function drawGraph(history: History) {
 // The car the camera follows: the test-drive car or the lead car of the generation (none in the garage)
 function focusCar(): Car | null {
   if (test) return test.car
-  if (swarm) return swarm.cars[swarm.lead]
+  if (swarm && tab === 'practice') return swarm.cars[swarm.lead] // the Garage keeps its own view while a run goes on
   return null
 }
 let parkedCache: { key: string; car: Car } | null = null
@@ -729,6 +764,36 @@ function setStrip(cells: [string, string][]) {
   strip.innerHTML = html
 }
 
+// Centred text that wraps onto more lines to fit a width
+function hudWrap(text: string, x: number, y: number, width: number, size: number, colour: string, lineHeight: number) {
+  ctx.font = '700 ' + size + 'px "Barlow Condensed", sans-serif'
+  ctx.textAlign = 'center'
+  ctx.textBaseline = 'alphabetic'
+  ctx.fillStyle = colour
+  let line = ''
+  let top = y
+  for (const word of text.split(' ')) {
+    const next = line ? line + ' ' + word : word
+    if (line && ctx.measureText(next).width > width) {
+      ctx.fillText(line, x, top)
+      line = word
+      top += lineHeight
+    } else line = next
+  }
+  if (line) ctx.fillText(line, x, top)
+}
+
+// The tip under the Training panel changes every few seconds while a run goes on
+const tipEl = $('trainTip')
+let tipText = ''
+function updateTip() {
+  const text = run && !run.judging ? 'Tip: ' + currentTip(run) : ''
+  if (text === tipText) return
+  tipText = text
+  tipEl.textContent = text
+  tipEl.hidden = !text
+}
+
 // Training with nothing to replay (replays are off, or the first one is not ready yet): a progress
 // screen, so it is clear that training is running and how far it has got.
 function drawTrainingScreen(r: Run) {
@@ -741,16 +806,18 @@ function drawTrainingScreen(r: Run) {
   ctx.lineWidth = 3
   ctx.beginPath()
   const turn = performance.now() / 350
-  ctx.arc(cx, H / 2 - 112, 14, turn, turn + 4)
+  // the text is large because on a phone this whole screen is drawn small
+  ctx.arc(cx, H / 2 - 128, 14, turn, turn + 4)
   ctx.stroke()
-  hudText(r.judging ? 'PICKING YOUR CAR' : 'TRAINING AT FULL SPEED', cx, H / 2 - 66, 18, COL.accent, 'center')
-  hudText('GEN ' + gen, cx, H / 2 - 8, 72, COL.text, 'center')
+  hudText(r.judging ? 'PICKING YOUR CAR' : 'TRAINING AT FULL SPEED', cx, H / 2 - 78, 24, COL.accent, 'center')
+  hudText('GEN ' + gen, cx, H / 2 - 4, 84, COL.text, 'center')
   ctx.fillStyle = COL.road
-  ctx.fillRect(cx - bar / 2, H / 2 + 24, bar, 10)
+  ctx.fillRect(cx - bar / 2, H / 2 + 26, bar, 10)
   ctx.fillStyle = COL.accent
-  ctx.fillRect(cx - bar / 2, H / 2 + 24, bar * done, 10)
-  hudText(Math.round(100 * done) + '% OF THE BUDGET USED' + (last ? ' · BEST CAR ' + last.best.toFixed(2) + ' LAPS' : ''), cx, H / 2 + 62, 16, COL.muted, 'center')
-  hudText(r.watching ? 'THE FIRST REPLAY IS ON ITS WAY' : 'REPLAYS ARE OFF FOR THIS RUN · TICK THE BOX BEFORE STARTING TO WATCH THEM', cx, H - 24, 13, COL.muted, 'center')
+  ctx.fillRect(cx - bar / 2, H / 2 + 26, bar * done, 10)
+  hudText(Math.round(100 * done) + '% OF THE BUDGET USED' + (last ? ' · BEST CAR ' + last.best.toFixed(2) + ' LAPS' : ''), cx, H / 2 + 68, 21, COL.muted, 'center')
+  if (!r.judging) hudWrap('Tip: ' + currentTip(r), cx, H / 2 + 116, 680, 25, COL.text, 31)
+  hudText(r.watching ? 'THE FIRST REPLAY IS ON ITS WAY' : 'REPLAYS ARE OFF FOR THIS RUN · TICK THE BOX BEFORE STARTING TO WATCH THEM', cx, H - 20, 16, COL.muted, 'center')
   setStrip([
     ['Generation', String(gen)],
     ['Budget used', Math.round(100 * done) + '<small>%</small>'],
@@ -772,7 +839,7 @@ function draw() {
     const f = fanFrame(parked())
     lookAt(cam, f.x, f.y, f.zoom)
   } else fit(cam, tab !== 'garage')
-  if (swarm && run) {
+  if (swarm && run && tab === 'practice') {
     const sw = swarm
     withCamera(ctx, cam, () => {
       drawTrack(ctx, sw.track)
@@ -795,7 +862,7 @@ function draw() {
     hudText('GEN ' + (sw.gen + 1), 16, 42, 36)
     hudText('REPLAY ON ' + TRACK_NAMES[sw.trackId].toUpperCase() + ' · TRAINING IS ON GEN ' + run.history.length, 16, 64, 16, COL.muted)
     hudText('SCORED ON ALL ' + run.build.practice.length + ' PRACTICE TRACKS', 16, 82, 13, COL.muted)
-    hudText(alive + ' / ' + sw.cars.length + ' DRIVING', W - 16, H - 16, 18, COL.tele, 'right')
+    hudText(sw.cars.length === 1 ? 'BEST OF ' + sw.genomes.length + ' CARS' : alive + ' / ' + sw.cars.length + ' DRIVING', W - 16, H - 16, 18, COL.tele, 'right')
     const status = run.judging
       ? 'TRAINING DONE · PICKING YOUR CAR'
       : sw.plays > 0
@@ -886,6 +953,7 @@ function loop(now: number) {
     if (tab === 'race') raceView?.tick()
     owed -= STEP
   }
+  updateTip()
   stepSwarm(Math.min(elapsed / STEP, 6)) // below 10 frames a second the replay slows down rather than stalling the screen
   buildOneThumb()
   draw()
