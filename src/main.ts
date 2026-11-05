@@ -102,6 +102,12 @@ document.querySelector('#app')!.innerHTML = `
   </section>
   <aside class="side">
     <div id="garage" class="side">
+      <div class="panel">
+        <h2>Your job</h2>
+        <p class="tip" style="margin-top:0">Build a car, train its brain on practice tracks, then race it on ${RACE_COUNT} tracks it has never seen. Gold: all ${RACE_COUNT} in under ${GOLD_TIME} s.</p>
+        <p class="tip">Not sure where to start? The setup below finished all ${RACE_COUNT} dry-road race tracks in all 7 of our test trainings. Train with it, then change one thing at a time to see what it does.</p>
+        <div class="actions"><button class="btn small primary" id="toPracticeTop">Train with this setup →</button></div>
+      </div>
       <div class="panel name">
         <input id="name" maxlength="24" aria-label="Car name" spellcheck="false" />
       </div>
@@ -109,7 +115,7 @@ document.querySelector('#app')!.innerHTML = `
         <h2><span class="n">01</span>Sensors<span class="aside" id="weights"></span></h2>
         <label class="row"><span>Rays</span><input type="range" id="count" min="${LIMITS.count[0]}" max="${LIMITS.count[1]}" step="1" /><output id="countOut"></output></label>
         <label class="row"><span>Spread</span><input type="range" id="spread" min="${LIMITS.spread[0]}" max="${LIMITS.spread[1]}" step="5" /><output id="spreadOut"></output></label>
-        <p class="tip">More rays see more, but every ray adds weights for training to find. A wide spread sees bends sooner; a narrow one sees straight ahead in more detail.</p>
+        <p class="tip">Rays are the car's eyes: each one measures the distance to the road edge or a block. More rays show more, but every ray adds connections the brain has to learn, so training takes longer. Spread is how wide they look: a wide spread sees bends sooner, a narrow one sees straight ahead in more detail.</p>
       </div>
       <div class="panel">
         <h2><span class="n">02</span>Car setup</h2>
@@ -118,14 +124,14 @@ document.querySelector('#app')!.innerHTML = `
           <div class="stat">Top speed<div class="bar amber"><i id="speedBar"></i></div><b id="speedOut"></b></div>
           <div class="stat">Cornering<div class="bar"><i id="gripBar"></i></div><b id="gripOut"></b></div>
         </div>
-        <p class="tip">A fast car has to brake earlier, because the tyres let go sooner.</p>
+        <p class="tip">Grip takes bends harder; speed is quicker on the straights. A fast car has to brake earlier, because the tyres let go sooner. In our tests a very fast car crashed too often to finish all ${RACE_COUNT} race tracks.</p>
       </div>
       <div class="panel">
         <h2><span class="n">03</span>Driving style</h2>
         <label class="row"><span>Pace bonus</span><input type="range" id="pace" min="0" max="100" step="5" /><output id="paceOut"></output></label>
         <label class="row"><span>Crash penalty</span><input type="range" id="safety" min="0" max="100" step="5" /><output id="safetyOut"></output></label>
         <label class="row"><span>Smoothness</span><input type="range" id="smooth" min="0" max="100" step="5" /><output id="smoothOut"></output></label>
-        <p class="tip">Training always rewards getting round the track. These change what else it cares about.</p>
+        <p class="tip">Training always rewards getting round the track. Pace bonus adds a reward for speed, so the car takes more risks. Crash penalty punishes crashing, so it drives more carefully. Smoothness punishes jerky steering. In our tests the sliders did not clearly help or hurt, so zero is a fine start.</p>
       </div>
       <div class="panel">
         <h2><span class="n">04</span>Practice tracks<span class="aside" id="pickCount"></span></h2>
@@ -150,7 +156,7 @@ document.querySelector('#app')!.innerHTML = `
         <label class="row" style="grid-template-columns:auto 1fr;margin-top:10px"><input type="checkbox" id="watchAll" checked /><span>Replay every ${REPLAY_EVERY}th generation</span></label>
         <label class="row" style="grid-template-columns:auto 1fr"><input type="checkbox" id="bestOnly" /><span>Show only the best car (lighter on phones)</span></label>
         <label class="row" style="grid-template-columns:auto 1fr"><span>Watch on</span><select id="watchTrack" aria-label="Practice track to watch"></select></label>
-        <p class="tip">Every generation is scored on all your practice tracks, with the blocks moved each time. The screen shows one of them.</p>
+        <p class="tip">Each generation, ${POPULATION} cars drive all your practice tracks, with the blocks moved each time. The best 10 carry over unchanged and the rest are children of good cars, with small random changes. The screen shows one track.</p>
         <p class="msg" id="trainMsg"></p>
         <p class="tip" id="trainTip" hidden></p>
       </div>
@@ -258,6 +264,7 @@ function setTab(t: Tab) {
 }
 document.querySelectorAll<HTMLButtonElement>('.tab[data-tab]').forEach((btn) => btn.addEventListener('click', () => setTab(btn.dataset.tab as Tab)))
 $('toPractice').addEventListener('click', () => setTab('practice'))
+$('toPracticeTop').addEventListener('click', () => setTab('practice'))
 $('toGarage').addEventListener('click', () => setTab('garage'))
 
 // ---------- RACE DAY (raceView.ts) ----------
@@ -362,7 +369,7 @@ const estGenerations = (build: Build) => Math.round(TRAINING_BUDGET / (POPULATIO
 
 function renderGarage() {
   const spec = specOf(b)
-  $('weights').textContent = genomeLength(shapeOf(b.sensors)) + ' weights'
+  $('weights').textContent = genomeLength(shapeOf(b.sensors)) + ' connections'
   $('countOut').textContent = String(b.sensors.count)
   $('spreadOut').textContent = b.sensors.spread + '°'
   $('speedOut').textContent = spec.maxSpeed.toFixed(1)
@@ -412,7 +419,7 @@ type Run = { build: Build; name: string; history: History; watching: boolean; ju
 const TIPS = [
   'More practice tracks prepare the car better for tracks it has never seen, but every generation then costs more of the budget.',
   'A wide spread sees bends sooner. A narrow spread sees straight ahead in more detail.',
-  'More rays see more, but every ray adds weights for the brain to learn, so training needs more generations.',
+  'More rays see more, but every ray adds connections for the brain to learn, so training needs more generations.',
   'A fast car has to brake earlier, because the tyres let go sooner.',
   'A pace bonus keeps cars moving. A crash penalty teaches them to take bends carefully.',
   'Blocks catch cars that see them too late. More rays, or a wider spread, spot them sooner.',
@@ -762,7 +769,7 @@ function renderPractice() {
   const spec = specOf(b)
   const rows: [string, string][] = [
     ['Sensors', b.sensors.count + ' rays across ' + b.sensors.spread + '°'],
-    ['Brain', genomeLength(shapeOf(b.sensors)) + ' weights'],
+    ['Brain', genomeLength(shapeOf(b.sensors)) + ' connections'],
     ['Top speed · cornering', spec.maxSpeed.toFixed(1) + ' · ' + spec.gripSpeed.toFixed(1)],
     ['Pace · crash · smooth', pct(b.reward.pace) + ' · ' + pct(b.reward.safety) + ' · ' + pct(b.reward.smooth)],
     ['Practice', b.practice.map((id) => TRACK_NAMES[id]).join(', ')],
@@ -1053,7 +1060,7 @@ function draw() {
     if (tab === 'garage') hudText('MOVE RAYS OR SPREAD TO ZOOM BACK IN ON THE CAR', W - 16, H - 16, 13, COL.muted, 'right')
   }
   setStrip([
-    ['Brain', genomeLength(shapeOf(b.sensors)) + '<small> weights</small>'],
+    ['Brain', genomeLength(shapeOf(b.sensors)) + '<small> connections</small>'],
     ['Top speed', specOf(b).maxSpeed.toFixed(1)],
     ['Practice', b.practice.length + '<small> tracks</small>'],
     ['Generations', '~' + estGenerations(b)],
