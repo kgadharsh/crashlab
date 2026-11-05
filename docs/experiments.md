@@ -75,3 +75,22 @@ Training now picks the car this way (`src/training.ts`). The same 4 seeds chose 
 - **40% did better than 50% and 60%** (2 gold), which does not fit a smooth curve. With three seeds, treat it as luck, and as a sign that a single run at a given budget can fool you.
 - **Verdict: do not cut the budget to 60%.** 80% looks safe but saves only about a fifth of the training time (roughly 20 seconds), and it rests on three seeds, so the budget stays at 30M steps for now.
 - Picking a car at each checkpoint uses the run's own track randomness, so the 100% row differs slightly from an unchecked run. The effect is small and the same at every budget.
+
+## 5 Nov 2026: is the gold time fair across builds?
+
+`scripts/medalCalibration.ts`. 16 trainings with the app's exact flow (the full 30M budget, then the final pick), each car raced on the 8 Grand Prix tracks. Builds: default (seeds 21 to 24), and on seeds 21 to 23 each: wide vision (9 rays, 180°), six practice tracks, fast car with a crash penalty, and a careful style (crash penalty and smoothness).
+
+| Build | Result per seed | Gold at 200 s |
+|---|---|---|
+| Default | 148 s, 148 s, 147 s, 151 s | 4 of 4 |
+| Wide vision | 143 s, 7/8, 156 s | 2 of 3 |
+| Six practice tracks | 7/8, 2/8, 154 s | 1 of 3 |
+| Fast car | 7/8, 6/8, 6/8 | 0 of 3 |
+| Careful style | 149 s, 149 s, 7/8 | 2 of 3 |
+
+- **9 of 16 cars finished all 8 tracks, and every one of them took 143 to 156 s.** At the 200 s line all 9 won gold and none won silver, so gold currently just means "finish all 8".
+- **Finishing times barely differ between cars.** They drive near top speed, so total time follows track length. The cars built for speed (the fast car) crashed instead: none of its 3 finished all 8.
+- **Share of all cars that would win gold:** 0% at 140 s or less, 38% at 150 s, 56% at 160 s and above.
+- **A 150 s line** would give 38% gold, 19% silver, 38% bronze and 6% no medal. But with a 13 s spread it would split cars that are within noise of each other (the default runs at 147, 148 and 148 s would win gold, the one at 151 s silver).
+- The 4 Nov line (200 s, from times of 183 to 312 s) predates the mirrored-track pick and is out of date. `GOLD_TIME` is not changed yet.
+- More practice tracks and wider vision are not safe upgrades: six tracks finished all 8 on 1 of 3 seeds and wide vision on 2 of 3, against 4 of 4 for the default. Three seeds is a small sample.
