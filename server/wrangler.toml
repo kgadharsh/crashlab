@@ -1,6 +1,8 @@
 name = "crashlab-api"
 main = "src/index.ts"
 compatibility_date = "2026-11-01"
+workers_dev = true # served at https://crashlab-api.kgadharsh.workers.dev
+preview_urls = false
 
 [[d1_databases]]
 binding = "DB"
