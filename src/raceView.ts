@@ -329,7 +329,8 @@ export function createRaceView(d: RaceDeps) {
       if (ch && !('error' in ch)) hudText(versus(r.summary, rivalResult(ch, r.gp), ch.car.name).toUpperCase(), W / 2, H / 2 + 86, 18, COL.text, 'center')
     } else {
       hudText('TRACK ' + (r.index + 1) + ' / ' + RACE_COUNT, 16, 42, 34)
-      if (r.gp.wet) hudText('WET ROAD', W - 16, 42, 24, COL.tele, 'right')
+      const road = [r.gp.wet ? 'WET ROAD' : '', r.gp.night ? 'NIGHT' : '', r.gp.ice ? 'ICE PATCHES' : ''].filter(Boolean).join(' · ')
+      if (road) hudText(road, W - 16, 42, 24, COL.tele, 'right')
       hudText(time(result?.time ?? lap.steps / 60), 16, 74, 30, result ? (result.time !== null ? COL.good : COL.bad) : COL.text)
       if (result) hudText(result.time !== null ? 'FINISHED' : CAUSE_LABEL[result.cause!].toUpperCase(), W / 2, 60, 30, result.time !== null ? COL.good : COL.bad, 'center')
       hudText(speed + '× SPEED', W - 16, H - 16, 16, COL.muted, 'right')

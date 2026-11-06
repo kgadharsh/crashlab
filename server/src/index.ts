@@ -198,7 +198,7 @@ async function weeklyInfo(req: Request, env: Env): Promise<Response> {
     seed: w.seed,
     podium: all.filter((p) => p.gp === 'w:' + w.week).map(({ place, id, display, finished, totalTime }) => ({ place, id, display, finished, totalTime })),
   }))
-  return json(req, { week: now, name: gp.name, wet: gp.wet, endsAt: weekStart(now + 1), limit: WEEKLY_LIMIT, past })
+  return json(req, { week: now, name: gp.name, wet: gp.wet, night: gp.night, ice: gp.ice, endsAt: weekStart(now + 1), limit: WEEKLY_LIMIT, past })
 }
 
 // Weekly trophies won by each player: [gold, silver, bronze]

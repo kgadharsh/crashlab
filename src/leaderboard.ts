@@ -19,7 +19,7 @@ const beats = (a: Score, b: Score) => a.finished !== b.finished ? a.finished > b
 type Row = { rank: number; id: number; display: string; finished: number; totalTime: number; medal: string | null; trophies?: number[] }
 // This week's Grand Prix as the server describes it (never its seed), and finished weeks with their seeds and top 3
 type Podium = { place: number; id: number; display: string; finished: number; totalTime: number }
-type Weekly = { week: number; name: string; wet: boolean; endsAt: number; limit: number; past: { week: number; seed: number; podium: Podium[] }[] }
+type Weekly = { week: number; name: string; wet: boolean; night?: boolean; ice?: boolean; endsAt: number; limit: number; past: { week: number; seed: number; podium: Podium[] }[] }
 const TROPHY = ['🥇', '🥈', '🥉']
 // Weekly trophies after a name, e.g. 🥇2 🥉1
 const trophyText = (t?: number[]) => (t ?? []).flatMap((n, i) => (n ? [TROPHY[i] + (n > 1 ? n : '')] : [])).join(' ')
@@ -284,6 +284,7 @@ export function createLeaderboard({ getCar, getGpId, goRace, notify, raceAgainst
       if (!res.ok) return tell(data.error ?? 'The board could not take that car.', true)
       if (isWeekly) {
         weeklyLeft = data.left
+        store.set('crashlab.enteredWeekly', '1') // it unlocks headlights in the skill tree
         if (weekly && data.rank) rememberRank('w:' + weekly.week, data.rank)
         tell(car.name + ' finished ' + data.finished + ' of 8 in ' + data.totalTime!.toFixed(1) + ' s. You are #' + data.rank + ' this week.')
         showTracks(data.tracks ?? [])
@@ -409,7 +410,7 @@ export function createLeaderboard({ getCar, getGpId, goRace, notify, raceAgainst
     const signed = !!nameIn(store.get(TOKEN_KEY))
     $('weeklyEnds').textContent = 'ends in ' + timeLeft(weekly.endsAt - Date.now())
     $('weeklyLine').textContent =
-      weekly.name + ': 8 new tracks on a ' + (weekly.wet ? 'wet' : 'dry') + ' road that nobody sees until the week is over, so no car has practised on them. ' +
+      weekly.name + ': 8 new tracks on a ' + (weekly.wet ? 'wet' : 'dry') + ' road' + (weekly.night ? ', at night' : '') + (weekly.ice ? ', with ice patches' : '') + ', that nobody sees until the week is over, so no car has practised on them. ' +
       'Your best of ' + weekly.limit + ' entries counts, and the top 3 win a trophy that stays next to their name.' +
       (signed && weeklyLeft !== undefined ? ' You have ' + weeklyLeft + (weeklyLeft === 1 ? ' entry' : ' entries') + ' left this week.' : '')
     const go = $<HTMLButtonElement>('weeklyGo')
@@ -444,7 +445,7 @@ export function createLeaderboard({ getCar, getGpId, goRace, notify, raceAgainst
       ...w.past.map((p) => {
         const gp = weeklyGp(p.week, p.seed)
         const box = document.createElement('div')
-        const head = Object.assign(document.createElement('p'), { className: 'tip', textContent: gp.name + (gp.wet ? ' · wet' : ' · dry') + (p.podium.length ? '' : ' · nobody entered') })
+        const head = Object.assign(document.createElement('p'), { className: 'tip', textContent: gp.name + (gp.wet ? ' · wet' : ' · dry') + (gp.night ? ' · night' : '') + (gp.ice ? ' · ice' : '') + (p.podium.length ? '' : ' · nobody entered') })
         head.style.cssText = 'color:var(--text);font-weight:600;margin-top:12px'
         const open = Object.assign(document.createElement('button'), { className: 'btn small', textContent: 'Race these tracks' })
         open.addEventListener('click', () => openWeek(gp))

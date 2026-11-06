@@ -4,7 +4,7 @@
 import type { Point } from './sensors'
 import { genomeToBrain } from './genome'
 import { CAR_RADIUS, CHECKPOINTS, RACE_STEPS, STALL_STEPS, createCar, drive, type Brain, type Car } from './sim'
-import { BLOCK_HALF, CORE_PRACTICE, HAIRPIN_RADIUS, PRACTICE, bendRadii, makeStyledTrack, styleFor, wetTrack, type Track, type TrackStyle } from './track'
+import { BLOCK_HALF, CORE_PRACTICE, HAIRPIN_RADIUS, PRACTICE, bendRadii, makeStyledTrack, styleFor, wetTrack, withConditions, type Track, type TrackStyle } from './track'
 import { makeRng } from './random'
 import { brainShape, specOf, type CarSpec } from './setup'
 import type { CarFile } from './carFile'
@@ -27,6 +27,7 @@ export const raceTrack = (i: number, wet = false): Track => {
 // practise on them. Each track takes the style of a random practice track, and about one week in three is wet.
 // Weeks start on Monday at 00:00 UTC.
 const WEEK_MS = 7 * 86400000
+const CONDITIONS_FROM = 2966
 const FIRST_MONDAY = Date.UTC(1970, 0, 5)
 export const weekOf = (now: number) => Math.floor((now - FIRST_MONDAY) / WEEK_MS)
 export const weekStart = (week: number) => FIRST_MONDAY + week * WEEK_MS
@@ -44,7 +45,10 @@ export function weeklyGp(week: number, seed: number): GrandPrix {
     const style = WEEKLY_STYLES[Math.floor(rng() * WEEKLY_STYLES.length)]
     return { seed: Math.floor(rng() * 1e6), style }
   })
-  return { id: 'w:' + week, name: weekName(week), wet, goldTime: 0, week, tracks }
+  // From the week of 9 Nov 2026 a week may also be raced at night or with ice patches (drawn after everything
+  // above, so the week of 2 Nov, raced before conditions existed, keeps exactly its tracks)
+  const c = week >= CONDITIONS_FROM ? rng() : 1
+  return { id: 'w:' + week, name: weekName(week), wet, goldTime: 0, week, tracks, ...(c < 0.3 ? { night: true } : c < 0.6 ? { ice: true } : {}) }
 }
 
 // Track i of a Grand Prix: the fixed race tracks, or the ones a weekly seed makes (made once, then kept)
@@ -54,7 +58,8 @@ export function gpTrack(gp: GrandPrix, i: number): Track {
   const key = gp.id + ':' + gp.tracks.map((t) => t.seed).join(',')
   let made = weeklyTracks.get(key)
   if (!made) weeklyTracks.set(key, (made = []))
-  return (made[i] ??= ((t) => (gp.wet ? wetTrack(t) : t))(makeStyledTrack(gp.tracks[i].seed, gp.tracks[i].style)))
+  const { seed, style } = gp.tracks[i]
+  return (made[i] ??= withConditions(((t) => (gp.wet ? wetTrack(t) : t))(makeStyledTrack(seed, style)), gp, seed))
 }
 
 // ---------- ONE TRACK ----------
@@ -139,7 +144,7 @@ export const BRONZE_FINISHES = RACE_COUNT - 2
 
 // Each Grand Prix has its own medals and personal best (the first keeps its old save key)
 // A weekly Grand Prix also has its week number and the seed and style of each of its tracks
-export type GrandPrix = { id: string; name: string; wet: boolean; goldTime: number; week?: number; tracks?: { seed: number; style: TrackStyle }[] }
+export type GrandPrix = { id: string; name: string; wet: boolean; goldTime: number; week?: number; tracks?: { seed: number; style: TrackStyle }[]; night?: boolean; ice?: boolean }
 export const GRAND_PRIXES: GrandPrix[] = [
   { id: 'gp1', name: 'Grand Prix 1', wet: false, goldTime: GOLD_TIME },
   { id: 'gp2', name: 'Grand Prix 2 · wet', wet: true, goldTime: WET_GOLD_TIME },

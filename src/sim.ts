@@ -2,6 +2,7 @@ import { castRay, type Point } from './sensors'
 import { think, type Brain } from './brain'
 import { CHECKPOINTS, CHECKPOINT_STRIDE, DEFAULT_TRACK, POINTS, type Track } from './track'
 import { DEFAULT_SPEC, WET_TYRE_DRY_SPEED, WET_TYRE_GRIP, type CarSpec, type Reward } from './setup'
+import { ICE_GRIP, NIGHT_RANGE, STUDS_ICE_GRIP } from './track'
 
 export { CHECKPOINTS, CHECKPOINT_STRIDE, DEFAULT_TRACK }
 export type { Track, Brain }
@@ -198,7 +199,12 @@ function nearbyWalls(car: Car): Float64Array {
 }
 
 function updateRays(car: Car, near: Float64Array = nearbyWalls(car)) {
-  car.rays = car.spec.rayAngles.map((a) => castRay(car.x, car.y, car.angle + a, car.spec.rayRange, near))
+  // at night, rays without headlights reach only NIGHT_RANGE (a ray that sees nothing still reads as full range away)
+  const range = car.track.night && !car.spec.lights ? Math.min(car.spec.rayRange, NIGHT_RANGE) : car.spec.rayRange
+  car.rays = car.spec.rayAngles.map((a) => {
+    const d = castRay(car.x, car.y, car.angle + a, range, near)
+    return range === car.spec.rayRange || d < range ? d : car.spec.rayRange
+  })
 }
 
 // Is the car touching any of these walls? (the distance from the car's middle to the wall segment)
@@ -225,16 +231,17 @@ export function step(car: Car, input: Input) {
   const boosting = input.boost === true && car.boost > 0
   if (boosting) car.boost--
   let maxSpeed = boosting ? car.spec.maxSpeed * NITRO_TOP : car.spec.maxSpeed
-  if (car.spec.wetTyres && car.track.grip === undefined) maxSpeed *= WET_TYRE_DRY_SPEED // wet tyres are slow on a dry road
+  if (car.spec.wetTyres && car.track.grip === undefined) maxSpeed *= car.spec.dryTop ?? WET_TYRE_DRY_SPEED // wet tyres are slow on a dry road
   const gripSpeed = gripSpeedOf(car)
 
-  car.speed += input.throttle * (boosting ? ACCEL * NITRO_ACCEL : ACCEL)
+  const accel = car.spec.accel ? ACCEL * car.spec.accel : ACCEL
+  car.speed += input.throttle * (boosting ? accel * NITRO_ACCEL : accel)
   car.speed *= FRICTION
   if (car.speed > maxSpeed) car.speed = maxSpeed
   if (car.speed < MAX_REVERSE) car.speed = MAX_REVERSE
 
   const turnScale = car.speed > gripSpeed ? Math.pow(gripSpeed / car.speed, GRIP_POWER) : 1
-  car.angle += input.steer * TURN_RATE * car.speed * turnScale
+  car.angle += input.steer * (car.spec.turn ? TURN_RATE * car.spec.turn : TURN_RATE) * car.speed * turnScale
 
   car.x += Math.cos(car.angle) * car.speed
   car.y += Math.sin(car.angle) * car.speed
@@ -256,12 +263,19 @@ export function step(car: Car, input: Input) {
 // The speed the tyres can still turn at here: a wet road lowers it, and wet tyres win most of that back
 function gripSpeedOf(car: Car): number {
   const road = car.track.grip ?? 1
-  return car.spec.gripSpeed * (car.spec.wetTyres && car.track.grip !== undefined ? Math.min(1, road * WET_TYRE_GRIP) : road)
+  const grip = car.spec.gripSpeed * (car.spec.wetTyres && car.track.grip !== undefined ? Math.min(1, road * (car.spec.wetGrip ?? WET_TYRE_GRIP)) : road)
+  return car.track.ice && onIce(car) ? grip * (car.spec.studs ? STUDS_ICE_GRIP : ICE_GRIP) : grip
+}
+// Is the car on an ice patch? Patches are stretches between checkpoints, so this is where the car is in its lap.
+function onIce(car: Car): boolean {
+  const k = car.passed % CHECKPOINTS
+  return car.track.ice!.some(([a, b]) => k >= a && k < b)
 }
 
 // What the brain sees: each ray distance (0 to 1) and the speed, then with grip sense how near the tyres are to letting go
 export function getInputs(car: Car): number[] {
-  const inputs = [...car.rays.map((d) => d / car.spec.rayRange), car.speed / car.spec.maxSpeed]
+  const scale = car.spec.rayScale ?? car.spec.rayRange
+  const inputs = [...car.rays.map((d) => d / scale), car.speed / car.spec.maxSpeed]
   if (car.spec.gripSense) inputs.push(Math.min(2, Math.max(0, car.speed) / gripSpeedOf(car)) / 2) // 0.5 is the limit
   if (car.spec.nitro) inputs.push(car.boost / NITRO_STEPS) // how much charge is left
   return inputs

@@ -18,11 +18,36 @@ export type Track = {
   longestWall: number // length of the longest wall segment (used to skip far-away walls)
   start: { x: number; y: number; angle: number }
   grip?: number // how well the road holds the tyres: 1 or left out is dry, lower is wetter (it multiplies the car's grip speed)
+  night?: boolean // rays without headlights reach only NIGHT_RANGE
+  ice?: [number, number][] // ice patches: from one checkpoint up to (not including) another
 }
 
 // The same track on a wet road (it keeps its blocks, and so do its mirrored and backwards versions)
 export const WET_GRIP = 0.75
 export const wetTrack = (track: Track, grip = WET_GRIP): Track => ({ ...track, grip })
+
+// ---------- CONDITIONS (the Weekly Grand Prix brings them, and a player can practise in them) ----------
+export const NIGHT_RANGE = 110 // how far a ray sees at night without headlights
+export const ICE_GRIP = 0.45 // ice multiplies the grip speed by this
+export const STUDS_ICE_GRIP = 0.9 // and by this with ice studs
+const ICE_PATCHES = 3
+const ICE_LENGTH = 5 // checkpoints, about 450 px
+export type Conditions = { night?: boolean; ice?: boolean }
+// A track with conditions added. The ice patches come from the seed, spread round the lap and never on the start.
+export function withConditions(track: Track, c: Conditions | undefined, seed: number): Track {
+  if (!c?.night && !c?.ice) return track
+  const out: Track = { ...track }
+  if (c.night) out.night = true
+  if (c.ice) {
+    const rng = makeRng(seed * 31 + 7)
+    const share = Math.floor((CHECKPOINTS - 6) / ICE_PATCHES)
+    out.ice = Array.from({ length: ICE_PATCHES }, (_, i) => {
+      const a = 6 + i * share + Math.floor(rng() * (share - ICE_LENGTH))
+      return [a, a + ICE_LENGTH] as [number, number]
+    })
+  }
+  return out
+}
 
 function loopToSegments(loop: Point[]): Segment[] {
   return loop.map((p, i) => ({ a: p, b: loop[(i + 1) % loop.length] }))
@@ -319,11 +344,12 @@ export const CORE_PRACTICE = 8
 export const PRACTICE_COUNT = PRACTICE.length
 const practice: Track[] = []
 // A practice track on a dry or a wet road. The wet ones are made once and kept, so a track is always the same object.
-const wetPractice = new Map<number, Track>()
-export function practiceOnRoad(id: number, wet: boolean): Track {
-  if (!wet) return practiceTrack(id)
-  let t = wetPractice.get(id)
-  if (!t) wetPractice.set(id, (t = wetTrack(practiceTrack(id))))
+const wetPractice = new Map<string, Track>()
+export function practiceOnRoad(id: number, wet: boolean, cond?: Conditions): Track {
+  if (!wet && !cond?.night && !cond?.ice) return practiceTrack(id)
+  const key = id + (wet ? 'w' : 'd') + (cond?.night ? 'n' : '') + (cond?.ice ? 'i' : '')
+  let t = wetPractice.get(key)
+  if (!t) wetPractice.set(key, (t = withConditions(wet ? wetTrack(practiceTrack(id)) : practiceTrack(id), cond, id + 1)))
   return t
 }
 export function practiceTrack(id: number): Track {
@@ -397,6 +423,8 @@ export function trackVariants(track: Track): Track[] {
   const variants = [mirrored, backwards(c), backwards(mirrored)].map((cl) => {
     const v = fromCenterline(cl, track.blocks.length)
     if (track.grip !== undefined) v.grip = track.grip // a wet track's other versions are wet too
+    if (track.night) v.night = true // and so are its conditions
+    if (track.ice) v.ice = track.ice
     return v
   })
   variantCache.set(track, variants)

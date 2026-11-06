@@ -1,7 +1,7 @@
 import './style.css'
 import { GOLD_TIME, GRAND_PRIXES, RACE_COUNT, medalFor, raceCar } from './race'
 import { carFromChallenge, challengeCode } from './challenge'
-import { DEFAULT_BUILD, KEEP_TRAINING_SHARE, LIMITS, POPULATION, REPLAY_EVERY, TRAINING_BUDGET, buildProblem, cleanBuild, genomeLength, brainShape, specOf, type Build, type Weather } from './setup'
+import { DEFAULT_BUILD, KEEP_TRAINING_SHARE, LIMITS, POPULATION, REPLAY_EVERY, TRAINING_BUDGET, buildProblem, cleanBuild, genomeLength, brainShape, specOf, levelOf, maxPractice, pointsUsed, POINT_BUDGET, type Build, type Parts } from './setup'
 import { CHECKPOINTS, STALL_STEPS, createCar, drive, getInputs, type Brain, type Car } from './sim'
 import { think } from './brain'
 import { PRACTICE, PRACTICE_COUNT, practiceOnRoad, practiceTrack, trackFeatures, trackStats, type Track } from './track'
@@ -10,10 +10,10 @@ import { carFromJson, carToJson, type CarFile } from './carFile'
 import { createLeaderboard } from './leaderboard'
 import { createRaceView, loadBest, type Challenge } from './raceView'
 import { bestOn, driveLap, loadMedals, parFor, recordLaps, totalStars, type Lap } from './board'
-import { PARTS, newlyUnlocked, type Progress } from './parts'
+import { PARTS, newlyUnlocked, type PartId, type Progress } from './parts'
 import { LOOKS, isUnlocked, loadLook, nextLook, saveLook } from './looks'
 import { hasRaced, logEvent, playtestNotes } from './playLog'
-import { COL, H, W, clear, drawBrain, drawCar, drawCrash, drawMinimap, drawRays, drawSensorFan, drawThumb, drawTrack, fanFrame, fit, follow, lookAt, newCamera, withCamera } from './draw'
+import { COL, H, W, clear, drawBrain, drawCar, drawCrash, drawMinimap, drawRays, drawSensorFan, drawThumb, drawTrack, fanFrame, fitTrack, follow, lookAt, newCamera, withCamera } from './draw'
 
 // ---------- SAVED STATE ----------
 const KEYS = { draft: 'crashlab.draft', car: 'crashlab.car', previous: 'crashlab.previous', challenge: 'crashlab.challenge', shelf: 'crashlab.shelf' }
@@ -152,9 +152,9 @@ document.querySelector('#app')!.innerHTML = `
         <p class="tip">Grip takes bends harder; speed is quicker on the straights. A fast car has to brake earlier, because the tyres let go sooner. In our tests a very fast car crashed too often to finish all ${RACE_COUNT} race tracks.</p>
       </div>
       <div class="panel">
-        <h2>Parts<span class="aside" id="partCount"></span></h2>
+        <h2>Skill tree<span class="aside" id="partCount"></span></h2>
+        <p class="tip" style="margin-top:0">Every car has ${POINT_BUDGET} points to spend. Each node changes what the car can do and costs something on the road, so spend them on what this week's tracks need. Racing, stars and the Weekly Grand Prix unlock more nodes.</p>
         <div class="parts" id="parts"></div>
-        <p class="tip">Parts change what the car can do, and each one costs something, so a car without them can still win. Win medals and stars to unlock them.</p>
       </div>
       <div class="panel">
         <h2><span class="n">03</span>What to reward</h2>
@@ -166,6 +166,7 @@ document.querySelector('#app')!.innerHTML = `
       <div class="panel">
         <h2><span class="n">04</span>Practice tracks<span class="aside" id="pickCount"></span></h2>
         <label class="row" style="grid-template-columns:auto 1fr"><span>Road</span><select id="weather" aria-label="Road the practice tracks are driven on"><option value="dry">Dry</option><option value="wet">Wet</option></select></label>
+        <div class="actions" style="margin-top:2px"><label class="check"><input type="checkbox" id="condNight" /> Night</label><label class="check"><input type="checkbox" id="condIce" /> Ice patches</label></div>
         <p class="tip" style="margin-top:2px">Grand Prix 2 is raced on a wet road. A car practised only on dry roads loses most of its grip there, so practise on wet roads to prepare for it.</p>
         <div class="tracks" id="tracks"></div>
         <p class="tip">Race day uses tracks you have never seen. More practice tracks prepare the car better, but each round uses more of the run's practice budget, so you get fewer rounds.</p>
@@ -386,13 +387,24 @@ bindSlider('safety', () => b.reward.safety, (v) => (b.reward.safety = v), 100)
 bindSlider('smooth', () => b.reward.smooth, (v) => (b.reward.smooth = v), 100)
 // The road the practice tracks are driven on (a wet road is what Grand Prix 2 is raced on)
 const weatherSel = $<HTMLSelectElement>('weather')
+// Practice conditions: the Weekly Grand Prix can be raced at night or with ice patches, so a car can practise in them
+for (const [id, key] of [['condNight', 'night'], ['condIce', 'ice']] as const) {
+  input(id).addEventListener('change', () => {
+    const c = { ...(b.cond ?? {}) }
+    if (input(id).checked) c[key] = true
+    else delete c[key]
+    if (c.night || c.ice) b.cond = c
+    else delete b.cond // no conditions is written exactly as before they existed
+    changed()
+  })
+}
 weatherSel.addEventListener('change', () => {
   if (weatherSel.value === 'wet') b.weather = 'wet'
   else delete b.weather // dry is the same as nothing
   changed()
 })
 // A practice track on the road a build practises on
-const practiceOn = (id: number, weather?: Weather): Track => practiceOnRoad(id, weather === 'wet')
+const practiceOn = (id: number, build: Build): Track => practiceOnRoad(id, build.weather === 'wet', build.cond)
 
 // The practice track picker
 const trackGrid = $('tracks')
@@ -422,7 +434,7 @@ for (let id = 0; id < PRACTICE_COUNT; id++) {
     garageView = 'track'
     if (picked >= 0) {
       if (b.practice.length > LIMITS.practice[0]) b.practice.splice(picked, 1)
-    } else if (b.practice.length < LIMITS.practice[1]) {
+    } else if (b.practice.length < maxPractice(b)) {
       b.practice.push(id)
       b.practice.sort((x, y) => x - y)
     }
@@ -457,7 +469,9 @@ function renderGarage() {
   $('paceOut').textContent = pct(b.reward.pace)
   $('safetyOut').textContent = pct(b.reward.safety)
   $('smoothOut').textContent = pct(b.reward.smooth)
-  $('pickCount').textContent = b.practice.length + ' of ' + LIMITS.practice[1] + ' picked'
+  $('pickCount').textContent = b.practice.length + ' of ' + maxPractice(b) + ' picked'
+  input('condNight').checked = !!b.cond?.night
+  input('condIce').checked = !!b.cond?.ice
   weatherSel.value = b.weather === 'wet' ? 'wet' : 'dry'
   renderParts()
   trackGrid.querySelectorAll<HTMLButtonElement>('.track').forEach((btn) => {
@@ -701,7 +715,7 @@ function makeSwarm(gen: number, genomes: number[][], build: Build, bestSteps: nu
   const shape = brainShape(build)
   const spec = specOf(build)
   const trackId = Number(watchSelect.value)
-  const track = practiceOn(trackId, build.weather)
+  const track = practiceOn(trackId, build)
   // best car only: the genomes come best first, so the first one is the generation's best car
   const brains = (input('bestOnly').checked ? genomes.slice(0, 1) : genomes).map((g) => genomeToBrain(g, shape))
   const cars = brains.map(() => createCar(track, spec))
@@ -769,7 +783,7 @@ TRACK_NAMES.forEach((n, i) => driveSelect.add(new Option(n, String(i))))
 
 function startTestDrive() {
   if (!car || !carBrain) return
-  const track = practiceOn(Number(driveSelect.value), car.build.weather) // a wet-trained car drives its test on a wet road
+  const track = practiceOn(Number(driveSelect.value), car.build) // a car drives its test on the road and in the conditions it practised in
   test = { track, car: createCar(track, specOf(car.build)), lastLap: null, bestLap: null, crashFrames: 0, crashAt: null }
   follow(cam, test.car, true)
   renderPractice()
@@ -814,53 +828,74 @@ const gpMedals = () =>
 const starCount = () => totalStars(loadMedals(), gpMedals())
 
 // ---------- PARTS ----------
-const progress = (): Progress => ({ stars: starCount(), gpMedals: gpMedals(), racedWet: loadBest(GRAND_PRIXES[1]) !== null })
-const partBoxes = new Map<string, HTMLInputElement>()
+// Has this browser raced a Weekly Grand Prix: a past week here (it saves a personal best) or an entry on the server
+const racedWeekly = () => {
+  try {
+    return !!localStorage.getItem('crashlab.enteredWeekly') || Object.keys(localStorage).some((k) => k.startsWith('crashlab.best.w:'))
+  } catch {
+    return false
+  }
+}
+const progress = (): Progress => ({ stars: starCount(), gpMedals: gpMedals(), racedWet: loadBest(GRAND_PRIXES[1]) !== null, racedWeekly: racedWeekly() })
+// Fit a node at a level (0 takes it off). A car with nothing fitted is written exactly as before the tree existed.
+function setLevel(id: PartId, level: number) {
+  const parts: Parts = { ...(b.parts ?? {}) }
+  if (id === 'range') delete parts.eyes // long-range eyes from before the tree become ray range only when range is changed
+  if (level) parts[id] = level === 1 ? true : level
+  else delete parts[id]
+  if (pointsUsed(parts)) b.parts = parts
+  else delete b.parts
+  // the extra practice track goes when the slot does
+  if (b.practice.length > maxPractice(b)) b.practice.length = maxPractice(b)
+  changed()
+}
+const nodeRows = new Map<PartId, HTMLElement>()
 $('parts').replaceChildren(
-  ...PARTS.map((part) => {
-    const row = document.createElement('label')
-    row.className = 'part'
-    const box = document.createElement('input')
-    box.type = 'checkbox'
-    box.addEventListener('change', () => {
-      const parts = { ...(b.parts ?? {}) }
-      if (box.checked) parts[part.id] = true
-      else delete parts[part.id]
-      if (Object.keys(parts).length) b.parts = parts
-      else delete b.parts // a build with no parts is written exactly as before parts existed
-      changed()
-    })
-    partBoxes.set(part.id, box)
-    const text = document.createElement('span')
-    text.innerHTML = '<b></b><small class="does"></small><small class="cost"></small><small class="lock"></small>'
-    text.querySelector('b')!.textContent = part.name
-    text.querySelector('.does')!.textContent = part.does
-    text.querySelector('.cost')!.textContent = 'Cost: ' + part.cost
-    row.append(box, text)
-    return row
-  }),
+  ...(['Eyes', 'Engine', 'Tyres', 'Brain', 'Practice'] as const).flatMap((branch) => [
+    Object.assign(document.createElement('div'), { className: 'branch', textContent: branch }),
+    ...PARTS.filter((p) => p.branch === branch).map((part) => {
+      const row = document.createElement('div')
+      row.className = 'part'
+      row.innerHTML = '<span class="lv"></span><span><b></b><small class="does"></small><small class="cost"></small><small class="lock"></small></span><span class="ctl"><button class="btn small less" type="button">−</button><button class="btn small more" type="button"></button></span>'
+      row.querySelector('b')!.textContent = part.name + ' · ' + part.points + (part.points === 1 ? ' point' : ' points') + (part.max > 1 ? ' a level' : '')
+      row.querySelector('.does')!.textContent = part.does
+      row.querySelector('.cost')!.textContent = 'Cost: ' + part.cost
+      row.querySelector<HTMLButtonElement>('.less')!.setAttribute('aria-label', 'Take off a level of ' + part.name)
+      row.querySelector<HTMLButtonElement>('.less')!.addEventListener('click', () => setLevel(part.id, levelOf(b.parts, part.id) - 1))
+      row.querySelector<HTMLButtonElement>('.more')!.addEventListener('click', () => setLevel(part.id, levelOf(b.parts, part.id) + 1))
+      nodeRows.set(part.id, row)
+      return row
+    }),
+  ]),
 )
 function renderParts() {
   const p = progress()
+  const used = pointsUsed(b.parts)
   let open = 0
   for (const part of PARTS) {
-    const box = partBoxes.get(part.id)!
+    const row = nodeRows.get(part.id)!
     const unlocked = part.open(p)
     if (unlocked) open++
-    const on = !!b.parts?.[part.id]
-    box.checked = on
-    box.disabled = !unlocked && !on // a part already on (say, from a loaded car) can always be switched off
-    box.closest('.part')!.classList.toggle('locked', !unlocked)
-    box.closest('.part')!.querySelector('.lock')!.textContent = unlocked ? '' : 'Locked · ' + part.unlock
+    const level = levelOf(b.parts, part.id)
+    const more = row.querySelector<HTMLButtonElement>('.more')!
+    const less = row.querySelector<HTMLButtonElement>('.less')!
+    more.disabled = !unlocked || level >= part.max || used + part.points > POINT_BUDGET
+    more.textContent = level >= part.max ? (part.max > 1 ? 'Max' : 'Fitted') : level ? '+1 level' : 'Fit'
+    more.setAttribute('aria-label', (level ? 'Add a level of ' : 'Fit ') + part.name)
+    less.hidden = level === 0 // a node already on (say, from a loaded car) can always be taken off
+    row.querySelector('.lv')!.textContent = part.max > 1 ? '●'.repeat(level) + '○'.repeat(part.max - level) : level ? '●' : '○'
+    row.classList.toggle('on', level > 0)
+    row.classList.toggle('locked', !unlocked)
+    row.querySelector('.lock')!.textContent = !unlocked ? 'Locked · ' + part.unlock : ''
   }
-  $('partCount').textContent = open + ' of ' + PARTS.length + ' unlocked'
+  $('partCount').textContent = used + ' of ' + POINT_BUDGET + ' points · ' + open + ' of ' + PARTS.length + ' unlocked'
 }
 // Tell the player when racing or medals have unlocked a part
 function announceParts() {
   const fresh = newlyUnlocked(progress())
   if (!fresh.length) return
   renderParts()
-  showNotice('New part unlocked: ' + fresh.map((f) => f.name).join(', ') + (fresh.length === 1 ? '. Fit it' : '. Fit them') + ' in the Garage.')
+  showNotice('New in your skill tree: ' + fresh.map((f) => f.name).join(', ') + '. Fit ' + (fresh.length === 1 ? 'it' : 'them') + ' in the Garage.')
 }
 
 const lookGrid = $('looks')
@@ -1127,8 +1162,8 @@ function renderPractice() {
     ['Top speed · cornering', spec.maxSpeed.toFixed(1) + ' · ' + spec.gripSpeed.toFixed(1)],
     ['Pace · crash · smooth', pct(b.reward.pace) + ' · ' + pct(b.reward.safety) + ' · ' + pct(b.reward.smooth)],
     ['Practice', b.practice.map((id) => TRACK_NAMES[id]).join(', ')],
-    ['Road', b.weather === 'wet' ? 'Wet' : 'Dry'],
-    ['Parts', PARTS.filter((p) => b.parts?.[p.id]).map((p) => p.name).join(', ') || 'None'],
+    ['Road', (b.weather === 'wet' ? 'Wet' : 'Dry') + (b.cond?.night ? ' · night' : '') + (b.cond?.ice ? ' · ice patches' : '')],
+    ['Skill tree', PARTS.filter((p) => levelOf(b.parts, p.id)).map((p) => p.name + (p.max > 1 ? ' ' + levelOf(b.parts, p.id) : '')).join(', ') || 'Nothing fitted'],
   ]
   $('spec').replaceChildren(
     ...rows.flatMap(([k, v]) => {
@@ -1227,8 +1262,8 @@ function focusCar(): Car | null {
 }
 let parkedCache: { key: string; car: Car } | null = null
 function parked(): Car {
-  const key = JSON.stringify(b.sensors) + b.balance + ':' + focusTrack + ':' + (b.weather ?? 'dry')
-  if (!parkedCache || parkedCache.key !== key) parkedCache = { key, car: createCar(practiceOn(focusTrack, b.weather), specOf(b)) }
+  const key = JSON.stringify(b.sensors) + b.balance + JSON.stringify(b.parts ?? {}) + ':' + focusTrack + ':' + (b.weather ?? 'dry') + JSON.stringify(b.cond ?? {})
+  if (!parkedCache || parkedCache.key !== key) parkedCache = { key, car: createCar(practiceOn(focusTrack, b), specOf(b)) }
   return parkedCache.car
 }
 
@@ -1323,7 +1358,7 @@ function draw() {
   else if (zoomedIn) {
     const f = fanFrame(parked())
     lookAt(cam, f.x, f.y, f.zoom)
-  } else fit(cam, tab !== 'garage')
+  } else fitTrack(cam, parked().track, tab !== 'garage')
   if (swarm && run && tab === 'practice') {
     const sw = swarm
     withCamera(ctx, cam, () => {

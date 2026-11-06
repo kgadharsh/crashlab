@@ -3,7 +3,7 @@
 // world, or fits the whole track on screen. A minimap shows the whole track and where cars are.
 import type { Point } from './sensors'
 import type { Car } from './sim'
-import { BLOCK_HALF, HALF_WIDTH, WORLD, type Track } from './track'
+import { BLOCK_HALF, CHECKPOINT_STRIDE, HALF_WIDTH, NIGHT_RANGE, WORLD, type Track } from './track'
 
 export const W = 800 // the screen
 export const H = 500
@@ -12,7 +12,7 @@ export const H = 500
 export const COL = {
   ground: '#07090c',
   road: '#1b2027',
-  roadWet: '#16283a', // a wet road is bluer, with a sheen
+  roadWet: '#183a5c', // a wet road is clearly blue, with puddles and rain on top
   wall: '#5b6573',
   kerbA: '#e8ecf1',
   kerbB: '#d83a34',
@@ -85,8 +85,9 @@ export function drawTrack(g: CanvasRenderingContext2D, track: Track, detail = tr
   g.fillStyle = wet ? COL.roadWet : COL.road
   g.fill(s.road, 'evenodd')
   if (wet) {
-    g.fillStyle = 'rgba(120,190,255,0.07)' // the sheen on a wet road
+    g.fillStyle = 'rgba(120,190,255,0.10)' // the sheen on a wet road
     g.fill(s.road, 'evenodd')
+    if (detail) drawRain(g)
   }
   if (detail) {
     g.strokeStyle = 'rgba(255,255,255,0.08)'
@@ -94,6 +95,22 @@ export function drawTrack(g: CanvasRenderingContext2D, track: Track, detail = tr
     g.setLineDash([16, 20])
     g.stroke(s.dashes)
     g.setLineDash([])
+  }
+  if (track.ice) {
+    // ice patches: a pale sheet over each stretch of road, from one checkpoint to another
+    g.strokeStyle = 'rgba(200,235,255,0.28)'
+    g.lineWidth = HALF_WIDTH * 2
+    g.lineCap = 'round'
+    for (const [a, b] of track.ice) {
+      g.beginPath()
+      for (let i = a * CHECKPOINT_STRIDE; i <= b * CHECKPOINT_STRIDE; i++) {
+        const p = track.centerline[i % track.centerline.length]
+        if (i === a * CHECKPOINT_STRIDE) g.moveTo(p.x, p.y)
+        else g.lineTo(p.x, p.y)
+      }
+      g.stroke()
+    }
+    g.lineCap = 'butt'
   }
   g.strokeStyle = COL.wall
   g.lineWidth = 2
@@ -109,6 +126,11 @@ export function drawTrack(g: CanvasRenderingContext2D, track: Track, detail = tr
   if (detail) {
     g.fillStyle = '#111'
     g.fill(s.blockHoles)
+  }
+  if (track.night) {
+    // night: the whole world dims (the car and its rays are drawn on top)
+    g.fillStyle = 'rgba(4,6,20,0.55)'
+    g.fillRect(-WORLD.w, -WORLD.h, WORLD.w * 3, WORLD.h * 3)
   }
 }
 
@@ -174,6 +196,39 @@ export function lookAt(cam: Camera, x: number, y: number, zoom: number, snap = f
 // Show the whole world
 export function fit(cam: Camera, snap = true) {
   lookAt(cam, WORLD.w / 2, WORLD.h / 2, FIT_ZOOM, snap)
+}
+
+// Show one whole track as big as the screen allows, leaving room at the top for its name
+const FIT_TOP = 56 // screen pixels kept clear for the heading
+const FIT_PAD = 30 // world units of ground round the road
+const boundsCache = new WeakMap<Track, { x0: number; x1: number; y0: number; y1: number }>()
+export function fitTrack(cam: Camera, track: Track, snap = true) {
+  let b = boundsCache.get(track)
+  if (!b) {
+    const xs = [...track.leftWall, ...track.rightWall].map((p) => p.x)
+    const ys = [...track.leftWall, ...track.rightWall].map((p) => p.y)
+    boundsCache.set(track, (b = { x0: Math.min(...xs) - FIT_PAD, x1: Math.max(...xs) + FIT_PAD, y0: Math.min(...ys) - FIT_PAD, y1: Math.max(...ys) + FIT_PAD }))
+  }
+  const zoom = Math.min(W / (b.x1 - b.x0), (H - FIT_TOP) / (b.y1 - b.y0))
+  lookAt(cam, (b.x0 + b.x1) / 2, (b.y0 + b.y1) / 2 - FIT_TOP / 2 / zoom, zoom, snap)
+}
+
+// Rain over a wet track: short slanting streaks that drift down, so a wet road is obvious at a glance
+function drawRain(g: CanvasRenderingContext2D) {
+  const t = performance.now() / 1000
+  g.strokeStyle = 'rgba(170,215,255,0.22)'
+  g.lineWidth = 2
+  g.beginPath()
+  const STEP = 70
+  for (let x = 0; x < WORLD.w; x += STEP)
+    for (let y = 0; y < WORLD.h; y += STEP) {
+      const k = (x * 7 + y * 13) % 97 // a fixed scatter, so streaks do not sit in a grid
+      const px = x + (k % STEP)
+      const py = y + ((k * 3 + t * 260) % STEP)
+      g.moveTo(px, py)
+      g.lineTo(px - 6, py + 16)
+    }
+  g.stroke()
 }
 
 // Paint in world coordinates through the camera
@@ -364,8 +419,10 @@ export function drawBrain(g: CanvasRenderingContext2D, t: Thought, x: number, y:
 }
 
 export function drawRays(g: CanvasRenderingContext2D, car: Car) {
+  // at night without headlights a ray sees only NIGHT_RANGE, so it is drawn no longer than that
+  const dark = car.track.night && !car.spec.lights
   car.spec.rayAngles.forEach((a, i) => {
-    const d = car.rays[i]
+    const d = dark ? Math.min(car.rays[i], NIGHT_RANGE) : car.rays[i]
     const x = car.x + Math.cos(car.angle + a) * d
     const y = car.y + Math.sin(car.angle + a) * d
     const near = d < car.spec.rayRange * 0.35

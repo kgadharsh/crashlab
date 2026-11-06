@@ -89,6 +89,8 @@ button, input { font: inherit; color: inherit; }
   margin: 0 auto;
 }
 .view { min-width: 0; display: flex; flex-direction: column; gap: 10px; }
+/* on a wide screen the track view stays in sight while the panels beside it scroll */
+@media (min-width: 961px) { .view { position: sticky; top: 64px; align-self: start; } }
 .screen {
   position: relative;
   border: 1px solid var(--line);
@@ -377,3 +379,9 @@ select {
 .part.locked { cursor: help; opacity: 0.75; }
 .rank li .btn.small { padding: 3px 8px; font-size: 11px; }
 .rank .troph { color: var(--text); font-family: system-ui, sans-serif; white-space: nowrap; }
+.branch { font: 600 11px var(--mono); letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); margin-top: 6px; }
+.part { grid-template-columns: 34px 1fr auto; cursor: default; }
+.part .lv { font: 600 12px var(--mono); color: var(--accent); letter-spacing: 1px; margin-top: 2px; }
+.part.on { box-shadow: inset 3px 0 0 var(--accent); }
+.part .ctl { display: flex; gap: 4px; align-items: start; }
+.check { display: inline-flex; gap: 6px; align-items: center; font-size: 13px; color: var(--text); cursor: pointer; }

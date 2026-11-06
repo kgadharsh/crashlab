@@ -194,3 +194,41 @@ Built from this: the **Keep training** button (30% of the budget, needs the same
 - **Wet tyres are much faster in the wet** (about 30 s over the eight tracks) and slower in the dry, as intended. They will likely be on most wet-board cars, which is fine because they unlock by racing the wet Grand Prix once.
 - **Long-range eyes and the bigger brain showed no gain** in three seeds. They are trade-offs on paper; whether either helps any build needs more seeds or players.
 - With no parts every number is unchanged: `scripts/bench.ts` still prints `9dc17bb5c6df`.
+
+## 7 Nov 2026: skill tree, wave 1
+
+`scripts/nodeCheck.ts`. The default build was trained on seeds 1 to 3 with the full budget, once with no nodes and once with each node on its own, then raced on four Grand Prix: the dry and wet ones, and one fixed set of weekly tracks (`weeklyGp(3000, 424242)`) raced at night and with ice patches. The night and ice cars practised in that condition, with and without the node that answers it. Average tracks finished out of 8 (and the dry time where all three seeds finished):
+
+| Build | Dry | Wet | Night | Ice |
+|---|---|---|---|---|
+| No nodes | 7.7 | 3.0 | 3.0 | 2.0 |
+| Ray range 1 | 8.0 (149 s) | 3.0 | 2.3 | 0.0 |
+| Focused rays | 7.0 | 5.0 | 3.0 | 0.3 |
+| Launch control | 6.0 | 3.0 | 4.0 | 1.3 |
+| Quick steering, 1 point, 3% slower | 8.0 (141 s) | 5.0 | 6.0 | 0.7 |
+| Downforce wing, 5% slower | 8.0 (144 s) | 3.7 | 5.0 | 1.0 |
+| No nodes, wet practice | 8.0 (157 s) | 7.3 | 6.3 | 0.7 |
+| Intermediate tyres, wet practice | 4.0 | 3.3 | 4.0 | 1.3 |
+| No nodes, night practice | 5.7 | 2.3 | 6.3 | 2.0 |
+| Headlights, night practice | 7.7 | 4.3 | 8.0 (149 s, all 3) | 2.3 |
+| No nodes, ice practice | 4.0 | 3.0 | 4.7 | 3.7 |
+| Ice studs, ice practice | 5.7 | 2.7 | 5.3 | 6.3 (all 8 in 2 of 3) |
+
+- **Quick steering was better almost everywhere** (8 to 10 s faster on the dry Grand Prix in every seed, and better at night and in the wet). It now costs 2 points and 7% grip (`QUICK_GRIP`) as well as 3% top speed.
+- **The wing was faster on dry roads in every seed** at 5% top speed; it now costs 7%.
+- **Ray range never helped**, like long-range eyes before it. Longer rays were divided by their longer range, so every distance read smaller and the car lost detail near walls. Ray range now keeps the ordinary scale (`rayScale`), so a near wall reads exactly as without it and the extra reach reads above 1. Long-range eyes from before the tree keep the old scale, so old cars race exactly as they did.
+- **Intermediate tyres were worse than no tyres** with wet practice, so they were cut rather than shipped as a dead point. Wet tyres unlock by racing the wet Grand Prix once again.
+- **Headlights and ice studs work as meant:** with night practice and headlights every seed finished all 8 at night, and studs with ice practice finished all 8 on ice in 2 of 3 seeds. Cars that did not prepare do badly in both conditions, which is the point of announcing a week's conditions in advance.
+- Focused rays and launch control are real trade-offs (better on some roads, worse on others).
+
+**Re-test after the changes** (same seeds and Grand Prix):
+
+| Build | Dry | Wet | Night | Ice |
+|---|---|---|---|---|
+| Quick steering, 2 points, 7% less grip, 3% slower | 7.7 (148, 146 s) | 4.3 | 4.7 | 2.3 |
+| Downforce wing, 7% slower | 8.0 (146 s) | 2.7 | 5.0 | 1.0 |
+| Ray range +40, ordinary scale | 7.7 | 2.3 | 1.7 | 1.3 |
+| Ray range +120, ordinary scale | 8.0 (150 s) | 5.0 | 3.0 | 0.7 |
+
+- Quick steering no longer beats a car without it outright; the wing is faster dry and at night, slower wet and on ice. Both are trade-offs now.
+- **One level of ray range (+40) bought nothing** in either round, so levels were a point that buys a worse car. Ray range became one node, Long rays: 2 points, +120 (320, like the old long-range eyes), 3% slower, keeping the ordinary scale. At that length it helped in the wet (5.0 against 3.0) and hurt on ice.
