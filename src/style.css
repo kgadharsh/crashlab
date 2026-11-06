@@ -354,3 +354,7 @@ select {
 .dot.gold { background: #ffcc33; }
 .dot.silver { background: #c7ced8; }
 .dot.bronze { background: #cd8a4f; }
+
+.shelf { display: grid; gap: 6px; }
+.slot { display: flex; align-items: center; gap: 6px; font-size: 13px; }
+.slot span { flex: 1; min-width: 0; overflow-wrap: anywhere; }

@@ -14,7 +14,7 @@ import { hasRaced, logEvent, playtestNotes } from './playLog'
 import { COL, H, W, clear, drawBrain, drawCar, drawCrash, drawMinimap, drawRays, drawSensorFan, drawThumb, drawTrack, fanFrame, fit, follow, lookAt, newCamera, withCamera } from './draw'
 
 // ---------- SAVED STATE ----------
-const KEYS = { draft: 'crashlab.draft', car: 'crashlab.car', previous: 'crashlab.previous', challenge: 'crashlab.challenge' }
+const KEYS = { draft: 'crashlab.draft', car: 'crashlab.car', previous: 'crashlab.previous', challenge: 'crashlab.challenge', shelf: 'crashlab.shelf' }
 function load<T>(key: string): T | null {
   try {
     const text = localStorage.getItem(key)
@@ -46,6 +46,14 @@ let carBrain: Brain | null = car ? genomeToBrain(car.genome, shapeOf(car.build.s
 const savedPrevious = load<string>(KEYS.previous)
 const parsedPrevious = savedPrevious ? carFromJson(savedPrevious) : null
 let previousCar: CarFile | null = parsedPrevious && !('error' in parsedPrevious) ? parsedPrevious : null
+// The shelf: up to MAX_SLOTS cars kept side by side, so a player can train twice and keep the better car
+const MAX_SLOTS = 5
+const savedShelf = load<unknown>(KEYS.shelf)
+let shelf: CarFile[] = (Array.isArray(savedShelf) ? savedShelf : []).flatMap((t) => {
+  const c = typeof t === 'string' ? carFromJson(t) : null
+  return c && !('error' in c) ? [c] : []
+}).slice(0, MAX_SLOTS)
+const saveShelf = () => save(KEYS.shelf, shelf.map(carToJson))
 // The car design the player chose (they only change how the car looks)
 let look = loadLook()
 function rememberPrevious(c: CarFile | null) {
@@ -204,6 +212,12 @@ document.querySelector('#app')!.innerHTML = `
         <div class="actions"><button class="btn" id="notes">Copy playtest notes</button></div>
         <input id="shareLink" readonly hidden aria-label="Challenge link" style="width:100%;margin-top:6px" />
         <p class="msg" id="carMsg"></p>
+      </div>
+      <div class="panel">
+        <h2>Car shelf<span class="aside" id="shelfCount"></span></h2>
+        <p class="tip" style="margin-top:0">Keep up to ${MAX_SLOTS} cars here, such as two trainings of the same setup, and use whichever races best. Using a shelf car puts your current car back under Switch to previous car.</p>
+        <div class="shelf" id="shelf"></div>
+        <div class="actions"><button class="btn" id="shelve">Put your car on the shelf</button></div>
       </div>
     </div>
     <div id="race" class="side">
@@ -944,6 +958,53 @@ fileInput.addEventListener('change', async () => {
   location.reload() // the simplest way to refresh every control from the loaded setup
 })
 
+// ---------- CAR SHELF ----------
+const carLabel = (c: CarFile) => c.name + ' · ' + c.build.sensors.count + ' rays' + (c.generations ? ' · ' + c.generations + ' rounds' : '') + (c.build.weather === 'wet' ? ' · wet' : '')
+function renderShelf() {
+  const training = !!worker
+  $('shelfCount').textContent = shelf.length + ' of ' + MAX_SLOTS
+  $<HTMLButtonElement>('shelve').disabled = !car || shelf.length >= MAX_SLOTS
+  $('shelve').textContent = shelf.length >= MAX_SLOTS ? 'Shelf is full' : 'Put your car on the shelf'
+  $('shelf').replaceChildren(
+    ...shelf.map((c, i) => {
+      const row = document.createElement('div')
+      row.className = 'slot'
+      const label = document.createElement('span')
+      label.textContent = carLabel(c)
+      const use = document.createElement('button')
+      use.className = 'btn small'
+      use.textContent = 'Use'
+      use.disabled = training
+      use.addEventListener('click', () => {
+        if (worker) return
+        if (car) rememberPrevious(car)
+        save(KEYS.car, carToJson(c))
+        // the garage takes on the shelf car's setup, as when loading a file
+        save(KEYS.draft, { name: c.name, build: c.build })
+        location.reload()
+      })
+      const drop = document.createElement('button')
+      drop.className = 'btn small'
+      drop.textContent = 'Remove'
+      drop.addEventListener('click', () => {
+        shelf.splice(i, 1)
+        saveShelf()
+        renderShelf()
+        carMsg('Removed ' + c.name + ' from the shelf.')
+      })
+      row.append(label, use, drop)
+      return row
+    }),
+  )
+}
+$('shelve').addEventListener('click', () => {
+  if (!car || shelf.length >= MAX_SLOTS) return
+  shelf.push(clone(car))
+  saveShelf()
+  renderShelf()
+  carMsg('Put ' + car.name + ' on the shelf.')
+})
+
 // ---------- PRACTICE PANEL ----------
 function renderPractice() {
   renderWatchOptions()
@@ -997,6 +1058,7 @@ function renderPractice() {
   $('testDrive').textContent = test ? 'Stop driving' : 'Test drive'
   $<HTMLButtonElement>('saveCar').disabled = !car
   $<HTMLButtonElement>('shareCar').disabled = !car
+  renderShelf()
   ensureBoard()
   renderBoard()
 }
