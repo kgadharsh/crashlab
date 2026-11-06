@@ -361,7 +361,7 @@ select {
 
 /* online leaderboard */
 .rank { list-style: none; margin: 0; padding: 0; display: grid; gap: 2px; }
-.rank li { display: grid; grid-template-columns: 26px 1fr auto; align-items: baseline; gap: 8px; padding: 5px 8px; background: var(--panel-2); border-radius: 2px; font: 500 13px var(--mono); }
+.rank li { display: grid; grid-template-columns: 26px 1fr auto auto; align-items: baseline; gap: 8px; padding: 5px 8px; background: var(--panel-2); border-radius: 2px; font: 500 13px var(--mono); }
 .rank .n { color: var(--muted); }
 .rank .who { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .rank .res { color: var(--muted); text-align: right; }
@@ -375,3 +375,4 @@ select {
 .part .does { color: var(--text); }
 .part .lock { color: var(--accent); }
 .part.locked { cursor: help; opacity: 0.75; }
+.rank li .btn.small { padding: 3px 8px; font-size: 11px; }

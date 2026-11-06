@@ -1440,7 +1440,19 @@ function loop(now: number) {
   requestAnimationFrame(loop)
 }
 
-const leaderboard = createLeaderboard({ getCar: () => car, getGpId: () => raceView!.gpId(), goRace: () => setTab('race'), notify: showNotice })
+const leaderboard = createLeaderboard({
+  getCar: () => car,
+  getGpId: () => raceView!.gpId(),
+  goRace: () => setTab('race'),
+  notify: showNotice,
+  // a car from the board becomes the car to beat, raced on this device like a friend's challenge
+  raceAgainst: (rival, gpId) => {
+    setChallenge(rival)
+    raceView!.selectGpId(gpId)
+    setTab('race')
+    $('challengePanel').scrollIntoView({ behavior: 'smooth', block: 'center' })
+  },
+})
 raceView = createRaceView({ onResult: (gpId, r) => {
   leaderboard.showResult(gpId, r)
   if (r) announceParts()

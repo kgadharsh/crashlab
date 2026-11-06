@@ -332,5 +332,6 @@ export function createRaceView(d: RaceDeps) {
     render()
   })
 
-  return { tick, draw, render, gpId: () => gp().id }
+  const selectGpId = (id: string) => selectGp(Math.max(0, GRAND_PRIXES.findIndex((g) => g.id === id)))
+  return { tick, draw, render, gpId: () => gp().id, selectGpId }
 }

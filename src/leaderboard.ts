@@ -1,7 +1,7 @@
 // The online board on the Race tab: shows the top cars for a Grand Prix and lets a player enter
 // their car. The server re-runs the car itself, so the result shown here is the server's, not ours.
 // With no server address (the live site until the server is deployed) the whole panel stays hidden.
-import { carToJson, type CarFile } from './carFile'
+import { carFromJson, carToJson, type CarFile } from './carFile'
 import { GRAND_PRIXES } from './race'
 
 const API = (import.meta.env.VITE_API_URL as string | undefined) ?? (import.meta.env.DEV ? 'http://localhost:8787' : '')
@@ -56,9 +56,10 @@ type Deps = {
   getGpId: () => string // the Grand Prix the Race tab is on, so a result goes on the matching board
   goRace: () => void
   notify: (text: string) => void // a message in the bar at the bottom of the screen
+  raceAgainst: (rival: CarFile, gpId: string) => void // make a board car the one to beat
 }
 
-export function createLeaderboard({ getCar, getGpId, goRace, notify }: Deps) {
+export function createLeaderboard({ getCar, getGpId, goRace, notify, raceAgainst }: Deps) {
   const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T
   const panel = $('boardOnline')
   if (!API) return { showResult() {} }
@@ -196,6 +197,14 @@ export function createLeaderboard({ getCar, getGpId, goRace, notify }: Deps) {
           const li = document.createElement('li')
           const cell = (cls: string, text: string) => Object.assign(document.createElement('span'), { className: cls, textContent: text })
           li.append(cell('n', String(e.rank)), cell('who', e.display), cell('res', e.finished + ' of 8 · ' + e.totalTime.toFixed(1) + ' s' + (e.medal ? ' · ' + e.medal : '')))
+          if (e.display !== myName) {
+            const race = document.createElement('button')
+            race.className = 'btn small'
+            race.textContent = 'Race'
+            race.setAttribute('aria-label', 'Race against ' + e.display)
+            race.addEventListener('click', () => loadRival(e, gp.id))
+            li.append(race)
+          } else li.append(document.createElement('span'))
           return li
         }),
       )
@@ -203,6 +212,23 @@ export function createLeaderboard({ getCar, getGpId, goRace, notify }: Deps) {
     } catch {
       $('onlineRows').replaceChildren()
       $('onlineEmpty').hidden = true
+      say('The board is not reachable right now.', true)
+    }
+  }
+
+  // Fetch a board car and make it the one to beat. It is checked like any car file before it is used.
+  async function loadRival(e: Row, gpId: string) {
+    say('Loading ' + e.display + "'s car…")
+    try {
+      const res = await fetch(API + '/entries/' + e.id)
+      const data = (await res.json()) as { car?: unknown; error?: string }
+      if (!res.ok || !data.car) return say(data.error ?? 'That car could not be loaded.', true)
+      const rival = carFromJson(carToJson(data.car as CarFile))
+      if ('error' in rival) return say('That car could not be used: ' + rival.error, true)
+      rival.name = e.display // shown as the player, not their car's own name
+      raceAgainst(rival, gpId)
+      say(e.display + "'s car is the one to beat. Race your car to see who wins.")
+    } catch {
       say('The board is not reachable right now.', true)
     }
   }

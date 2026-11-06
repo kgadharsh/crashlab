@@ -121,7 +121,7 @@ const within = (v: unknown, [lo, hi]: readonly [number, number]) => isNum(v) && 
 // Returns why a build is not allowed, or null if it is fine
 export function buildProblem(b: unknown, practiceCount: number): string | null {
   const d = b as Build
-  if (!d || typeof d !== 'object' || !d.sensors || !d.reward || !Array.isArray(d.practice)) return 'missing parts'
+  if (!d || typeof d !== 'object' || !d.sensors || !d.reward || !Array.isArray(d.practice)) return 'it is incomplete'
   const s = d.sensors
   if (!within(s.count, LIMITS.count) || !Number.isInteger(s.count)) return 'ray count out of range'
   if (!within(s.spread, LIMITS.spread)) return 'ray spread out of range'
