@@ -7,6 +7,7 @@ import { think } from './brain'
 import { PRACTICE, PRACTICE_COUNT, practiceOnRoad, practiceTrack, trackFeatures, trackStats, type Track } from './track'
 import { genomeToBrain } from './genome'
 import { carFromJson, carToJson, type CarFile } from './carFile'
+import { createLeaderboard } from './leaderboard'
 import { createRaceView, loadBest, type Challenge } from './raceView'
 import { bestOn, driveLap, loadMedals, parFor, recordLaps, totalStars, type Lap } from './board'
 import { LOOKS, isUnlocked, loadLook, nextLook, saveLook } from './looks'
@@ -237,6 +238,13 @@ document.querySelector('#app')!.innerHTML = `
         <p class="msg" id="raceMsg"></p>
         <p class="tip" style="margin-top:8px">Your car drives 8 tracks it has never seen, once each. Most tracks finished wins, then the lowest total time. Grand Prix 2 is the same tracks on a wet road.</p>
         <p class="tip" id="medalRules"></p>
+      </div>
+      <div class="panel" id="boardOnline" hidden>
+        <h2>Leaderboard<span class="aside"><button class="btn small primary" id="onlineDry">Dry</button> <button class="btn small" id="onlineWet">Wet</button></span></h2>
+        <ol class="tower" id="onlineRows"></ol>
+        <p class="tip" id="onlineEmpty" hidden>No cars on this board yet. Be the first.</p>
+        <div class="actions"><button class="btn primary" id="onlineEnter">Enter your car</button></div>
+        <p class="msg" id="onlineMsg"></p>
       </div>
       <div class="panel">
         <h2>Timing<span class="aside" id="raceTotal"></span></h2>
@@ -1360,6 +1368,7 @@ function loop(now: number) {
 }
 
 raceView = createRaceView({ ctx, cam, getCar: () => car, isStale: carIsStale, getChallenge: () => challenge, getLook: () => look, goTo: setTab, hudText, setStrip })
+createLeaderboard(() => car)
 
 // ---------- CHALLENGE LINKS ----------
 // Share: the car goes into a link, so a friend can race it with no server.
