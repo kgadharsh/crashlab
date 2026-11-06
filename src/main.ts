@@ -262,6 +262,7 @@ document.querySelector('#app')!.innerHTML = `
         <div id="resultBoard" hidden>
           <p class="tip" style="margin-top:12px;color:var(--text);font-weight:600">Put this on the leaderboard?</p>
           <div class="actions" style="margin-top:4px"><button class="btn primary" id="resultBoardGo">Sign in with Google to enter</button></div>
+          <p class="tip" id="resultBoardPlace" style="margin-top:2px"></p>
           <p class="msg" id="resultBoardMsg"></p>
         </div>
         <p class="msg" id="resultMsg"></p>
@@ -295,6 +296,12 @@ function showNudge(carName: string) {
   $('nudgeText').replaceChildren(carName + ' is trained.', more)
   nudge.hidden = false
   document.body.classList.add('has-nudge') // keeps the bar from covering the last panel
+}
+// The same bar can carry other news, such as players who passed you on the board while you were away
+function showNotice(text: string) {
+  $('nudgeText').replaceChildren(text)
+  nudge.hidden = false
+  document.body.classList.add('has-nudge')
 }
 function hideNudge() {
   nudge.hidden = true
@@ -1374,8 +1381,8 @@ function loop(now: number) {
   requestAnimationFrame(loop)
 }
 
-raceView = createRaceView({ ctx, cam, getCar: () => car, isStale: carIsStale, getChallenge: () => challenge, getLook: () => look, goTo: setTab, hudText, setStrip })
-createLeaderboard({ getCar: () => car, getGpId: () => raceView!.gpId(), goRace: () => setTab('race') })
+const leaderboard = createLeaderboard({ getCar: () => car, getGpId: () => raceView!.gpId(), goRace: () => setTab('race'), notify: showNotice })
+raceView = createRaceView({ onResult: (gpId, r) => leaderboard.showResult(gpId, r), ctx, cam, getCar: () => car, isStale: carIsStale, getChallenge: () => challenge, getLook: () => look, goTo: setTab, hudText, setStrip })
 
 // ---------- CHALLENGE LINKS ----------
 // Share: the car goes into a link, so a friend can race it with no server.

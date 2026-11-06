@@ -16,6 +16,7 @@ import { COL, H, W, clear, drawCar, drawCrash, drawMinimap, drawRays, drawTrack,
 export type Challenge = { car: CarFile; results: RaceResult[] } | { error: string }
 
 export type RaceDeps = {
+  onResult?: (gpId: string, result: { finished: number; totalTime: number } | null) => void // a race finished or its result is shown again (null: a new race started)
   ctx: CanvasRenderingContext2D
   cam: Camera
   getCar: () => CarFile | null
@@ -235,6 +236,7 @@ export function createRaceView(d: RaceDeps) {
       // a new race has started: the last result's share message is about an older race
       $('resultMsg').textContent = ''
       $('resultBoardMsg').textContent = ''
+      d.onResult?.(gp().id, null)
       $('resultLink').hidden = true
     }
     if (s) {
@@ -245,6 +247,7 @@ export function createRaceView(d: RaceDeps) {
       const gens = live!.car.generations
       $('resultLine').textContent = s.finished + ' of ' + RACE_COUNT + ' finished · ' + s.totalTime.toFixed(1) + ' s total' + (gens ? ' · trained for ' + gens + ' rounds' : '')
       $('advice').textContent = adviceFor(s, live!.gp, live!.car.build.weather === 'wet')
+      d.onResult?.(live!.gp.id, s)
     }
     // a friend's challenge, and how your latest race compares with it
     const ch = d.getChallenge()

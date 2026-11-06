@@ -162,12 +162,25 @@ async function board(req: Request, env: Env, gpId: string): Promise<Response> {
   return json(req, { gp: gpId, entries: results.map((e, i) => ({ rank: i + 1, ...e })) })
 }
 
-// The signed-in player's board name (null until they choose one)
+// A player's place on a Grand Prix's board: one more than the number of players whose best entry beats their best (null if not on it)
+const SCORE = 'finished * 100000 - total_time'
+async function rankOf(env: Env, gpId: string, playerId: string): Promise<number | null> {
+  const row = await env.DB.prepare(
+    `SELECT (SELECT MAX(${SCORE}) FROM entries WHERE gp = ?1 AND player = ?2) AS mine,
+            (SELECT COUNT(*) FROM (SELECT MAX(${SCORE}) AS s FROM entries WHERE gp = ?1 GROUP BY player)
+              WHERE s > (SELECT MAX(${SCORE}) FROM entries WHERE gp = ?1 AND player = ?2)) AS ahead`,
+  ).bind(gpId, playerId).first<{ mine: number | null; ahead: number }>()
+  return row && row.mine !== null ? row.ahead + 1 : null
+}
+
+// The signed-in player's board name (null until they choose one) and their place on each board
 async function getMe(req: Request, env: Env): Promise<Response> {
   const player = await playerOf(req, env)
   if (!player) return json(req, { error: 'Sign in first.' }, 401)
   const me = await env.DB.prepare('SELECT name FROM players WHERE id = ?').bind(player.id).first<{ name: string }>()
-  return json(req, { name: me?.name ?? null })
+  const ranks: Record<string, number | null> = {}
+  for (const gp of GRAND_PRIXES) ranks[gp.id] = await rankOf(env, gp.id, player.id)
+  return json(req, { name: me?.name ?? null, ranks })
 }
 
 const NAME_RULE = /^[\p{L}\p{N}][\p{L}\p{N} _.-]{1,18}[\p{L}\p{N}]$/u // 3 to 20 characters: letters, numbers, and inside the name spaces . _ -

@@ -10,6 +10,11 @@ const TOKEN_KEY = 'crashlab.token'
 const NONCE_KEY = 'crashlab.nonce'
 // The Grand Prix a player asked to enter from a race result before going off to sign in, so the entry can finish when they come back
 const PENDING_KEY = 'crashlab.pendingEntry'
+// The player's place on each board when they last looked, so a return visit can say who passed them
+const RANKS_KEY = 'crashlab.ranks'
+type Ranks = Record<string, number | null>
+type Score = { finished: number; totalTime: number }
+const beats = (a: Score, b: Score) => a.finished !== b.finished ? a.finished > b.finished : a.totalTime < b.totalTime
 
 type Row = { rank: number; id: number; display: string; finished: number; totalTime: number; medal: string | null }
 
@@ -50,12 +55,13 @@ type Deps = {
   getCar: () => CarFile | null
   getGpId: () => string // the Grand Prix the Race tab is on, so a result goes on the matching board
   goRace: () => void
+  notify: (text: string) => void // a message in the bar at the bottom of the screen
 }
 
-export function createLeaderboard({ getCar, getGpId, goRace }: Deps) {
+export function createLeaderboard({ getCar, getGpId, goRace, notify }: Deps) {
   const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T
   const panel = $('boardOnline')
-  if (!API) return { render() {} }
+  if (!API) return { showResult() {} }
   panel.hidden = false
   $('resultBoard').hidden = false
   takeSignIn()
@@ -81,7 +87,9 @@ export function createLeaderboard({ getCar, getGpId, goRace }: Deps) {
           store.set(TOKEN_KEY, null) // the server no longer accepts this sign-in
           return renderWho()
         }
-        myName = ((await res.json()) as { name: string | null }).name
+        const me = (await res.json()) as { name: string | null; ranks?: Ranks }
+        myName = me.name
+        if (me.ranks) sinceLastVisit(me.ranks)
       } catch {
         $('onlineWho').textContent = 'Signed in. The board is not reachable right now.'
         return
@@ -110,6 +118,7 @@ export function createLeaderboard({ getCar, getGpId, goRace }: Deps) {
       if (!res.ok) return say(data.error ?? 'That name could not be saved.', true)
       myName = data.name
       say('Your board name is ' + data.name + '.')
+      reshow()
       await renderWho()
       const pending = store.get(PENDING_KEY)
       if (pending) {
@@ -121,6 +130,35 @@ export function createLeaderboard({ getCar, getGpId, goRace }: Deps) {
       say('The board is not reachable right now.', true)
     }
   })
+  // Players who passed you while you were away: compare each board place with the one remembered from last time
+  function sinceLastVisit(now: Ranks) {
+    let before: Ranks = {}
+    try {
+      before = JSON.parse(store.get(RANKS_KEY) ?? '{}') as Ranks
+    } catch {
+      /* nothing remembered */
+    }
+    const news = GRAND_PRIXES.flatMap((gp) => {
+      const was = before[gp.id]
+      const is = now[gp.id]
+      if (typeof was !== 'number' || typeof is !== 'number' || is <= was) return []
+      const n = is - was
+      return [n + (n === 1 ? ' player' : ' players') + ' passed you on ' + gp.name + ': you are now #' + is + '.']
+    })
+    if (news.length) notify('Since your last visit, ' + news.join(' And ') + ' Race again to win your place back.')
+    store.set(RANKS_KEY, JSON.stringify(now))
+  }
+  function rememberRank(gpId: string, rank: number) {
+    let ranks: Ranks = {}
+    try {
+      ranks = JSON.parse(store.get(RANKS_KEY) ?? '{}') as Ranks
+    } catch {
+      /* start afresh */
+    }
+    ranks[gpId] = rank
+    store.set(RANKS_KEY, JSON.stringify(ranks))
+  }
+
   const signIn = () => {
     const nonce = crypto.randomUUID().replace(/-/g, '')
     store.set(NONCE_KEY, nonce)
@@ -131,6 +169,7 @@ export function createLeaderboard({ getCar, getGpId, goRace }: Deps) {
     store.set(TOKEN_KEY, null)
     myName = undefined
     renderWho()
+    reshow()
     say('Signed out.')
   })
   renderWho()
@@ -140,6 +179,8 @@ export function createLeaderboard({ getCar, getGpId, goRace }: Deps) {
     $('onlineMsg').classList.toggle('bad', bad)
   }
 
+  const rowsFor: Record<string, Row[]> = {} // the last board fetched for each Grand Prix
+
   async function refresh() {
     const gp = GRAND_PRIXES[gpIndex]
     $('onlineDry').className = gpIndex === 0 ? 'btn small primary' : 'btn small'
@@ -148,6 +189,8 @@ export function createLeaderboard({ getCar, getGpId, goRace }: Deps) {
       const res = await fetch(API + '/board?gp=' + gp.id)
       const data = (await res.json()) as { entries?: Row[]; error?: string }
       if (!res.ok || !data.entries) throw new Error(data.error ?? 'bad reply')
+      rowsFor[gp.id] = data.entries
+      if (lastShown?.gpId === gp.id) reshow()
       $('onlineRows').replaceChildren(
         ...data.entries.map((e) => {
           const li = document.createElement('li')
@@ -190,8 +233,9 @@ export function createLeaderboard({ getCar, getGpId, goRace }: Deps) {
         $('onlineName').focus()
       }
       if (!res.ok) return tell(data.error ?? 'The board could not take that car.', true)
+      if (data.rank) rememberRank(gpId, data.rank)
       tell('On the board: ' + car.name + ' finished ' + data.finished + ' of 8 in ' + data.totalTime!.toFixed(1) + ' s' + (data.medal ? ' (' + data.medal + ')' : '') + '. You are number ' + data.rank + '. ' + data.left + ' entries left today.')
-      refresh()
+      await refresh()
     } catch {
       tell('The board is not reachable right now.', true)
     }
@@ -230,6 +274,50 @@ export function createLeaderboard({ getCar, getGpId, goRace }: Deps) {
       say('Signed in. Choose the name the board will show, and your car goes on the board.')
     }
   })()
+  // Under a race result: where it would place, and what it takes to pass the car just above
+  let shownFor = ''
+  let lastShown: { gpId: string; r: Score } | null = null
+  // the board or who is signed in changed: work the shown result out again
+  const reshow = () => {
+    shownFor = ''
+    if (lastShown) showResult(lastShown.gpId, lastShown.r)
+  }
+  async function showResult(gpId: string, r: Score | null) {
+    if (!r) {
+      shownFor = ''
+      lastShown = null
+      $('resultBoardPlace').textContent = ''
+      return
+    }
+    const key = gpId + ':' + r.finished + ':' + r.totalTime
+    if (key === shownFor) return // render runs often; work this out once per result
+    lastShown = { gpId, r }
+    shownFor = key
+    const place = $('resultBoardPlace')
+    place.textContent = ''
+    // compare with the board as it is now, not as it was when the page opened
+    try {
+      const res = await fetch(API + '/board?gp=' + gpId)
+      rowsFor[gpId] = ((await res.json()) as { entries?: Row[] }).entries ?? []
+    } catch {
+      if (!rowsFor[gpId]) return
+    }
+    if (key !== shownFor) return
+    const rows = rowsFor[gpId]
+    const mine = myName ? rows.find((e) => e.display === myName) : undefined
+    const others = rows.filter((e) => e !== mine)
+    const yours = mine && !beats(r, mine) ? mine : r // your board entry stays if this run is not better
+    const ahead = others.filter((e) => beats(e, yours))
+    const where = mine && yours === mine ? 'Your board entry is #' + (ahead.length + 1) + ' and stays there.' : 'This would place #' + (ahead.length + 1) + (ahead.length >= rows.length && rows.length >= 50 ? ' or lower' : '') + '.'
+    const above = ahead[ahead.length - 1]
+    if (!above) return (place.textContent = where + (rows.length ? ' That is the top of the board.' : ' The board is empty, so you would be first.'))
+    const target =
+      above.finished > yours.finished
+        ? 'Finishing ' + (above.finished - yours.finished) + ' more ' + (above.finished - yours.finished === 1 ? 'track' : 'tracks')
+        : (Math.floor((yours.totalTime - above.totalTime) * 10) / 10 + 0.1).toFixed(1) + ' s faster'
+    place.textContent = where + ' ' + target + ' puts you above ' + above.display + ' (#' + above.rank + ').'
+  }
+
   refresh()
-  return { render() {} }
+  return { showResult }
 }
