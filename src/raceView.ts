@@ -5,7 +5,7 @@ import { genomeToBrain } from './genome'
 import { CHECKPOINTS, createCar, drive, type Brain, type Car } from './sim'
 import { brainShape, specOf, type CarSpec } from './setup'
 import {
-  CAUSE_LABEL, GRAND_PRIXES, RACE_COUNT, adviceFor, better, finishLap, lapIsOver, medalFor, medalRules, raceTrack, summarise, versus,
+  CAUSE_LABEL, GRAND_PRIXES, RACE_COUNT, adviceFor, better, finishLap, gpTrack, lapIsOver, medalFor, medalRules, raceCar, summarise, versus,
   type GrandPrix, type Medal, type RaceResult, type TrackResult,
 } from './race'
 import { logEvent } from './playLog'
@@ -72,6 +72,9 @@ function loadGpIndex(): number {
   }
 }
 
+// The big word on a result with no medal: weekly races have none (their trophies go by place on the week's board)
+const headline = (s: RaceResult, gp: GrandPrix) => (gp.week !== undefined ? s.finished + ' OF ' + RACE_COUNT : 'NO MEDAL')
+
 const time = (s: number | null) => (s === null ? '--.--' : s.toFixed(2))
 const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T
 
@@ -79,14 +82,32 @@ export function createRaceView(d: RaceDeps) {
   let live: Live | null = null
   let speed = 4
   let gpIndex = loadGpIndex()
-  const gp = () => GRAND_PRIXES[gpIndex]
+  // a finished week's Grand Prix, opened from the Weekly panel: the third choice, while it is loaded
+  let pastWeek: GrandPrix | null = null
+  const gp = () => (gpIndex === GRAND_PRIXES.length && pastWeek ? pastWeek : GRAND_PRIXES[gpIndex])
+  const choices = () => (pastWeek ? [...GRAND_PRIXES, pastWeek] : GRAND_PRIXES)
+  // the challenge car's result in a Grand Prix: worked out on load for the fixed ones, and once on demand for a past week
+  const rivalRuns = new WeakMap<CarFile, Map<string, RaceResult>>()
+  function rivalResult(ch: { car: CarFile; results: RaceResult[] }, g: GrandPrix): RaceResult {
+    const i = GRAND_PRIXES.indexOf(g)
+    if (i >= 0) return ch.results[i]
+    let runs = rivalRuns.get(ch.car)
+    if (!runs) rivalRuns.set(ch.car, (runs = new Map()))
+    let r = runs.get(g.id)
+    if (!r) runs.set(g.id, (r = raceCar(ch.car, g)))
+    return r
+  }
   let best = loadBest(gp())
 
   // Which Grand Prix is chosen: its name, rules and buttons (the race itself is chosen by gp())
   function renderGp() {
     $('gpTitle').textContent = gp().name
-    $('medalRules').textContent = medalRules(gp())
-    GRAND_PRIXES.forEach((_, i) => {
+    $('medalRules').textContent = gp().week !== undefined
+      ? 'These were last week\'s secret tracks. They are open now: race them as often as you like. This week\'s are still secret.'
+      : medalRules(gp())
+    $('gp2').hidden = !pastWeek
+    if (pastWeek) $('gp2').textContent = pastWeek.name
+    choices().forEach((_, i) => {
       const b = $('gp' + i)
       b.className = i === gpIndex ? 'btn small primary' : 'btn small'
       b.setAttribute('aria-pressed', String(i === gpIndex))
@@ -96,7 +117,7 @@ export function createRaceView(d: RaceDeps) {
     if (i === gpIndex || (live && !live.summary)) return // not in the middle of a race
     gpIndex = i
     try {
-      localStorage.setItem(GP_KEY, String(i))
+      if (i < GRAND_PRIXES.length) localStorage.setItem(GP_KEY, String(i))
     } catch {
       /* storage blocked: the choice only lasts this visit */
     }
@@ -116,7 +137,7 @@ export function createRaceView(d: RaceDeps) {
       brain: genomeToBrain(car.genome, brainShape(car.build)),
       spec,
       index: 0,
-      lap: createCar(raceTrack(0, gp().wet), spec),
+      lap: createCar(gpTrack(gp(), 0), spec),
       results: [],
       hold: 0,
       summary: null,
@@ -135,7 +156,7 @@ export function createRaceView(d: RaceDeps) {
   function nextTrack(r: Live) {
     r.index++
     if (r.index >= RACE_COUNT) return finish(r)
-    r.lap = createCar(raceTrack(r.index, r.gp.wet), r.spec)
+    r.lap = createCar(gpTrack(r.gp, r.index), r.spec)
     follow(d.cam, r.lap, true)
   }
 
@@ -162,7 +183,7 @@ export function createRaceView(d: RaceDeps) {
       r.results.push(finishLap(r.lap))
     }
     while (r.results.length < RACE_COUNT) {
-      const lap = createCar(raceTrack(r.results.length, r.gp.wet), r.spec)
+      const lap = createCar(gpTrack(r.gp, r.results.length), r.spec)
       while (!lapIsOver(lap)) drive(lap, r.brain)
       r.lap = lap
       r.results.push(finishLap(lap))
@@ -192,7 +213,7 @@ export function createRaceView(d: RaceDeps) {
     go.disabled = !car || racing
     go.textContent = live?.summary ? 'Race again' : 'Race your car'
     $<HTMLButtonElement>('raceSkip').disabled = !racing
-    GRAND_PRIXES.forEach((_, i) => ($<HTMLButtonElement>('gp' + i).disabled = racing)) // the Grand Prix cannot change mid-race
+    choices().forEach((_, i) => ($<HTMLButtonElement>('gp' + i).disabled = racing)) // the Grand Prix cannot change mid-race
     $('raceSpeed').textContent = 'Speed ' + speed + '×'
     $('raceMsg').textContent = !car
       ? 'Train a car in Practice first.'
@@ -242,8 +263,8 @@ export function createRaceView(d: RaceDeps) {
     if (s) {
       const medal = medalFor(s, live!.gp)
       const m = $('medal')
-      m.textContent = medal ? medal.toUpperCase() : 'NO MEDAL'
-      m.style.color = medal ? MEDAL_COLOUR[medal] : COL.muted
+      m.textContent = medal ? medal.toUpperCase() : headline(s, live!.gp)
+      m.style.color = medal ? MEDAL_COLOUR[medal] : live!.gp.week !== undefined ? COL.text : COL.muted
       const gens = live!.car.generations
       $('resultLine').textContent = s.finished + ' of ' + RACE_COUNT + ' finished · ' + s.totalTime.toFixed(1) + ' s total' + (gens ? ' · trained for ' + gens + ' rounds' : '')
       $('advice').textContent = adviceFor(s, live!.gp, live!.car.build.weather === 'wet')
@@ -256,10 +277,10 @@ export function createRaceView(d: RaceDeps) {
       $('challengeLine').textContent = ch.error + ' Ask your friend to send it again.'
       $('challengeVs').textContent = ''
     } else if (ch) {
-      const rival = ch.results[gpIndex]
+      const rival = rivalResult(ch, gp())
       const rivalMedal = medalFor(rival, gp())
       $('challengeLine').textContent =
-        ch.car.name + ' got ' + (rivalMedal ? rivalMedal.toUpperCase() + ' in ' + gp().name + ': ' : 'in ' + gp().name + ': ') + rival.finished + ' of ' + RACE_COUNT + ' finished · ' + rival.totalTime.toFixed(1) + ' s total.' +
+        (rivalMedal ? ch.car.name + ' got ' + rivalMedal.toUpperCase() + ' in ' + gp().name + ': ' : ch.car.name + "'s result in " + gp().name + ': ') + rival.finished + ' of ' + RACE_COUNT + ' finished · ' + rival.totalTime.toFixed(1) + ' s total.' +
         (car ? ' Race your car on the same tracks and beat it.' : ' Train a car in Practice, then race it here.')
       $('challengeVs').textContent = live?.summary ? versus(live.summary, rival, ch.car.name) : ''
     }
@@ -301,11 +322,11 @@ export function createRaceView(d: RaceDeps) {
       const medal = medalFor(r.summary, r.gp)
       ctx.fillStyle = 'rgba(7,9,12,0.72)'
       ctx.fillRect(0, 0, W, H)
-      hudText(medal ? medal.toUpperCase() : 'NO MEDAL', W / 2, H / 2 - 16, 64, medal ? MEDAL_COLOUR[medal] : COL.muted, 'center')
+      hudText(medal ? medal.toUpperCase() : headline(r.summary, r.gp), W / 2, H / 2 - 16, 64, medal ? MEDAL_COLOUR[medal] : r.gp.week !== undefined ? COL.text : COL.muted, 'center')
       hudText(r.summary.finished + ' / ' + RACE_COUNT + ' FINISHED  ·  ' + r.summary.totalTime.toFixed(1) + ' S', W / 2, H / 2 + 22, 22, COL.text, 'center')
       if (r.newBest) hudText('NEW PERSONAL BEST', W / 2, H / 2 + 54, 18, COL.accent, 'center')
       const ch = d.getChallenge()
-      if (ch && !('error' in ch)) hudText(versus(r.summary, ch.results[GRAND_PRIXES.indexOf(r.gp)], ch.car.name).toUpperCase(), W / 2, H / 2 + 86, 18, COL.text, 'center')
+      if (ch && !('error' in ch)) hudText(versus(r.summary, rivalResult(ch, r.gp), ch.car.name).toUpperCase(), W / 2, H / 2 + 86, 18, COL.text, 'center')
     } else {
       hudText('TRACK ' + (r.index + 1) + ' / ' + RACE_COUNT, 16, 42, 34)
       if (r.gp.wet) hudText('WET ROAD', W - 16, 42, 24, COL.tele, 'right')
@@ -321,7 +342,7 @@ export function createRaceView(d: RaceDeps) {
     ])
   }
 
-  GRAND_PRIXES.forEach((_, i) => $('gp' + i).addEventListener('click', () => selectGp(i)))
+  ;[...GRAND_PRIXES, null].forEach((_, i) => $('gp' + i).addEventListener('click', () => selectGp(i)))
   renderGp()
   $('raceGo').addEventListener('click', start)
   $('resultGarage').addEventListener('click', () => d.goTo('garage'))
@@ -332,6 +353,15 @@ export function createRaceView(d: RaceDeps) {
     render()
   })
 
-  const selectGpId = (id: string) => selectGp(Math.max(0, GRAND_PRIXES.findIndex((g) => g.id === id)))
-  return { tick, draw, render, gpId: () => gp().id, selectGpId }
+  const selectGpId = (id: string) => selectGp(Math.max(0, choices().findIndex((g) => g.id === id)))
+  // Open a finished week's tracks as a third choice and switch to it
+  function showPastWeek(g: GrandPrix) {
+    if (live && !live.summary) return
+    if (pastWeek?.id !== g.id) {
+      pastWeek = g
+      if (gpIndex === GRAND_PRIXES.length) gpIndex = -1 // so selectGp below treats it as a change
+    }
+    selectGp(GRAND_PRIXES.length)
+  }
+  return { tick, draw, render, gpId: () => gp().id, selectGpId, showPastWeek }
 }

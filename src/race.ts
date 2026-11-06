@@ -4,7 +4,8 @@
 import type { Point } from './sensors'
 import { genomeToBrain } from './genome'
 import { CAR_RADIUS, CHECKPOINTS, RACE_STEPS, STALL_STEPS, createCar, drive, type Brain, type Car } from './sim'
-import { BLOCK_HALF, CORE_PRACTICE, HAIRPIN_RADIUS, PRACTICE, bendRadii, makeStyledTrack, styleFor, wetTrack, type Track } from './track'
+import { BLOCK_HALF, CORE_PRACTICE, HAIRPIN_RADIUS, PRACTICE, bendRadii, makeStyledTrack, styleFor, wetTrack, type Track, type TrackStyle } from './track'
+import { makeRng } from './random'
 import { brainShape, specOf, type CarSpec } from './setup'
 import type { CarFile } from './carFile'
 
@@ -19,6 +20,41 @@ const wetRaceTracks: Track[] = []
 export const raceTrack = (i: number, wet = false): Track => {
   const dry = (raceTracks[i] ??= makeStyledTrack(7001 + i, RACE_STYLES[i]))
   return wet ? (wetRaceTracks[i] ??= wetTrack(dry)) : dry
+}
+
+// ---------- THE WEEKLY GRAND PRIX ----------
+// Every week has 8 new tracks made from a seed only the server knows until the week is over, so nobody can
+// practise on them. Each track takes the style of a random practice track, and about one week in three is wet.
+// Weeks start on Monday at 00:00 UTC.
+const WEEK_MS = 7 * 86400000
+const FIRST_MONDAY = Date.UTC(1970, 0, 5)
+export const weekOf = (now: number) => Math.floor((now - FIRST_MONDAY) / WEEK_MS)
+export const weekStart = (week: number) => FIRST_MONDAY + week * WEEK_MS
+const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
+export const weekName = (week: number) => {
+  const d = new Date(weekStart(week))
+  return 'Week of ' + d.getUTCDate() + ' ' + MONTHS[d.getUTCMonth()]
+}
+const WEEKLY_STYLES =[...PRACTICE.flatMap((p) => (p.style ? [p.style] : [])), styleFor(0.9)]
+
+export function weeklyGp(week: number, seed: number): GrandPrix {
+  const rng = makeRng(seed)
+  const wet = rng() < 1 / 3
+  const tracks = Array.from({ length: RACE_COUNT }, () => {
+    const style = WEEKLY_STYLES[Math.floor(rng() * WEEKLY_STYLES.length)]
+    return { seed: Math.floor(rng() * 1e6), style }
+  })
+  return { id: 'w:' + week, name: weekName(week), wet, goldTime: 0, week, tracks }
+}
+
+// Track i of a Grand Prix: the fixed race tracks, or the ones a weekly seed makes (made once, then kept)
+const weeklyTracks = new Map<string, Track[]>()
+export function gpTrack(gp: GrandPrix, i: number): Track {
+  if (!gp.tracks) return raceTrack(i, gp.wet)
+  const key = gp.id + ':' + gp.tracks.map((t) => t.seed).join(',')
+  let made = weeklyTracks.get(key)
+  if (!made) weeklyTracks.set(key, (made = []))
+  return (made[i] ??= ((t) => (gp.wet ? wetTrack(t) : t))(makeStyledTrack(gp.tracks[i].seed, gp.tracks[i].style)))
 }
 
 // ---------- ONE TRACK ----------
@@ -72,7 +108,7 @@ export function summarise(tracks: TrackResult[]): RaceResult {
 export function raceCar(car: CarFile, gp: GrandPrix = GRAND_PRIXES[0]): RaceResult {
   const brain = genomeToBrain(car.genome, brainShape(car.build))
   const spec = specOf(car.build)
-  return summarise(Array.from({ length: RACE_COUNT }, (_, i) => raceOne(brain, raceTrack(i, gp.wet), spec)))
+  return summarise(Array.from({ length: RACE_COUNT }, (_, i) => raceOne(brain, gpTrack(gp, i), spec)))
 }
 
 // More tracks finished wins; among equals, the lower total time wins
@@ -102,7 +138,8 @@ export const WET_GOLD_TIME = 190
 export const BRONZE_FINISHES = RACE_COUNT - 2
 
 // Each Grand Prix has its own medals and personal best (the first keeps its old save key)
-export type GrandPrix = { id: string; name: string; wet: boolean; goldTime: number }
+// A weekly Grand Prix also has its week number and the seed and style of each of its tracks
+export type GrandPrix = { id: string; name: string; wet: boolean; goldTime: number; week?: number; tracks?: { seed: number; style: TrackStyle }[] }
 export const GRAND_PRIXES: GrandPrix[] = [
   { id: 'gp1', name: 'Grand Prix 1', wet: false, goldTime: GOLD_TIME },
   { id: 'gp2', name: 'Grand Prix 2 · wet', wet: true, goldTime: WET_GOLD_TIME },
@@ -110,6 +147,7 @@ export const GRAND_PRIXES: GrandPrix[] = [
 
 export type Medal = 'gold' | 'silver' | 'bronze' | null
 export function medalFor(r: { finished: number; totalTime: number }, gp: GrandPrix = GRAND_PRIXES[0]): Medal {
+  if (gp.week !== undefined) return null // weekly trophies go by place on the week's board, not by time
   if (r.finished === RACE_COUNT) return r.totalTime <= gp.goldTime ? 'gold' : 'silver'
   return r.finished >= BRONZE_FINISHES ? 'bronze' : null
 }

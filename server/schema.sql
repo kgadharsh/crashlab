@@ -21,3 +21,10 @@ CREATE TABLE IF NOT EXISTS players (
   name_key TEXT NOT NULL UNIQUE, -- lower case, so Ann and ann cannot both exist
   created_at INTEGER NOT NULL
 );
+
+-- The Weekly Grand Prix: each week's track seed, picked at random the first time the week is asked for.
+-- It is only sent out once the week is over, so nobody can practise on that week's tracks.
+CREATE TABLE IF NOT EXISTS weeks (
+  week INTEGER PRIMARY KEY,    -- weeks since Monday 5 Jan 1970 (UTC); entries for it have gp = 'w:' || week
+  seed INTEGER NOT NULL
+);

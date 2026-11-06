@@ -235,7 +235,7 @@ document.querySelector('#app')!.innerHTML = `
       </div>
       <div class="panel">
         <h2><span id="gpTitle">Grand Prix 1</span><span class="aside">8 secret tracks</span></h2>
-        <div class="actions"><button class="btn small primary" id="gp0" aria-pressed="true">Dry road</button><button class="btn small" id="gp1" aria-pressed="false">Wet road</button></div>
+        <div class="actions"><button class="btn small primary" id="gp0" aria-pressed="true">Dry road</button><button class="btn small" id="gp1" aria-pressed="false">Wet road</button><button class="btn small" id="gp2" aria-pressed="false" hidden>Past week</button></div>
         <div class="actions">
           <button class="btn primary wide" id="raceGo">Race your car</button>
           <button class="btn" id="raceSpeed">Speed 4×</button>
@@ -244,6 +244,17 @@ document.querySelector('#app')!.innerHTML = `
         <p class="msg" id="raceMsg"></p>
         <p class="tip" style="margin-top:8px">Your car drives 8 tracks it has never seen, once each. Most tracks finished wins, then the lowest total time. Grand Prix 2 is the same tracks on a wet road.</p>
         <p class="tip" id="medalRules"></p>
+      </div>
+      <div class="panel" id="weeklyPanel" hidden>
+        <h2>Weekly Grand Prix<span class="aside" id="weeklyEnds"></span></h2>
+        <p class="tip" id="weeklyLine" style="margin-top:0"></p>
+        <div class="actions"><button class="btn primary" id="weeklyGo">Enter your car</button></div>
+        <p class="msg" id="weeklyMsg"></p>
+        <ol class="tower" id="weeklyTracks" hidden></ol>
+        <p class="tip" id="weeklyBoardTitle" style="color:var(--text);font-weight:600">This week</p>
+        <ol class="rank" id="weeklyRows"></ol>
+        <p class="tip" id="weeklyEmpty" hidden>No entries this week yet. Be the first.</p>
+        <div id="weeklyPast"></div>
       </div>
       <div class="panel" id="boardOnline" hidden>
         <h2>Leaderboard<span class="aside"><button class="btn small primary" id="onlineDry">Dry</button> <button class="btn small" id="onlineWet">Wet</button></span></h2>
@@ -266,7 +277,7 @@ document.querySelector('#app')!.innerHTML = `
         <div class="actions"><button class="btn small primary" id="resultGarage">Edit setup in Garage →</button><button class="btn small" id="resultPractice">Go to Practice →</button><button class="btn small" id="resultShare">Challenge a friend</button></div>
         <input id="resultLink" readonly hidden aria-label="Challenge link" style="width:100%;margin-top:6px" />
         <div id="resultBoard" hidden>
-          <p class="tip" style="margin-top:12px;color:var(--text);font-weight:600">Put this on the leaderboard?</p>
+          <p class="tip" id="resultBoardAsk" style="margin-top:12px;color:var(--text);font-weight:600">Put this on the leaderboard?</p>
           <div class="actions" style="margin-top:4px"><button class="btn primary" id="resultBoardGo">Sign in with Google to enter</button></div>
           <p class="tip" id="resultBoardPlace" style="margin-top:2px"></p>
           <p class="msg" id="resultBoardMsg"></p>
@@ -1446,11 +1457,17 @@ const leaderboard = createLeaderboard({
   goRace: () => setTab('race'),
   notify: showNotice,
   // a car from the board becomes the car to beat, raced on this device like a friend's challenge
-  raceAgainst: (rival, gpId) => {
+  raceAgainst: (rival, gp) => {
     setChallenge(rival)
-    raceView!.selectGpId(gpId)
+    if (typeof gp === 'string') raceView!.selectGpId(gp)
+    else raceView!.showPastWeek(gp)
     setTab('race')
     $('challengePanel').scrollIntoView({ behavior: 'smooth', block: 'center' })
+  },
+  openWeek: (gp) => {
+    raceView!.showPastWeek(gp)
+    setTab('race')
+    $('gpTitle').scrollIntoView({ behavior: 'smooth', block: 'center' })
   },
 })
 raceView = createRaceView({ onResult: (gpId, r) => {

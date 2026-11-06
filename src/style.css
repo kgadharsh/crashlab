@@ -376,3 +376,4 @@ select {
 .part .lock { color: var(--accent); }
 .part.locked { cursor: help; opacity: 0.75; }
 .rank li .btn.small { padding: 3px 8px; font-size: 11px; }
+.rank .troph { color: var(--text); font-family: system-ui, sans-serif; white-space: nowrap; }

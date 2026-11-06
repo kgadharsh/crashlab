@@ -2,7 +2,7 @@
 // uses, and ranks the result. The score a player sees in the browser is never trusted.
 import { carFromJson } from '../../src/carFile'
 import { sign, verify } from './auth'
-import { GRAND_PRIXES, medalFor, raceCar } from '../../src/race'
+import { GRAND_PRIXES, medalFor, raceCar, weekOf, weekStart, weeklyGp, type GrandPrix } from '../../src/race'
 
 export interface Env {
   DB: D1Database
@@ -12,6 +12,8 @@ export interface Env {
   SESSION_SECRET: string
 }
 
+const WEEKLY_LIMIT = 3 // entries per player in each Weekly Grand Prix; their best counts
+const PAST_WEEKS = 6 // finished weeks listed with their winners
 const DAILY_LIMIT = 3 // ranked entries per player per day. Training cannot be limited (it runs in the browser), so this is what makes retrying for a lucky car cost something
 const BOARD_SIZE = 50
 const MAX_BODY = 60000
@@ -121,7 +123,8 @@ async function submit(req: Request, env: Env): Promise<Response> {
   } catch {
     return json(req, { error: 'That is not valid JSON.' }, 400)
   }
-  const gp = GRAND_PRIXES.find((g) => g.id === body.gp)
+  const weekly = body.gp === 'weekly' // always this week's: past weeks are closed
+  const gp = weekly ? await weekGp(env, weekOf(Date.now())) : GRAND_PRIXES.find((g) => g.id === body.gp)
   if (!gp) return json(req, { error: 'Unknown Grand Prix.' }, 400)
   const car = carFromJson(typeof body.car === 'string' ? body.car : '')
   if ('error' in car) return json(req, { error: car.error }, 400)
@@ -134,8 +137,13 @@ async function submit(req: Request, env: Env): Promise<Response> {
     display = me.name
   }
   const day = new Date().toISOString().slice(0, 10)
-  const used = await env.DB.prepare('SELECT COUNT(*) AS n FROM entries WHERE player = ? AND day = ?').bind(player.id, day).first<{ n: number }>()
-  if ((used?.n ?? 0) >= DAILY_LIMIT) return json(req, { error: 'You have used all ' + DAILY_LIMIT + ' board entries for today. Try again tomorrow.' }, 429)
+  const used = weekly
+    ? await env.DB.prepare('SELECT COUNT(*) AS n FROM entries WHERE player = ? AND gp = ?').bind(player.id, gp.id).first<{ n: number }>()
+    : await env.DB.prepare("SELECT COUNT(*) AS n FROM entries WHERE player = ? AND day = ? AND gp NOT LIKE 'w:%'").bind(player.id, day).first<{ n: number }>()
+  const limit = weekly ? WEEKLY_LIMIT : DAILY_LIMIT
+  if ((used?.n ?? 0) >= limit) {
+    return json(req, { error: weekly ? 'You have used all ' + WEEKLY_LIMIT + ' entries for this week. A new Grand Prix starts on Monday.' : 'You have used all ' + DAILY_LIMIT + ' board entries for today. Try again tomorrow.' }, 429)
+  }
 
   const result = raceCar(car, gp) // the server's own run
   const medal = medalFor(result, gp)
@@ -148,18 +156,76 @@ async function submit(req: Request, env: Env): Promise<Response> {
     `SELECT COUNT(*) + 1 AS rank FROM (SELECT MAX(${score}) AS s FROM entries WHERE gp = ? GROUP BY player)
        WHERE s > (SELECT MAX(${score}) FROM entries WHERE gp = ? AND player = ?)`,
   ).bind(gp.id, gp.id, player.id).first<{ rank: number }>()
-  return json(req, { finished: result.finished, totalTime: result.totalTime, medal, rank: rank?.rank ?? 1, left: DAILY_LIMIT - (used?.n ?? 0) - 1 })
+  // a weekly result also says how each secret track went, but not where the car stopped, which would give the track away
+  const tracks = weekly ? result.tracks.map((t) => ({ time: t.time, progress: t.progress, cause: t.cause })) : undefined
+  return json(req, { finished: result.finished, totalTime: result.totalTime, medal, rank: rank?.rank ?? 1, left: limit - (used?.n ?? 0) - 1, tracks })
 }
+
+// ---------- THE WEEKLY GRAND PRIX ----------
+// A week's Grand Prix, with its seed picked at random and saved the first time anyone asks for that week
+async function weekGp(env: Env, week: number): Promise<GrandPrix> {
+  const seed = crypto.getRandomValues(new Uint32Array(1))[0]
+  await env.DB.prepare('INSERT OR IGNORE INTO weeks (week, seed) VALUES (?, ?)').bind(week, seed).run()
+  const row = await env.DB.prepare('SELECT seed FROM weeks WHERE week = ?').bind(week).first<{ seed: number }>()
+  return weeklyGp(week, row!.seed)
+}
+
+// The top 3 players of every finished week (finishing at least one track), best first within each week
+type Podium = { gp: string; place: number; id: number; display: string; finished: number; totalTime: number; player: string }
+async function podiums(env: Env): Promise<Podium[]> {
+  const { results } = await env.DB.prepare(
+    `SELECT gp, place, id, display, finished, totalTime, player FROM (
+       SELECT b.gp, b.id, COALESCE(p.name, b.display) AS display, b.finished, b.total_time AS totalTime, b.player,
+              ROW_NUMBER() OVER (PARTITION BY b.gp ORDER BY b.finished DESC, b.total_time ASC, b.id ASC) AS place
+       FROM (SELECT *, ROW_NUMBER() OVER (PARTITION BY gp, player ORDER BY finished DESC, total_time ASC, id ASC) AS r
+             FROM entries WHERE gp LIKE 'w:%' AND gp <> ?) b
+       LEFT JOIN players p ON p.id = b.player
+       WHERE b.r = 1 AND b.finished > 0
+     ) WHERE place <= 3 ORDER BY gp DESC, place ASC`,
+  ).bind('w:' + weekOf(Date.now())).all<Podium>()
+  return results
+}
+
+// This week (its name, road and when it ends, but never its seed) and the finished weeks with their winners.
+// A finished week's seed is public, so the game can make its tracks and anyone can race them.
+async function weeklyInfo(req: Request, env: Env): Promise<Response> {
+  const now = weekOf(Date.now())
+  const gp = await weekGp(env, now)
+  const { results } = await env.DB.prepare('SELECT week, seed FROM weeks WHERE week < ? ORDER BY week DESC LIMIT ?').bind(now, PAST_WEEKS).all<{ week: number; seed: number }>()
+  const all = await podiums(env)
+  const past = results.map((w) => ({
+    week: w.week,
+    seed: w.seed,
+    podium: all.filter((p) => p.gp === 'w:' + w.week).map(({ place, id, display, finished, totalTime }) => ({ place, id, display, finished, totalTime })),
+  }))
+  return json(req, { week: now, name: gp.name, wet: gp.wet, endsAt: weekStart(now + 1), limit: WEEKLY_LIMIT, past })
+}
+
+// Weekly trophies won by each player: [gold, silver, bronze]
+async function trophies(env: Env): Promise<Map<string, number[]>> {
+  const won = new Map<string, number[]>()
+  for (const p of await podiums(env)) {
+    const t = won.get(p.player) ?? [0, 0, 0]
+    t[p.place - 1]++
+    won.set(p.player, t)
+  }
+  return won
+}
+
+// Which boards can be shown: the fixed Grand Prix, and any week up to this one
+const boardExists = (gpId: string) => GRAND_PRIXES.some((g) => g.id === gpId) || (/^w:\d+$/.test(gpId) && Number(gpId.slice(2)) <= weekOf(Date.now()))
 
 // Each player's best entry for a Grand Prix, best first
 async function board(req: Request, env: Env, gpId: string): Promise<Response> {
-  if (!GRAND_PRIXES.some((g) => g.id === gpId)) return json(req, { error: 'Unknown Grand Prix.' }, 400)
+  if (!boardExists(gpId)) return json(req, { error: 'Unknown Grand Prix.' }, 400)
   const { results } = await env.DB.prepare(
-    `SELECT e.id, COALESCE(p.name, e.display) AS display, e.finished, e.total_time AS totalTime, e.medal FROM (
+    `SELECT e.id, e.player, COALESCE(p.name, e.display) AS display, e.finished, e.total_time AS totalTime, e.medal FROM (
        SELECT *, ROW_NUMBER() OVER (PARTITION BY player ORDER BY finished DESC, total_time ASC, id ASC) AS r FROM entries WHERE gp = ?
      ) e LEFT JOIN players p ON p.id = e.player WHERE e.r = 1 ORDER BY e.finished DESC, e.total_time ASC, e.id ASC LIMIT ?`,
-  ).bind(gpId, BOARD_SIZE).all<{ id: number; display: string; finished: number; totalTime: number; medal: string | null }>()
-  return json(req, { gp: gpId, entries: results.map((e, i) => ({ rank: i + 1, ...e })) })
+  ).bind(gpId, BOARD_SIZE).all<{ id: number; player: string; display: string; finished: number; totalTime: number; medal: string | null }>()
+  const won = await trophies(env)
+  // the player's sign-in id stays on the server
+  return json(req, { gp: gpId, entries: results.map(({ player, ...e }, i) => ({ rank: i + 1, ...e, trophies: won.get(player) })) })
 }
 
 // A player's place on a Grand Prix's board: one more than the number of players whose best entry beats their best (null if not on it)
@@ -180,7 +246,10 @@ async function getMe(req: Request, env: Env): Promise<Response> {
   const me = await env.DB.prepare('SELECT name FROM players WHERE id = ?').bind(player.id).first<{ name: string }>()
   const ranks: Record<string, number | null> = {}
   for (const gp of GRAND_PRIXES) ranks[gp.id] = await rankOf(env, gp.id, player.id)
-  return json(req, { name: me?.name ?? null, ranks })
+  const week = 'w:' + weekOf(Date.now())
+  const used = await env.DB.prepare('SELECT COUNT(*) AS n FROM entries WHERE player = ? AND gp = ?').bind(player.id, week).first<{ n: number }>()
+  const weekly = { rank: await rankOf(env, week, player.id), left: WEEKLY_LIMIT - (used?.n ?? 0) }
+  return json(req, { name: me?.name ?? null, ranks, weekly })
 }
 
 const NAME_RULE = /^[\p{L}\p{N}][\p{L}\p{N} _.-]{1,18}[\p{L}\p{N}]$/u // 3 to 20 characters: letters, numbers, and inside the name spaces . _ -
@@ -219,6 +288,7 @@ export default {
     if (req.method === 'GET' && auth) return auth[2] ? finishSignIn(auth[1], url, env) : startSignIn(auth[1], url, env)
     if (req.method === 'POST' && url.pathname === '/entries') return submit(req, env)
     if (req.method === 'GET' && url.pathname === '/board') return board(req, env, url.searchParams.get('gp') ?? 'gp1')
+    if (req.method === 'GET' && url.pathname === '/weekly') return weeklyInfo(req, env)
     if (url.pathname === '/me' && req.method === 'GET') return getMe(req, env)
     if (url.pathname === '/me' && req.method === 'PUT') return setMe(req, env)
     if (req.method === 'GET' && m) return entry(req, env, Number(m[1]))
