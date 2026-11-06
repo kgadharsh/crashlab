@@ -28,7 +28,7 @@ function nameIn(token: string | null): string | null {
   }
 }
 
-// Coming back from GitHub, the address ends #signin=TOKEN&nonce=N. Keep the token only if the nonce is the one we sent.
+// Coming back from Google, the address ends #signin=TOKEN&nonce=N. Keep the token only if the nonce is the one we sent.
 function takeSignIn() {
   const m = location.hash.match(/^#signin=([\w.-]+)&nonce=([\w-]+)$/)
   if (!m) return
@@ -52,19 +52,68 @@ export function createLeaderboard(getCar: () => CarFile | null) {
   takeSignIn()
   let gpIndex = 0
 
-  const renderWho = () => {
-    const name = nameIn(store.get(TOKEN_KEY))
-    $('onlineWho').textContent = name ? 'Signed in as ' + name + '.' : 'Sign in to enter the board.'
-    $('onlineSignIn').hidden = !!name
-    $('onlineSignOut').hidden = !name
+  // the player's chosen board name: undefined while unknown, null when they have not chosen one yet
+  let myName: string | null | undefined
+  const renderWho = async () => {
+    const signed = !!nameIn(store.get(TOKEN_KEY))
+    $('onlineSignIn').hidden = signed
+    $('onlineSignOut').hidden = !signed
+    if (!signed) {
+      myName = undefined
+      $('onlineNameRow').hidden = true
+      $('onlineWho').textContent = 'Sign in to enter the board.'
+      return
+    }
+    if (myName === undefined) {
+      try {
+        const res = await fetch(API + '/me', { headers: headers() })
+        if (res.status === 401) {
+          store.set(TOKEN_KEY, null) // the server no longer accepts this sign-in
+          return renderWho()
+        }
+        myName = ((await res.json()) as { name: string | null }).name
+      } catch {
+        $('onlineWho').textContent = 'Signed in. The board is not reachable right now.'
+        return
+      }
+    }
+    $('onlineNameRow').hidden = myName !== null
+    $('onlineWho').textContent = myName ? 'Playing as ' + myName + '. ' : 'Signed in. Choose the name the board will show.'
+    if (myName) {
+      const change = document.createElement('button')
+      change.className = 'btn small'
+      change.textContent = 'Change name'
+      change.addEventListener('click', () => {
+        $('onlineNameRow').hidden = false
+        ;($('onlineName') as HTMLInputElement).value = myName ?? ''
+        $('onlineName').focus()
+      })
+      $('onlineWho').append(change)
+    }
   }
-  $('onlineSignIn').addEventListener('click', () => {
+  $('onlineNameSave').addEventListener('click', async () => {
+    const name = ($('onlineName') as HTMLInputElement).value
+    try {
+      const res = await fetch(API + '/me', { method: 'PUT', headers: headers(), body: JSON.stringify({ name }) })
+      const data = (await res.json()) as { name?: string; error?: string }
+      if (!res.ok) return say(data.error ?? 'That name could not be saved.', true)
+      myName = data.name
+      say('Your board name is ' + data.name + '.')
+      renderWho()
+      refresh()
+    } catch {
+      say('The board is not reachable right now.', true)
+    }
+  })
+  const signIn = () => {
     const nonce = crypto.randomUUID().replace(/-/g, '')
     store.set(NONCE_KEY, nonce)
-    location.href = API + '/auth/github?ret=' + encodeURIComponent(location.origin + location.pathname + location.search) + '&nonce=' + nonce
-  })
+    location.href = API + '/auth/google?ret=' + encodeURIComponent(location.origin + location.pathname + location.search) + '&nonce=' + nonce
+  }
+  $('onlineSignIn').addEventListener('click', signIn)
   $('onlineSignOut').addEventListener('click', () => {
     store.set(TOKEN_KEY, null)
+    myName = undefined
     renderWho()
     say('Signed out.')
   })
@@ -86,8 +135,8 @@ export function createLeaderboard(getCar: () => CarFile | null) {
       $('onlineRows').replaceChildren(
         ...data.entries.map((e) => {
           const li = document.createElement('li')
-          const medal = e.medal ? ' · ' + e.medal : ''
-          li.textContent = e.rank + '. ' + e.display + ' — ' + e.finished + ' of 8, ' + e.totalTime.toFixed(1) + ' s' + medal
+          const cell = (cls: string, text: string) => Object.assign(document.createElement('span'), { className: cls, textContent: text })
+          li.append(cell('n', String(e.rank)), cell('who', e.display), cell('res', e.finished + ' of 8 · ' + e.totalTime.toFixed(1) + ' s' + (e.medal ? ' · ' + e.medal : '')))
           return li
         }),
       )
@@ -107,8 +156,12 @@ export function createLeaderboard(getCar: () => CarFile | null) {
     say('Racing your car on the server…')
     try {
       const res = await fetch(API + '/entries', { method: 'POST', headers: headers(), body: JSON.stringify({ gp: GRAND_PRIXES[gpIndex].id, car: carToJson(car) }) })
-      const data = (await res.json()) as { error?: string; finished?: number; totalTime?: number; medal?: string | null; rank?: number; left?: number }
+      const data = (await res.json()) as { error?: string; needName?: boolean; finished?: number; totalTime?: number; medal?: string | null; rank?: number; left?: number }
       if (res.status === 401) renderWho()
+      if (res.status === 409 && data.needName) {
+        myName = null
+        renderWho()
+      }
       if (!res.ok) return say(data.error ?? 'The board could not take that car.', true)
       say('The server scored ' + car.name + ': ' + data.finished + ' of 8 in ' + data.totalTime!.toFixed(1) + ' s' + (data.medal ? ' (' + data.medal + ')' : '') + '. You are number ' + data.rank + ' on the board. ' + data.left + ' entries left today.')
       refresh()

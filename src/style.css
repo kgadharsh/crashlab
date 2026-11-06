@@ -358,3 +358,10 @@ select {
 .shelf { display: grid; gap: 6px; }
 .slot { display: flex; align-items: center; gap: 6px; font-size: 13px; }
 .slot span { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+
+/* online leaderboard */
+.rank { list-style: none; margin: 0; padding: 0; display: grid; gap: 2px; }
+.rank li { display: grid; grid-template-columns: 26px 1fr auto; align-items: baseline; gap: 8px; padding: 5px 8px; background: var(--panel-2); border-radius: 2px; font: 500 13px var(--mono); }
+.rank .n { color: var(--muted); }
+.rank .who { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.rank .res { color: var(--muted); text-align: right; }

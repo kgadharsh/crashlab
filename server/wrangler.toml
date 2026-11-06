@@ -8,4 +8,4 @@ database_name = "crashlab"
 database_id = "8a5af9ec-bc2b-4afe-995f-8ded779fae91"
 
 [vars]
-GITHUB_CLIENT_ID = "Ov23liywdLCMc2AqYF3V" # public; the matching secret is set with `wrangler secret put GITHUB_CLIENT_SECRET`
+GOOGLE_CLIENT_ID = "1077193827752-9js0k7o41dc62qdi401nebhckr026tk8.apps.googleusercontent.com" # public; fill in from the Google console. The secret is set with `wrangler secret put GOOGLE_CLIENT_SECRET`
