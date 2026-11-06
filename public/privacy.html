@@ -1,0 +1,54 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <link rel="icon" type="image/svg+xml" href="favicon.svg" />
+    <title>CrashLab privacy</title>
+    <style>
+      :root { --bg: #0b0e12; --text: #e8ecf1; --muted: #8a94a3; --accent: #ffb31a; }
+      body { margin: 0; background: var(--bg); color: var(--text); font: 16px/1.6 system-ui, -apple-system, Segoe UI, sans-serif; }
+      main { max-width: 680px; margin: 0 auto; padding: 32px 16px 64px; }
+      h1 { font-size: 28px; margin: 0 0 4px; }
+      h2 { font-size: 18px; margin: 28px 0 6px; color: var(--accent); }
+      p, li { color: var(--text); }
+      .muted { color: var(--muted); }
+      a { color: var(--accent); }
+      ul { padding-left: 20px; }
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1>CrashLab privacy</h1>
+      <p class="muted">Last updated 6 November 2026</p>
+
+      <p>CrashLab is a browser game where you build and train a self-driving car and race it. This page says what the game keeps about you and where.</p>
+
+      <h2>If you never sign in</h2>
+      <p>Nothing leaves your device. Your setup, your cars and your race results are kept in your own browser's storage, and you can delete them by clearing this site's data in your browser.</p>
+
+      <h2>If you sign in with Google</h2>
+      <p>Signing in is only needed to put a car on the online leaderboard. Google tells CrashLab who you are. CrashLab keeps only your Google account's ID number, which is how it recognises you next time. Your email address, name and photo are not stored and never shown.</p>
+      <p>On the leaderboard you appear under a board name you choose yourself.</p>
+
+      <h2>What the leaderboard server stores</h2>
+      <ul>
+        <li>Your Google account ID number and the board name you chose.</li>
+        <li>Each car you enter: its setup and its trained driving brain, its race result, and the date.</li>
+      </ul>
+      <p>The leaderboard is public. Anyone can see board names and results, and the cars entered on the board can be downloaded so other players can race against them.</p>
+      <p>The server runs on Cloudflare, which, like any web host, handles your connection (including your IP address) to deliver the game's requests.</p>
+
+      <h2>In your browser</h2>
+      <p>After you sign in, your browser keeps a sign-in token for 30 days so you stay signed in. Signing out on the Race tab removes it.</p>
+
+      <h2>What CrashLab does not do</h2>
+      <p>No adverts, no analytics or tracking, and nothing is sold or shared with anyone else.</p>
+
+      <h2>Deleting your data</h2>
+      <p>To have your board name and entered cars deleted, open an issue at <a href="https://github.com/kgadharsh/crashlab/issues">github.com/kgadharsh/crashlab/issues</a> saying which board name is yours, and it will be removed.</p>
+
+      <p><a href="./">Back to CrashLab</a></p>
+    </main>
+  </body>
+</html>
