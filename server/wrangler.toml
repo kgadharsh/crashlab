@@ -1,0 +1,13 @@
+name = "crashlab-api"
+main = "src/index.ts"
+compatibility_date = "2026-11-01"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "crashlab"
+database_id = "local-only" # replace with the id from `wrangler d1 create crashlab` when deploying
+
+[vars]
+# Local development only: lets a request name its player in the X-Dev-Player header.
+# Remove this once sign-in exists (the deployed Worker must never trust that header).
+DEV_PLAYER_HEADER = "1"
