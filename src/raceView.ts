@@ -3,7 +3,7 @@
 import type { CarFile } from './carFile'
 import { genomeToBrain } from './genome'
 import { CHECKPOINTS, createCar, drive, type Brain, type Car } from './sim'
-import { shapeOf, specOf, type CarSpec } from './setup'
+import { brainShape, specOf, type CarSpec } from './setup'
 import {
   CAUSE_LABEL, GRAND_PRIXES, RACE_COUNT, adviceFor, better, finishLap, lapIsOver, medalFor, medalRules, raceTrack, summarise, versus,
   type GrandPrix, type Medal, type RaceResult, type TrackResult,
@@ -113,7 +113,7 @@ export function createRaceView(d: RaceDeps) {
     live = {
       gp: gp(),
       car,
-      brain: genomeToBrain(car.genome, shapeOf(car.build.sensors)),
+      brain: genomeToBrain(car.genome, brainShape(car.build)),
       spec,
       index: 0,
       lap: createCar(raceTrack(0, gp().wet), spec),

@@ -1,7 +1,7 @@
 import { castRay, type Point } from './sensors'
 import { think, type Brain } from './brain'
 import { CHECKPOINTS, CHECKPOINT_STRIDE, DEFAULT_TRACK, POINTS, type Track } from './track'
-import { DEFAULT_SPEC, type CarSpec, type Reward } from './setup'
+import { DEFAULT_SPEC, WET_TYRE_DRY_SPEED, WET_TYRE_GRIP, type CarSpec, type Reward } from './setup'
 
 export { CHECKPOINTS, CHECKPOINT_STRIDE, DEFAULT_TRACK }
 export type { Track, Brain }
@@ -224,8 +224,9 @@ export function step(car: Car, input: Input) {
   if (car.dead) return
   const boosting = input.boost === true && car.boost > 0
   if (boosting) car.boost--
-  const maxSpeed = boosting ? car.spec.maxSpeed * NITRO_TOP : car.spec.maxSpeed
-  const gripSpeed = car.spec.gripSpeed * (car.track.grip ?? 1) // a wet road lowers the speed the tyres can turn at
+  let maxSpeed = boosting ? car.spec.maxSpeed * NITRO_TOP : car.spec.maxSpeed
+  if (car.spec.wetTyres && car.track.grip === undefined) maxSpeed *= WET_TYRE_DRY_SPEED // wet tyres are slow on a dry road
+  const gripSpeed = gripSpeedOf(car)
 
   car.speed += input.throttle * (boosting ? ACCEL * NITRO_ACCEL : ACCEL)
   car.speed *= FRICTION
@@ -252,9 +253,16 @@ export function step(car: Car, input: Input) {
   updateRays(car, near)
 }
 
-// What the brain sees: each ray distance (0 to 1) and the speed
+// The speed the tyres can still turn at here: a wet road lowers it, and wet tyres win most of that back
+function gripSpeedOf(car: Car): number {
+  const road = car.track.grip ?? 1
+  return car.spec.gripSpeed * (car.spec.wetTyres && car.track.grip !== undefined ? Math.min(1, road * WET_TYRE_GRIP) : road)
+}
+
+// What the brain sees: each ray distance (0 to 1) and the speed, then with grip sense how near the tyres are to letting go
 export function getInputs(car: Car): number[] {
   const inputs = [...car.rays.map((d) => d / car.spec.rayRange), car.speed / car.spec.maxSpeed]
+  if (car.spec.gripSense) inputs.push(Math.min(2, Math.max(0, car.speed) / gripSpeedOf(car)) / 2) // 0.5 is the limit
   if (car.spec.nitro) inputs.push(car.boost / NITRO_STEPS) // how much charge is left
   return inputs
 }

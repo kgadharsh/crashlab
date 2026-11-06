@@ -20,12 +20,23 @@ export type Reward = {
 export type Weather = 'dry' | 'wet' | 'both'
 export const WEATHERS: Weather[] = ['dry', 'wet', 'both']
 
+// Parts: extra pieces of kit a player unlocks (see parts.ts). Each is a trade-off, not a strict upgrade, so a
+// newcomer without them can still win, and a player who fakes an unlock gains nothing unfair.
+export type Parts = {
+  eyes?: boolean // long-range eyes: rays see much further, but a near wall reads as a smaller number and the car is a little heavier
+  tyres?: boolean // wet tyres: far more grip on a wet road, a lower top speed on a dry one
+  brain?: boolean // bigger brain: more hidden neurons, so more to learn in the same budget
+  grip?: boolean // grip sense: the brain feels how close the tyres are to letting go
+}
+export const PART_IDS = ['eyes', 'tyres', 'brain', 'grip'] as const
+
 export type Build = {
   sensors: Sensors
   balance: number // car setup: 0 = all grip, 1 = all top speed
   reward: Reward
   practice: number[] // ids of the practice tracks to train on
   weather?: Weather // left out means dry, so every earlier car and build stays valid
+  parts?: Parts // left out means none, so every earlier car and build stays valid
   perks?: { nitro?: boolean } // an experiment (scripts/nitroCheck.ts), not a garage choice: it is not saved with a car
 }
 
@@ -51,10 +62,21 @@ export const REPLAY_EVERY = 10 // while watching, every 10th generation is repla
 
 // ---------- THE BRAIN'S SHAPE FOLLOWS THE SENSORS ----------
 export const HIDDEN = 5
+export const BIG_HIDDEN = 9 // with the bigger brain
+export const LONG_RAY_RANGE = 320 // with long-range eyes
+export const EYES_TOP_SPEED = 0.97 // long-range eyes weigh a little
+export const GRIP_TOP_SPEED = 0.97 // so does grip sense: without a cost it beat no parts on every road (scripts/partsCheck.ts, 6 Nov 2026)
+export const WET_TYRE_GRIP = 1.45 // wet tyres multiply a wet road's grip by this (never above dry grip)
+export const WET_TYRE_DRY_SPEED = 0.92 // and cost this share of top speed on a dry road
 export const OUTPUTS = 2 // steering, throttle
 export type Shape = { inputs: number; hidden: number; outputs: number }
 // rays + speed; with nitro also the charge left, and a boost output
 export const shapeOf = (s: Sensors, nitro = false): Shape => ({ inputs: s.count + 1 + (nitro ? 1 : 0), hidden: HIDDEN, outputs: OUTPUTS + (nitro ? 1 : 0) })
+// The brain a build needs: grip sense adds an input, the bigger brain more hidden neurons
+export const brainShape = (b: Build): Shape => {
+  const base = shapeOf(b.sensors, !!b.perks?.nitro)
+  return { inputs: base.inputs + (b.parts?.grip ? 1 : 0), hidden: b.parts?.brain ? BIG_HIDDEN : HIDDEN, outputs: base.outputs }
+}
 export const genomeLength = (sh: Shape) => sh.hidden * sh.inputs + sh.hidden + sh.outputs * sh.hidden + sh.outputs
 
 // ---------- WHAT THE CHOICES DO TO THE CAR ----------
@@ -64,6 +86,8 @@ export type CarSpec = {
   maxSpeed: number
   gripSpeed: number // above this speed the tyres lose turning power
   nitro: boolean // the car has a limited boost, and its brain a button for it
+  wetTyres?: boolean // grip on a wet road is raised; top speed on a dry one is lowered
+  gripSense?: boolean // the brain gets one more input: speed against the speed the tyres can turn at
 }
 
 const lerp = (a: number, b: number, t: number) => a + (b - a) * t
@@ -75,12 +99,16 @@ export function rayAngles(s: Sensors): number[] {
 
 // balance 0.5 is the original car: top speed 6 and grip up to speed 3
 export function specOf(b: Build): CarSpec {
+  const p = b.parts ?? {}
+  const maxSpeed = lerp(5, 7, b.balance)
   return {
     rayAngles: rayAngles(b.sensors),
-    rayRange: RAY_RANGE,
-    maxSpeed: lerp(5, 7, b.balance),
+    rayRange: p.eyes ? LONG_RAY_RANGE : RAY_RANGE,
+    maxSpeed: maxSpeed * (p.eyes ? EYES_TOP_SPEED : 1) * (p.grip ? GRIP_TOP_SPEED : 1),
     gripSpeed: lerp(3.5, 2.5, b.balance),
     nitro: !!b.perks?.nitro,
+    ...(p.tyres ? { wetTyres: true } : {}),
+    ...(p.grip ? { gripSense: true } : {}),
   }
 }
 
@@ -103,6 +131,10 @@ export function buildProblem(b: unknown, practiceCount: number): string | null {
   if (p.length < LIMITS.practice[0] || p.length > LIMITS.practice[1]) return 'wrong number of practice tracks'
   if (new Set(p).size !== p.length || p.some((id) => !Number.isInteger(id) || id < 0 || id >= practiceCount)) return 'unknown practice track'
   if (d.weather !== undefined && !WEATHERS.includes(d.weather)) return 'unknown weather'
+  if (d.parts !== undefined) {
+    if (!d.parts || typeof d.parts !== 'object' || Array.isArray(d.parts)) return 'unknown parts'
+    for (const [k, v] of Object.entries(d.parts)) if (!(PART_IDS as readonly string[]).includes(k) || typeof v !== 'boolean') return 'unknown parts'
+  }
   return null
 }
 
@@ -116,5 +148,7 @@ export function cleanBuild(b: Build): Build {
     // dry is written as nothing, so a dry build looks the same as one saved before weather existed.
     // ("both" was only an experiment and is not a garage choice, so a build that has it is read as dry)
     ...(b.weather === 'wet' ? { weather: 'wet' as const } : {}),
+    // only the parts that are on, and nothing at all when none are, so a build without parts looks as it always did
+    ...(b.parts && PART_IDS.some((k) => b.parts![k]) ? { parts: Object.fromEntries(PART_IDS.filter((k) => b.parts![k]).map((k) => [k, true])) as Parts } : {}),
   }
 }

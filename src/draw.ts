@@ -311,7 +311,7 @@ export function drawCar(g: CanvasRenderingContext2D, c: { x: number; y: number; 
 
 // What a car sees, thinks and does, drawn small: the rays as bars (short means something is close), the hidden
 // neurons as dots (amber is positive, cyan negative, brighter is stronger) and the two outputs as bars.
-export type Thought = { inputs: number[]; hidden: number[]; outputs: number[] }
+export type Thought = { inputs: number[]; hidden: number[]; outputs: number[]; rays?: number } // rays: how many inputs are rays (the next is speed)
 export function drawBrain(g: CanvasRenderingContext2D, t: Thought, x: number, y: number, w: number, h: number) {
   g.save()
   g.fillStyle = 'rgba(7,9,12,0.78)'
@@ -328,7 +328,8 @@ export function drawBrain(g: CanvasRenderingContext2D, t: Thought, x: number, y:
   const top = y + 24
   const bottom = y + h - 8
   // sees: one bar per ray, then the car's own speed
-  const rays = t.inputs.slice(0, -1)
+  const nRays = t.rays ?? t.inputs.length - 1
+  const rays = t.inputs.slice(0, nRays)
   const rowH = Math.min(11, (bottom - top) / (rays.length + 1))
   rays.forEach((d, i) => {
     const near = d < 0.35
@@ -336,7 +337,7 @@ export function drawBrain(g: CanvasRenderingContext2D, t: Thought, x: number, y:
     g.fillRect(cols[0], top + i * rowH, Math.max(2, colW * Math.min(1, d)), rowH - 3)
   })
   g.fillStyle = COL.accent
-  g.fillRect(cols[0], top + rays.length * rowH, Math.max(2, colW * Math.min(1, t.inputs[t.inputs.length - 1])), rowH - 3)
+  g.fillRect(cols[0], top + rays.length * rowH, Math.max(2, colW * Math.min(1, t.inputs[nRays])), rowH - 3)
   // thinks: one dot per hidden neuron
   const step = (bottom - top) / t.hidden.length
   t.hidden.forEach((a, i) => {

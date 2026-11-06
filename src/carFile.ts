@@ -1,4 +1,4 @@
-import { buildProblem, cleanBuild, genomeLength, shapeOf, type Build } from './setup'
+import { buildProblem, cleanBuild, genomeLength, brainShape, type Build } from './setup'
 import { PRACTICE_COUNT } from './track'
 
 // A car is its garage build plus its trained weights, saved as text.
@@ -28,7 +28,7 @@ export function carFromJson(text: string): CarFile | { error: string } {
   const problem = buildProblem(d.build, PRACTICE_COUNT)
   if (problem) return { error: 'That car has an illegal setup: ' + problem + '.' }
   const build = cleanBuild(d.build as Build)
-  const length = genomeLength(shapeOf(build.sensors))
+  const length = genomeLength(brainShape(build))
   if (!Array.isArray(d.genome) || d.genome.length !== length) return { error: 'That car should have ' + length + ' connections.' }
   for (const w of d.genome) {
     if (typeof w !== 'number' || !Number.isFinite(w) || Math.abs(w) > MAX_WEIGHT) return { error: 'That car has a weight that is not a sensible number.' }

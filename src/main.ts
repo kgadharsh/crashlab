@@ -1,7 +1,7 @@
 import './style.css'
 import { GOLD_TIME, GRAND_PRIXES, RACE_COUNT, medalFor, raceCar } from './race'
 import { carFromChallenge, challengeCode } from './challenge'
-import { DEFAULT_BUILD, KEEP_TRAINING_SHARE, LIMITS, POPULATION, REPLAY_EVERY, TRAINING_BUDGET, buildProblem, cleanBuild, genomeLength, shapeOf, specOf, type Build, type Weather } from './setup'
+import { DEFAULT_BUILD, KEEP_TRAINING_SHARE, LIMITS, POPULATION, REPLAY_EVERY, TRAINING_BUDGET, buildProblem, cleanBuild, genomeLength, brainShape, specOf, type Build, type Weather } from './setup'
 import { CHECKPOINTS, STALL_STEPS, createCar, drive, getInputs, type Brain, type Car } from './sim'
 import { think } from './brain'
 import { PRACTICE, PRACTICE_COUNT, practiceOnRoad, practiceTrack, trackFeatures, trackStats, type Track } from './track'
@@ -10,6 +10,7 @@ import { carFromJson, carToJson, type CarFile } from './carFile'
 import { createLeaderboard } from './leaderboard'
 import { createRaceView, loadBest, type Challenge } from './raceView'
 import { bestOn, driveLap, loadMedals, parFor, recordLaps, totalStars, type Lap } from './board'
+import { PARTS, newlyUnlocked, type Progress } from './parts'
 import { LOOKS, isUnlocked, loadLook, nextLook, saveLook } from './looks'
 import { hasRaced, logEvent, playtestNotes } from './playLog'
 import { COL, H, W, clear, drawBrain, drawCar, drawCrash, drawMinimap, drawRays, drawSensorFan, drawThumb, drawTrack, fanFrame, fit, follow, lookAt, newCamera, withCamera } from './draw'
@@ -42,7 +43,7 @@ const draft: Draft =
 const savedCar = load<string>(KEYS.car)
 const parsedCar = savedCar ? carFromJson(savedCar) : null
 let car: CarFile | null = parsedCar && !('error' in parsedCar) ? parsedCar : null
-let carBrain: Brain | null = car ? genomeToBrain(car.genome, shapeOf(car.build.sensors)) : null
+let carBrain: Brain | null = car ? genomeToBrain(car.genome, brainShape(car.build)) : null
 // The car before the latest training run, so a run that turns out worse can be undone
 const savedPrevious = load<string>(KEYS.previous)
 const parsedPrevious = savedPrevious ? carFromJson(savedPrevious) : null
@@ -151,6 +152,11 @@ document.querySelector('#app')!.innerHTML = `
         <p class="tip">Grip takes bends harder; speed is quicker on the straights. A fast car has to brake earlier, because the tyres let go sooner. In our tests a very fast car crashed too often to finish all ${RACE_COUNT} race tracks.</p>
       </div>
       <div class="panel">
+        <h2>Parts<span class="aside" id="partCount"></span></h2>
+        <div class="parts" id="parts"></div>
+        <p class="tip">Parts change what the car can do, and each one costs something, so a car without them can still win. Win medals and stars to unlock them.</p>
+      </div>
+      <div class="panel">
         <h2><span class="n">03</span>What to reward</h2>
         <label class="row"><span>Reward speed</span><input type="range" id="pace" min="0" max="100" step="5" /><output id="paceOut"></output></label>
         <label class="row"><span>Punish crashes</span><input type="range" id="safety" min="0" max="100" step="5" /><output id="safetyOut"></output></label>
@@ -198,7 +204,7 @@ document.querySelector('#app')!.innerHTML = `
       <div class="panel">
         <h2>Your car</h2>
         <p class="tip" id="carState" style="margin-top:0"></p>
-        <p class="tip">During a test drive, the box in the corner shows what the car sees (its rays), thinks (five neurons) and does (steering and gas).</p>
+        <p class="tip">During a test drive, the box in the corner shows what the car sees (its rays), thinks (its neurons) and does (steering and gas).</p>
         <div class="actions">
           <select id="driveTrack" aria-label="Track for the test drive"></select>
           <button class="btn" id="testDrive">Test drive</button>
@@ -430,7 +436,7 @@ const estGenerations = (build: Build) => Math.round(TRAINING_BUDGET / (POPULATIO
 
 function renderGarage() {
   const spec = specOf(b)
-  $('weights').textContent = genomeLength(shapeOf(b.sensors)) + ' connections'
+  $('weights').textContent = genomeLength(brainShape(b)) + ' connections'
   $('countOut').textContent = String(b.sensors.count)
   $('spreadOut').textContent = b.sensors.spread + '°'
   $('speedOut').textContent = spec.maxSpeed.toFixed(1)
@@ -442,6 +448,7 @@ function renderGarage() {
   $('smoothOut').textContent = pct(b.reward.smooth)
   $('pickCount').textContent = b.practice.length + ' of ' + LIMITS.practice[1] + ' picked'
   weatherSel.value = b.weather === 'wet' ? 'wet' : 'dry'
+  renderParts()
   trackGrid.querySelectorAll<HTMLButtonElement>('.track').forEach((btn) => {
     const id = Number(btn.dataset.id)
     const on = b.practice.includes(id)
@@ -544,7 +551,7 @@ function finishTraining(f: Finish) {
   // the generations the brain has had in all: carrying on adds to the car's count (unknown if the old car's was)
   const total = r.keep ? (car?.generations !== undefined ? car.generations + f.generations : undefined) : f.generations
   car = { name: r.name, build: r.build, genome: f.genome, ...(total !== undefined ? { generations: total } : {}) }
-  carBrain = genomeToBrain(f.genome, shapeOf(r.build.sensors))
+  carBrain = genomeToBrain(f.genome, brainShape(r.build))
   save(KEYS.car, carToJson(car))
   drawGraph(r.history)
   // the test drive only starts if you are watching it; from another tab the car is simply ready
@@ -558,7 +565,7 @@ function finishTraining(f: Finish) {
 }
 
 // Keep training carries on from the car you have, so its brain must be the same size as the garage's
-const canKeepTraining = () => !!car && genomeLength(shapeOf(b.sensors)) === car.genome.length
+const canKeepTraining = () => !!car && genomeLength(brainShape(b)) === car.genome.length
 
 // keep: carry on from your car with a share of the budget, instead of starting from random brains
 function startTraining(keep: boolean) {
@@ -612,7 +619,7 @@ $('swapCar').addEventListener('click', () => {
   if (worker || !previousCar || !car) return
   const now = car
   car = previousCar
-  carBrain = genomeToBrain(car.genome, shapeOf(car.build.sensors))
+  carBrain = genomeToBrain(car.genome, brainShape(car.build))
   save(KEYS.car, carToJson(car))
   rememberPrevious(now)
   stopTestDrive()
@@ -680,7 +687,7 @@ const RAMP_FRAMES = 90 // the fast-forward eases in over 1.5 seconds, so the spe
 const paceFor = (bestSteps: number) => Math.min(MAX_SPEED, Math.max(1, Math.min(bestSteps, VIEW_STEPS) / SHOW_FRAMES))
 
 function makeSwarm(gen: number, genomes: number[][], build: Build, bestSteps: number, plays = 0): Swarm {
-  const shape = shapeOf(build.sensors)
+  const shape = brainShape(build)
   const spec = specOf(build)
   const trackId = Number(watchSelect.value)
   const track = practiceOn(trackId, build.weather)
@@ -795,6 +802,56 @@ const gpMedals = () =>
   })
 const starCount = () => totalStars(loadMedals(), gpMedals())
 
+// ---------- PARTS ----------
+const progress = (): Progress => ({ stars: starCount(), gpMedals: gpMedals(), racedWet: loadBest(GRAND_PRIXES[1]) !== null })
+const partBoxes = new Map<string, HTMLInputElement>()
+$('parts').replaceChildren(
+  ...PARTS.map((part) => {
+    const row = document.createElement('label')
+    row.className = 'part'
+    const box = document.createElement('input')
+    box.type = 'checkbox'
+    box.addEventListener('change', () => {
+      const parts = { ...(b.parts ?? {}) }
+      if (box.checked) parts[part.id] = true
+      else delete parts[part.id]
+      if (Object.keys(parts).length) b.parts = parts
+      else delete b.parts // a build with no parts is written exactly as before parts existed
+      changed()
+    })
+    partBoxes.set(part.id, box)
+    const text = document.createElement('span')
+    text.innerHTML = '<b></b><small class="does"></small><small class="cost"></small><small class="lock"></small>'
+    text.querySelector('b')!.textContent = part.name
+    text.querySelector('.does')!.textContent = part.does
+    text.querySelector('.cost')!.textContent = 'Cost: ' + part.cost
+    row.append(box, text)
+    return row
+  }),
+)
+function renderParts() {
+  const p = progress()
+  let open = 0
+  for (const part of PARTS) {
+    const box = partBoxes.get(part.id)!
+    const unlocked = part.open(p)
+    if (unlocked) open++
+    const on = !!b.parts?.[part.id]
+    box.checked = on
+    box.disabled = !unlocked && !on // a part already on (say, from a loaded car) can always be switched off
+    box.closest('.part')!.classList.toggle('locked', !unlocked)
+    box.closest('.part')!.querySelector('.lock')!.textContent = unlocked ? '' : 'Locked · ' + part.unlock
+  }
+  $('partCount').textContent = open + ' of ' + PARTS.length + ' unlocked'
+}
+// Tell the player when racing or medals have unlocked a part
+function announceParts() {
+  const fresh = newlyUnlocked(progress())
+  if (!fresh.length) return
+  renderParts()
+  showNotice('New part unlocked: ' + fresh.map((f) => f.name).join(', ') + (fresh.length === 1 ? '. Fit it' : '. Fit them') + ' in the Garage.')
+}
+
 const lookGrid = $('looks')
 const lookButtons: HTMLButtonElement[] = LOOKS.map((l, i) => {
   const btn = document.createElement('button')
@@ -871,6 +928,7 @@ function finishBoard(bd: Board) {
   const { gained } = recordLaps(bd.laps as Lap[], bd.car.build.weather === 'wet')
   const after = starCount()
   const unlocked = LOOKS.filter((l) => l.stars > before && l.stars <= after).map((l) => l.name)
+  announceParts()
   boardMsg = unlocked.length ? 'New design unlocked: ' + unlocked.join(', ') + '. Pick it in the Garage.' : gained ? 'These laps earned ' + gained + ' more stars.' : ''
   boardVersion++
   renderLooks()
@@ -1054,11 +1112,12 @@ function renderPractice() {
   const spec = specOf(b)
   const rows: [string, string][] = [
     ['Sensors', b.sensors.count + ' rays over a ' + b.sensors.spread + '° view'],
-    ['Brain', genomeLength(shapeOf(b.sensors)) + ' connections'],
+    ['Brain', genomeLength(brainShape(b)) + ' connections'],
     ['Top speed · cornering', spec.maxSpeed.toFixed(1) + ' · ' + spec.gripSpeed.toFixed(1)],
     ['Pace · crash · smooth', pct(b.reward.pace) + ' · ' + pct(b.reward.safety) + ' · ' + pct(b.reward.smooth)],
     ['Practice', b.practice.map((id) => TRACK_NAMES[id]).join(', ')],
     ['Road', b.weather === 'wet' ? 'Wet' : 'Dry'],
+    ['Parts', PARTS.filter((p) => b.parts?.[p.id]).map((p) => p.name).join(', ') || 'None'],
   ]
   $('spec').replaceChildren(
     ...rows.flatMap(([k, v]) => {
@@ -1309,7 +1368,7 @@ function draw() {
     if (t.crashFrames === 0 && carBrain) {
       const inputs = getInputs(t.car)
       const thought = think(carBrain, inputs)
-      drawBrain(ctx, { inputs, hidden: thought.hidden, outputs: thought.outputs }, W - 296, 12, 284, 132)
+      drawBrain(ctx, { inputs, hidden: thought.hidden, outputs: thought.outputs, rays: t.car.spec.rayAngles.length }, W - 296, 12, 284, 132)
     }
     hudText(time(t.car.steps / 60), 16, 50, 46)
     hudText('LAST ' + time(t.lastLap) + '    BEST ' + time(t.bestLap), 16, 74, 16, COL.muted)
@@ -1354,7 +1413,7 @@ function draw() {
     if (tab === 'garage') hudText('MOVE RAYS OR VIEW WIDTH TO ZOOM BACK IN ON THE CAR', W - 16, H - 16, 13, COL.muted, 'right')
   }
   setStrip([
-    ['Brain', genomeLength(shapeOf(b.sensors)) + '<small> connections</small>'],
+    ['Brain', genomeLength(brainShape(b)) + '<small> connections</small>'],
     ['Top speed', specOf(b).maxSpeed.toFixed(1)],
     ['Practice', b.practice.length + '<small> tracks</small>'],
     ['Rounds', '~' + estGenerations(b)],
@@ -1382,7 +1441,10 @@ function loop(now: number) {
 }
 
 const leaderboard = createLeaderboard({ getCar: () => car, getGpId: () => raceView!.gpId(), goRace: () => setTab('race'), notify: showNotice })
-raceView = createRaceView({ onResult: (gpId, r) => leaderboard.showResult(gpId, r), ctx, cam, getCar: () => car, isStale: carIsStale, getChallenge: () => challenge, getLook: () => look, goTo: setTab, hudText, setStrip })
+raceView = createRaceView({ onResult: (gpId, r) => {
+  leaderboard.showResult(gpId, r)
+  if (r) announceParts()
+},  ctx, cam, getCar: () => car, isStale: carIsStale, getChallenge: () => challenge, getLook: () => look, goTo: setTab, hudText, setStrip })
 
 // ---------- CHALLENGE LINKS ----------
 // Share: the car goes into a link, so a friend can race it with no server.

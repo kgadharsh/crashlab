@@ -4,7 +4,7 @@
 import type { CarFile } from './carFile'
 import { genomeToBrain } from './genome'
 import { CHECKPOINTS, runLap, type Brain } from './sim'
-import { shapeOf, specOf } from './setup'
+import { brainShape, specOf } from './setup'
 import { practiceOnRoad } from './track'
 import type { Medal } from './race'
 
@@ -31,7 +31,7 @@ export function lapMedal(id: number, seconds: number | null, wet: boolean): Meda
 }
 
 export function brainOf(car: CarFile): Brain {
-  return genomeToBrain(car.genome, shapeOf(car.build.sensors))
+  return genomeToBrain(car.genome, brainShape(car.build))
 }
 
 // One lap of one practice track, on the road the car was trained for

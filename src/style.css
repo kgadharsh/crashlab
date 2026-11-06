@@ -365,3 +365,13 @@ select {
 .rank .n { color: var(--muted); }
 .rank .who { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .rank .res { color: var(--muted); text-align: right; }
+
+/* parts */
+.parts { display: grid; gap: 8px; }
+.part { display: grid; grid-template-columns: auto 1fr; gap: 10px; align-items: start; padding: 8px 10px; background: var(--panel-2); border-radius: 2px; cursor: pointer; }
+.part input { margin-top: 3px; }
+.part b { display: block; font-weight: 600; }
+.part small { display: block; font-size: 12.5px; line-height: 1.4; color: var(--muted); }
+.part .does { color: var(--text); }
+.part .lock { color: var(--accent); }
+.part.locked { cursor: help; opacity: 0.75; }

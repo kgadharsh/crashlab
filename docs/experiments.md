@@ -174,3 +174,23 @@ Built from this: the **Keep training** button (30% of the budget, needs the same
 - **Wet:** a wet lap took 10% longer than the same car's dry lap (median over 14 laps, range 7% to 51%), so `WET_FACTOR` is 1.1. The two wet-trained cars were slower than that on easy tracks (up to 23% over the dry gold time) and finished fewer of the twisty tracks than hoped, so they mostly get bronze and silver on a wet road.
 - **Limits:** seven dry-trained cars and two wet ones, one seed each for most builds, so gold times may sit a little high or low. Gold on an easy track is a margin of about half a percent over a typical car, a few hundredths of a second, which a retrain can move either way. Star unlocks assume a first car earns 16 to 28 stars (12 silver laps is 24).
 - Adding the four new practice tracks left the benchmark fingerprint (Grand Prix result included) unchanged, because the Grand Prix is built from the first eight practice styles only.
+
+## 6 Nov 2026: car parts
+
+`scripts/partsCheck.ts`. The default build was trained on seeds 1 to 3 with the full budget, once with no parts and once with each part on its own, practising on a dry road (and, for wet tyres and grip sense, on a wet road too), then raced on both Grand Prix. Three seeds is few, so read these as directions, not measurements. Average tracks finished out of 8:
+
+| Build | Dry Grand Prix | Wet Grand Prix |
+|---|---|---|
+| No parts, dry practice | 7.7 (all 8 in 2 of 3, ~149 s) | 3.0 |
+| Long-range eyes | 7.3 (one 193 s, one 6/8) | 3.3 |
+| Bigger brain | 7.7 (~150 s) | 3.0 |
+| Grip sense, no cost | 8.0 (all 3, ~149 s) | 7.0 |
+| Grip sense, 3% slower | 6.0 (8/8 twice, one 2/8) | 4.3 |
+| No parts, wet practice | 8.0 (152 to 159 s) | 7.3 (one 182 s) |
+| Wet tyres, wet practice | 7.7 (~154 s) | 7.7 (148 to 150 s) |
+| Grip sense 3% slower, wet practice | 8.0 (153 to 166 s) | 7.0 |
+
+- **Grip sense without a cost beat no parts everywhere** (better in the wet, never worse in the dry), which breaks the rule that a part is a trade-off. With top speed 3% lower (`GRIP_TOP_SPEED`) it helps a dry-practised car in the wet a little and costs it in the dry.
+- **Wet tyres are much faster in the wet** (about 30 s over the eight tracks) and slower in the dry, as intended. They will likely be on most wet-board cars, which is fine because they unlock by racing the wet Grand Prix once.
+- **Long-range eyes and the bigger brain showed no gain** in three seeds. They are trade-offs on paper; whether either helps any build needs more seeds or players.
+- With no parts every number is unchanged: `scripts/bench.ts` still prints `9dc17bb5c6df`.

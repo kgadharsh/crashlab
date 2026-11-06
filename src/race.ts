@@ -5,7 +5,7 @@ import type { Point } from './sensors'
 import { genomeToBrain } from './genome'
 import { CAR_RADIUS, CHECKPOINTS, RACE_STEPS, STALL_STEPS, createCar, drive, type Brain, type Car } from './sim'
 import { BLOCK_HALF, CORE_PRACTICE, HAIRPIN_RADIUS, PRACTICE, bendRadii, makeStyledTrack, styleFor, wetTrack, type Track } from './track'
-import { shapeOf, specOf, type CarSpec } from './setup'
+import { brainShape, specOf, type CarSpec } from './setup'
 import type { CarFile } from './carFile'
 
 // ---------- THE GRAND PRIX ----------
@@ -70,7 +70,7 @@ export function summarise(tracks: TrackResult[]): RaceResult {
 }
 
 export function raceCar(car: CarFile, gp: GrandPrix = GRAND_PRIXES[0]): RaceResult {
-  const brain = genomeToBrain(car.genome, shapeOf(car.build.sensors))
+  const brain = genomeToBrain(car.genome, brainShape(car.build))
   const spec = specOf(car.build)
   return summarise(Array.from({ length: RACE_COUNT }, (_, i) => raceOne(brain, raceTrack(i, gp.wet), spec)))
 }

@@ -6,7 +6,7 @@ import { genomeToBrain } from './genome'
 import { makeRng } from './random'
 import { runBrain } from './sim'
 import { practiceTrack, moveBlocks, trackVariants, wetTrack, type Track } from './track'
-import { specOf, shapeOf, genomeLength, TRAINING_BUDGET, POPULATION, type Build } from './setup'
+import { specOf, brainShape, genomeLength, TRAINING_BUDGET, POPULATION, type Build } from './setup'
 
 // Each generation drives every chosen practice track, with its blocks moved to new spots,
 // so a brain cannot win by remembering where the blocks are.
@@ -22,14 +22,14 @@ export type TrainingStep = { report: GenerationReport; spent: number; finished: 
 // How one genome drives one track for this build. The scoring helper threads build the same one, so a car scores the same anywhere.
 export function driverFor(build: Build): Drive {
   const spec = specOf(build)
-  const shape = shapeOf(build.sensors, !!build.perks?.nitro)
+  const shape = brainShape(build)
   return (genome, track) => runBrain(genomeToBrain(genome, shape), track, spec, build.reward)
 }
 
 // start: an existing car to carry on training, instead of beginning from random brains. It also
 // competes in the final pick, so carrying on never hands back a car the judging scores worse.
 export function createTraining(build: Build, seed: number, budget = TRAINING_BUDGET, start?: number[]) {
-  const shape = shapeOf(build.sensors, !!build.perks?.nitro)
+  const shape = brainShape(build)
   if (start && start.length !== genomeLength(shape)) throw new Error('That car was built for different sensors')
   const trackRng = makeRng(seed + 77777) // separate, so the tracks drawn do not change the evolution's own luck
   const dry = build.practice.map(practiceTrack)
