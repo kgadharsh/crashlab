@@ -8,6 +8,7 @@ import { PRACTICE, PRACTICE_COUNT, practiceOnRoad, practiceTrack, trackFeatures,
 import { genomeToBrain } from './genome'
 import { carFromJson, carToJson, type CarFile } from './carFile'
 import { createLeaderboard } from './leaderboard'
+import { reveal, setupFolds } from './fold'
 import { createRaceView, loadBest, type Challenge } from './raceView'
 import { bestOn, driveLap, loadMedals, parFor, recordLaps, totalStars, type Lap } from './board'
 import { PARTS, newlyUnlocked, type PartId, type Progress } from './parts'
@@ -174,7 +175,7 @@ document.querySelector('#app')!.innerHTML = `
       <button class="btn primary wide" id="toPractice">Go to practice →</button>
     </div>
     <div id="practice" class="side">
-      <div class="panel">
+      <div class="panel" data-fixed>
         <h2>Training<span class="aside" id="trainState">ready</span></h2>
         <div class="budget"><div class="bar"><i id="budgetBar" style="width:0%"></i></div>
           <div class="legend"><span id="budgetUsed"></span><span id="budgetGen"></span></div></div>
@@ -229,12 +230,12 @@ document.querySelector('#app')!.innerHTML = `
       </div>
     </div>
     <div id="race" class="side">
-      <div class="panel" id="challengePanel" hidden>
+      <div class="panel" id="challengePanel" data-fixed hidden>
         <h2>Challenge<span class="aside"><button class="btn small" id="challengeClear">Dismiss</button></span></h2>
         <p class="tip" id="challengeLine" style="margin-top:0"></p>
         <p class="tip" id="challengeVs" style="color:var(--text);font-weight:600"></p>
       </div>
-      <div class="panel">
+      <div class="panel" data-fixed>
         <h2><span id="gpTitle">Grand Prix 1</span><span class="aside">8 secret tracks</span></h2>
         <div class="actions"><button class="btn small primary" id="gp0" aria-pressed="true">Dry road</button><button class="btn small" id="gp1" aria-pressed="false">Wet road</button><button class="btn small" id="gp2" aria-pressed="false" hidden>Past week</button></div>
         <div class="actions">
@@ -270,7 +271,7 @@ document.querySelector('#app')!.innerHTML = `
         <h2>Timing<span class="aside" id="raceTotal"></span></h2>
         <ol class="tower" id="tower"></ol>
       </div>
-      <div class="panel" id="resultPanel" hidden>
+      <div class="panel" id="resultPanel" data-fixed hidden>
         <h2>Result</h2>
         <div class="medal" id="medal"></div>
         <p class="tip" id="resultLine" style="margin-top:4px"></p>
@@ -1485,6 +1486,10 @@ function loop(now: number) {
   draw()
   requestAnimationFrame(loop)
 }
+
+// fold the side panels: one open at a time in each tab
+setupFolds(['garage', 'practice', 'race'])
+$('raceGo').addEventListener('click', () => reveal($('tower'))) // a race fills the timing tower, so show it
 
 const leaderboard = createLeaderboard({
   getCar: () => car,

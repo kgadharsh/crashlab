@@ -385,3 +385,10 @@ select {
 .part.on { box-shadow: inset 3px 0 0 var(--accent); }
 .part .ctl { display: flex; gap: 4px; align-items: start; }
 .check { display: inline-flex; gap: 6px; align-items: center; font-size: 13px; color: var(--text); cursor: pointer; }
+/* folding panels: a folded panel shows only its heading */
+.panel.fold > h2 { cursor: pointer; user-select: none; }
+.panel.fold > h2::before { content: '▾'; color: var(--muted); font-size: 11px; width: 10px; }
+.panel.fold.folded > h2::before { content: '▸'; }
+.panel.fold > h2:focus-visible { outline: 2px solid var(--accent); outline-offset: 4px; }
+.panel.fold.folded > h2 { margin-bottom: 0; }
+.panel.fold.folded > :not(h2) { display: none !important; }

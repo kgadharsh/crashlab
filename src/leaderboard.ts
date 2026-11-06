@@ -2,6 +2,7 @@
 // their car. The server re-runs the car itself, so the result shown here is the server's, not ours.
 // With no server address (the live site until the server is deployed) the whole panel stays hidden.
 import { carFromJson, carToJson, type CarFile } from './carFile'
+import { reveal } from './fold'
 import { CAUSE_LABEL, GRAND_PRIXES, weeklyGp, type Cause, type GrandPrix } from './race'
 
 const API = (import.meta.env.VITE_API_URL as string | undefined) ?? (import.meta.env.DEV ? 'http://localhost:8787' : '')
@@ -72,6 +73,12 @@ type Deps = {
 
 export function createLeaderboard({ getCar, getGpId, goRace, notify, raceAgainst, openWeek }: Deps) {
   const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T
+  // an element the player must see now: its panel opens if it is folded
+  const show = (id: string) => {
+    const el = $(id)
+    reveal(el.closest('.panel') ?? el)
+    return el
+  }
   const panel = $('boardOnline')
   if (!API) return { showResult() {} }
   panel.hidden = false
@@ -278,7 +285,7 @@ export function createLeaderboard({ getCar, getGpId, goRace, notify, raceAgainst
         myName = null
         store.set(PENDING_KEY, gpId)
         await renderWho()
-        $('onlineNameRow').scrollIntoView({ behavior: 'smooth', block: 'center' })
+        show('onlineNameRow').scrollIntoView({ behavior: 'smooth', block: 'center' })
         $('onlineName').focus()
       }
       if (!res.ok) return tell(data.error ?? 'The board could not take that car.', true)
@@ -308,7 +315,7 @@ export function createLeaderboard({ getCar, getGpId, goRace, notify, raceAgainst
     if (myName === null) {
       store.set(PENDING_KEY, gpId)
       $('onlineNameRow').hidden = false
-      $('boardOnline').scrollIntoView({ behavior: 'smooth', block: 'center' })
+      show('boardOnline').scrollIntoView({ behavior: 'smooth', block: 'center' })
       $('onlineName').focus()
       return say('Choose the name the board will show, and your car goes on the board.')
     }
@@ -321,7 +328,7 @@ export function createLeaderboard({ getCar, getGpId, goRace, notify, raceAgainst
     if (!nameIn(store.get(TOKEN_KEY))) return store.set(PENDING_KEY, null) // sign-in was abandoned
     await renderWho()
     goRace()
-    $(pending === 'weekly' && myName ? 'weeklyPanel' : 'boardOnline').scrollIntoView({ block: 'center' })
+    show(pending === 'weekly' && myName ? 'weeklyPanel' : 'boardOnline').scrollIntoView({ block: 'center' })
     if (myName) {
       store.set(PENDING_KEY, null)
       return enter(pending)
@@ -475,7 +482,7 @@ export function createLeaderboard({ getCar, getGpId, goRace, notify, raceAgainst
     if (myName === null) {
       store.set(PENDING_KEY, 'weekly')
       $('onlineNameRow').hidden = false
-      $('onlineNameRow').scrollIntoView({ behavior: 'smooth', block: 'center' })
+      show('onlineNameRow').scrollIntoView({ behavior: 'smooth', block: 'center' })
       $('onlineName').focus()
       return say('Choose the name the board will show, and your car goes into the Weekly Grand Prix.')
     }
