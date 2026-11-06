@@ -12,7 +12,7 @@ export interface Env {
   SESSION_SECRET: string
 }
 
-const DAILY_LIMIT = 10 // ranked entries per player per day (retraining is never limited, only entering the board)
+const DAILY_LIMIT = 3 // ranked entries per player per day. Training cannot be limited (it runs in the browser), so this is what makes retrying for a lucky car cost something
 const BOARD_SIZE = 50
 const MAX_BODY = 60000
 const ORIGINS = ['https://kgadharsh.github.io', 'http://localhost:5173']
