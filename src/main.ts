@@ -119,7 +119,7 @@ document.querySelector('#app')!.innerHTML = `
       <canvas id="track" width="${W}" height="${H}"></canvas>
     </div>
     <div class="strip" id="strip"></div>
-    <div class="graph" id="graphBox"><canvas id="graph" width="800" height="170"></canvas></div>
+    <div class="graph" id="graphBox"><p id="graphStatus"></p><canvas id="graph" width="240" height="44" aria-hidden="true"></canvas></div>
   </section>
   <aside class="side">
     <div id="garage" class="side">
@@ -1191,53 +1191,31 @@ function renderPractice() {
   renderBoard()
 }
 
-// ---------- THE LEARNING GRAPH ----------
-let lastHistory: History = [] // the last graph drawn, so it can be redrawn
+// ---------- HOW TRAINING IS GOING ----------
+// One plain line (still improving, or levelled off and ready to race) and a small sparkline of the best and
+// average car, for anyone who wants the shape. A big chart was more than a game needs.
+const RECENT = 10 // rounds compared, to tell improving from levelled off
+const LEVEL_GAIN = 0.03 // the best car gaining less than 3% over the last 10 rounds counts as levelled off
+function trainingStatus(history: History): string {
+  if (history.length === 0) return 'Start training and you will see here whether your car is still getting better.'
+  const best = history[history.length - 1].best
+  const laps = best.toFixed(2) + (best >= 1 ? ' laps' : ' of a lap') + ' in 40 s'
+  if (history.length < RECENT * 2) return 'Learning. Best car so far: ' + laps + '.'
+  const before = Math.max(...history.slice(-RECENT * 2, -RECENT).map((h) => h.best))
+  const now = Math.max(...history.slice(-RECENT).map((h) => h.best))
+  return now > before * (1 + LEVEL_GAIN)
+    ? 'Still improving: best car ' + laps + ', up ' + Math.round((now / before - 1) * 100) + '% in the last ' + RECENT + ' rounds.'
+    : 'Levelled off at ' + laps + '. More rounds will change little: race it, or change the setup.'
+}
 function drawGraph(history: History) {
-  lastHistory = history
+  $('graphStatus').textContent = trainingStatus(history)
   const Wg = gcanvas.width
   const Hg = gcanvas.height
-  const left = 48
-  const right = Wg - 16
-  const top = 30
-  const bottom = Hg - 22
-  gctx.fillStyle = COL.ground
-  gctx.fillRect(0, 0, Wg, Hg)
-  gctx.font = '700 13px "Barlow Condensed", sans-serif'
-  gctx.fillStyle = COL.muted
-  gctx.textAlign = 'left'
-  gctx.textBaseline = 'alphabetic'
-  // the legend sits after the title, measured, so a wider fallback font never runs into it
-  let x0 = left
-  for (const [text, colour] of [['LAPS DRIVEN IN 40 S, PER ROUND', COL.muted], ['— BEST CAR', COL.accent], ['— AVERAGE CAR', COL.tele]]) {
-    gctx.fillStyle = colour
-    gctx.fillText(text, x0, 18)
-    x0 += gctx.measureText(text).width + 16
-  }
-  const maxY = Math.max(1, ...history.map((h) => h.best)) * 1.1
-  const minY = 0
-  const n = Math.max(history.length, 10)
-  const x = (i: number) => left + (i / (n - 1)) * (right - left)
-  const y = (v: number) => bottom - ((v - minY) / (maxY - minY)) * (bottom - top)
-  gctx.font = '11px "JetBrains Mono", monospace'
-  gctx.textAlign = 'right'
-  gctx.textBaseline = 'middle'
-  const stepY = maxY > 2.2 ? 1 : 0.5
-  for (let v = 0; v <= maxY; v += stepY) {
-    gctx.strokeStyle = COL.road
-    gctx.lineWidth = 1
-    gctx.beginPath()
-    gctx.moveTo(left, y(v))
-    gctx.lineTo(right, y(v))
-    gctx.stroke()
-    gctx.fillStyle = COL.muted
-    gctx.fillText(v.toFixed(1), left - 8, y(v))
-  }
-  if (history.length === 0) {
-    gctx.textAlign = 'center'
-    gctx.fillText('Start training and the scores appear here.', (left + right) / 2, (top + bottom) / 2)
-    return
-  }
+  gctx.clearRect(0, 0, Wg, Hg)
+  if (history.length < 2) return
+  const maxY = Math.max(0.01, ...history.map((h) => h.best)) * 1.08
+  const x = (i: number) => 2 + (i / (history.length - 1)) * (Wg - 4)
+  const y = (v: number) => Hg - 3 - (v / maxY) * (Hg - 6)
   const line = (vals: number[], colour: string, width: number) => {
     gctx.strokeStyle = colour
     gctx.lineWidth = width
@@ -1245,13 +1223,8 @@ function drawGraph(history: History) {
     vals.forEach((v, i) => (i === 0 ? gctx.moveTo(x(i), y(v)) : gctx.lineTo(x(i), y(v))))
     gctx.stroke()
   }
-  line(history.map((h) => h.mean), COL.tele, 2)
-  line(history.map((h) => h.best), COL.accent, 2.5)
-  const last = history[history.length - 1]
-  gctx.textAlign = 'right'
-  gctx.textBaseline = 'bottom'
-  gctx.fillStyle = COL.accent
-  gctx.fillText(last.best.toFixed(2) + ' laps', right, Math.max(top, y(last.best) - 4))
+  line(history.map((h) => h.mean), COL.tele, 1.5)
+  line(history.map((h) => h.best), COL.accent, 2)
 }
 
 // ---------- THE BIG SCREEN ----------
@@ -1580,7 +1553,6 @@ renderGarage()
 renderLooks()
 renderChip()
 drawGraph([])
-// the graph is only redrawn when it changes, so redraw it once the web fonts have arrived
-void document.fonts?.ready.then(() => drawGraph(run ? run.history : lastHistory))
+
 setTab(tab) // the Garage, unless a challenge link has already sent the player to the Race tab
 requestAnimationFrame(loop)

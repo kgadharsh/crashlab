@@ -122,8 +122,10 @@ button, input { font: inherit; color: inherit; }
 .cell .k { font: 600 11px var(--head); letter-spacing: 0.14em; text-transform: uppercase; color: var(--muted); }
 .cell .v { font: 600 22px/1.2 var(--mono); font-variant-numeric: tabular-nums; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .cell .v small { font-size: 12px; color: var(--muted); font-weight: 500; }
-.graph { border: 1px solid var(--line); border-radius: 4px; overflow: hidden; }
-.graph canvas { display: block; width: 100%; height: auto; }
+.graph { border: 1px solid var(--line); border-radius: 4px; background: var(--panel); display: flex; align-items: center; gap: 14px; padding: 10px 14px; }
+.graph p { margin: 0; flex: 1; font-size: 13.5px; line-height: 1.4; color: var(--text); }
+.graph canvas { display: block; width: 160px; height: 30px; flex: none; }
+@media (max-width: 420px) { .graph canvas { width: 96px; } }
 
 /* ---------- PANELS ---------- */
 .panel {
