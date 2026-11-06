@@ -242,7 +242,7 @@ export function createRaceView(d: RaceDeps) {
       m.textContent = medal ? medal.toUpperCase() : 'NO MEDAL'
       m.style.color = medal ? MEDAL_COLOUR[medal] : COL.muted
       const gens = live!.car.generations
-      $('resultLine').textContent = s.finished + ' of ' + RACE_COUNT + ' finished · ' + s.totalTime.toFixed(1) + ' s total' + (gens ? ' · trained for ' + gens + ' generations' : '')
+      $('resultLine').textContent = s.finished + ' of ' + RACE_COUNT + ' finished · ' + s.totalTime.toFixed(1) + ' s total' + (gens ? ' · trained for ' + gens + ' rounds' : '')
       $('advice').textContent = adviceFor(s, live!.gp, live!.car.build.weather === 'wet')
     }
     // a friend's challenge, and how your latest race compares with it
@@ -264,7 +264,7 @@ export function createRaceView(d: RaceDeps) {
     $('pb').textContent =
       (best
         ? (live?.newBest ? 'New personal best! ' : 'Personal best: ') + best.finished + '/' + RACE_COUNT + ' · ' + best.totalTime.toFixed(1) + ' s · ' + best.name
-        : 'No personal best yet.') + (fewestText ? '. Fewest generations to a medal: ' + fewestText + '.' : '')
+        : 'No personal best yet.') + (fewestText ? '. Fewest rounds to a medal: ' + fewestText + '.' : '')
   }
 
   // ---------- THE BIG SCREEN ----------

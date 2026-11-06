@@ -128,9 +128,9 @@ document.querySelector('#app')!.innerHTML = `
       </div>
       <div class="panel">
         <h2><span class="n">01</span>Sensors<span class="aside" id="weights"></span></h2>
-        <label class="row"><span>Rays</span><input type="range" id="count" min="${LIMITS.count[0]}" max="${LIMITS.count[1]}" step="1" /><output id="countOut"></output></label>
-        <label class="row"><span>Spread</span><input type="range" id="spread" min="${LIMITS.spread[0]}" max="${LIMITS.spread[1]}" step="5" /><output id="spreadOut"></output></label>
-        <p class="tip">Rays are the car's eyes: each one measures the distance to the road edge or a block. More rays show more, but every ray adds connections the brain has to learn, so it needs more generations to learn them. Spread is how wide they look: a wide spread sees bends sooner, a narrow one sees straight ahead in more detail.</p>
+        <label class="row"><span>Eyes (rays)</span><input type="range" id="count" min="${LIMITS.count[0]}" max="${LIMITS.count[1]}" step="1" /><output id="countOut"></output></label>
+        <label class="row"><span>View width</span><input type="range" id="spread" min="${LIMITS.spread[0]}" max="${LIMITS.spread[1]}" step="5" /><output id="spreadOut"></output></label>
+        <p class="tip">Rays are the car's eyes: each one is a line that measures the distance to the road edge or a block. More rays show more, but the brain has more to learn, so training needs more rounds. View width is how wide the rays fan out: wide sees bends sooner, narrow sees straight ahead in more detail.</p>
       </div>
       <div class="panel">
         <h2><span class="n">02</span>Car setup</h2>
@@ -142,18 +142,18 @@ document.querySelector('#app')!.innerHTML = `
         <p class="tip">Grip takes bends harder; speed is quicker on the straights. A fast car has to brake earlier, because the tyres let go sooner. In our tests a very fast car crashed too often to finish all ${RACE_COUNT} race tracks.</p>
       </div>
       <div class="panel">
-        <h2><span class="n">03</span>Driving style</h2>
-        <label class="row"><span>Pace bonus</span><input type="range" id="pace" min="0" max="100" step="5" /><output id="paceOut"></output></label>
-        <label class="row"><span>Crash penalty</span><input type="range" id="safety" min="0" max="100" step="5" /><output id="safetyOut"></output></label>
-        <label class="row"><span>Smoothness</span><input type="range" id="smooth" min="0" max="100" step="5" /><output id="smoothOut"></output></label>
-        <p class="tip">Training always rewards getting round the track. Pace bonus adds a reward for speed, so the car takes more risks. Crash penalty punishes crashing, so it drives more carefully. Smoothness punishes jerky steering. In our tests the sliders did not clearly help or hurt, so zero is a fine start.</p>
+        <h2><span class="n">03</span>What to reward</h2>
+        <label class="row"><span>Reward speed</span><input type="range" id="pace" min="0" max="100" step="5" /><output id="paceOut"></output></label>
+        <label class="row"><span>Punish crashes</span><input type="range" id="safety" min="0" max="100" step="5" /><output id="safetyOut"></output></label>
+        <label class="row"><span>Punish jerky steering</span><input type="range" id="smooth" min="0" max="100" step="5" /><output id="smoothOut"></output></label>
+        <p class="tip">Training always rewards getting round the track. These sliders add extras. Reward speed pushes the car to go faster and take more risks. Punish crashes makes it drive more carefully. Punish jerky steering makes it steer smoothly. In our tests the sliders did not clearly help or hurt, so zero is a fine start.</p>
       </div>
       <div class="panel">
         <h2><span class="n">04</span>Practice tracks<span class="aside" id="pickCount"></span></h2>
         <label class="row" style="grid-template-columns:auto 1fr"><span>Road</span><select id="weather" aria-label="Road the practice tracks are driven on"><option value="dry">Dry</option><option value="wet">Wet</option></select></label>
         <p class="tip" style="margin-top:2px">Grand Prix 2 is raced on a wet road. A car practised only on dry roads loses most of its grip there, so practise on wet roads to prepare for it.</p>
         <div class="tracks" id="tracks"></div>
-        <p class="tip">Race day uses tracks you have never seen. More practice tracks prepare the car better, but each generation uses more of the run's practice budget, so you get fewer generations.</p>
+        <p class="tip">Race day uses tracks you have never seen. More practice tracks prepare the car better, but each round uses more of the run's practice budget, so you get fewer rounds.</p>
       </div>
       <button class="btn primary wide" id="toPractice">Go to practice →</button>
     </div>
@@ -162,17 +162,17 @@ document.querySelector('#app')!.innerHTML = `
         <h2>Training<span class="aside" id="trainState">ready</span></h2>
         <div class="budget"><div class="bar"><i id="budgetBar" style="width:0%"></i></div>
           <div class="legend"><span id="budgetUsed"></span><span id="budgetGen"></span></div></div>
-        <p class="tip">Practice budget: every run gets the same ${hours(TRAINING_BUDGET)} hours of simulated driving, shared by all ${POPULATION} cars and your practice tracks. It is counted in driving, not seconds, so a faster device gets no advantage. More practice tracks use it up faster, so you get fewer generations. Every new run starts with a full budget; Keep training uses ${Math.round(KEEP_TRAINING_SHARE * 100)}% of it.</p>
+        <p class="tip">Practice budget: every run gets the same ${hours(TRAINING_BUDGET)} hours of simulated driving, shared by all ${POPULATION} cars and your practice tracks. It is counted in driving, not seconds, so a faster device gets no advantage. More practice tracks use it up faster, so you get fewer rounds. Every new run starts with a full budget; Keep training uses ${Math.round(KEEP_TRAINING_SHARE * 100)}% of it.</p>
         <div class="actions">
           <button class="btn primary" id="train">Start training</button>
           <button class="btn" id="keep">Keep training</button>
           <button class="btn" id="skip" hidden>Skip to the end</button>
         </div>
         <p class="tip" id="keepHint" style="margin-top:8px"></p>
-        <label class="row" style="grid-template-columns:auto 1fr;margin-top:10px"><input type="checkbox" id="watchAll" checked /><span>Replay every ${REPLAY_EVERY}th generation</span></label>
+        <label class="row" style="grid-template-columns:auto 1fr;margin-top:10px"><input type="checkbox" id="watchAll" checked /><span>Replay every ${REPLAY_EVERY}th round</span></label>
         <label class="row" style="grid-template-columns:auto 1fr"><input type="checkbox" id="bestOnly" /><span>Show only the best car (lighter on phones)</span></label>
         <label class="row" style="grid-template-columns:auto 1fr"><span>Watch on</span><select id="watchTrack" aria-label="Practice track to watch"></select></label>
-        <p class="tip">Each generation, ${POPULATION} cars drive all your practice tracks, with the blocks moved each time. The best 10 carry over unchanged and the rest are children of good cars, with small random changes. The screen shows one track.</p>
+        <p class="tip">Training goes in rounds. In each round, ${POPULATION} cars drive all your practice tracks, with the blocks moved each time. The best 10 carry over unchanged and the rest are children of good cars, with small random changes. The screen shows one track.</p>
         <p class="msg" id="trainMsg"></p>
         <p class="tip" id="trainTip" hidden></p>
       </div>
@@ -345,7 +345,7 @@ const practiceOn = (id: number, weather?: Weather): Track => practiceOnRoad(id, 
 const trackGrid = $('tracks')
 const thumbs: HTMLCanvasElement[] = []
 let focusTrack = b.practice[0] ?? 0 // the track shown on the big screen in the garage
-// The garage screen zooms in on the car's sensors (to choose rays and spread), and shows the whole
+// The garage screen zooms in on the car's sensors (to choose rays and view width), and shows the whole
 // track when a track card is clicked (to choose practice tracks). Moving a sensor slider zooms back in.
 let garageView: 'car' | 'track' = 'car'
 for (let id = 0; id < PRACTICE_COUNT; id++) {
@@ -456,12 +456,12 @@ const runSeconds = (r: Run) => Math.round((performance.now() - r.startedAt - (hi
 // Tips shown while training runs, a new one every few seconds. Each one is something that helps
 // build a faster car, and none is more than a sentence.
 const TIPS = [
-  'More practice tracks prepare the car better for tracks it has never seen, but every generation then costs more of the budget.',
-  'A wide spread sees bends sooner. A narrow spread sees straight ahead in more detail.',
-  'More rays see more, but every ray adds connections for the brain to learn, so training needs more generations.',
+  'More practice tracks prepare the car better for tracks it has never seen, but every round then costs more of the budget.',
+  'A wide view sees bends sooner. A narrow view sees straight ahead in more detail.',
+  'More rays see more, but the brain has more to learn, so training needs more rounds.',
   'A fast car has to brake earlier, because the tyres let go sooner.',
-  'A pace bonus keeps cars moving. A crash penalty teaches them to take bends carefully.',
-  'Blocks catch cars that see them too late. More rays, or a wider spread, spot them sooner.',
+  'Rewarding speed keeps cars moving. Punishing crashes teaches them to take bends carefully.',
+  'Blocks catch cars that see them too late. More rays, or a wider view, spot them sooner.',
   'Training has luck in it: the same setup can give a better or a worse car, so it can be worth training it twice.',
   'Race day counts tracks finished first, then total time. Gold needs all ' + RACE_COUNT + ' tracks in under ' + GOLD_TIME + ' seconds.',
   'You can tune your next car in the Garage while this one trains.',
@@ -514,7 +514,7 @@ function finishTraining(f: Finish) {
   // the test drive only starts if you are watching it; from another tab the car is simply ready
   const here = tab === 'practice'
   const worse = r.keep ? ' If it feels worse, switch back with "Switch to previous car" under Your car.' : ''
-  stopTraining('Done: ' + f.generations + ' generations. ' + (here ? 'Here is your car on its first test drive.' : 'Your new car is ready: test drive it in Practice, or race it.') + worse)
+  stopTraining('Done: ' + f.generations + ' rounds of training. ' + (here ? 'Here is your car on its first test drive.' : 'Your new car is ready: test drive it in Practice, or race it.') + worse)
   renderChip()
   raceView?.render()
   if (here) startTestDrive()
@@ -534,7 +534,7 @@ function startTraining(keep: boolean) {
   const budget = keep ? TRAINING_BUDGET * KEEP_TRAINING_SHARE : TRAINING_BUDGET
   run = { build: clone(b), name: draft.name, history: [], watching: watch, judging: false, finish: null, spent: 0, budget, keep, startedAt: performance.now(), awayAtStart: hiddenNow(), tipStart: Math.floor(Math.random() * TIPS.length) }
   drawGraph([])
-  const pace = watch ? 'Every ' + REPLAY_EVERY + 'th generation is replayed here.' : ''
+  const pace = watch ? 'Every ' + REPLAY_EVERY + 'th round is replayed here.' : ''
   trainMsg(keep ? 'Carrying on from your car at full speed. ' + pace : watch ? 'Training at full speed. ' + pace : 'Training at full speed...')
   worker = new Worker(new URL('./trainWorker.ts', import.meta.url), { type: 'module' })
   worker.onmessage = (event: MessageEvent) => {
@@ -953,10 +953,10 @@ function renderPractice() {
   $('budgetBar').style.width = (100 * spent) / total + '%'
   $('budgetUsed').textContent = hours(spent) + ' of ' + hours(total) + ' hours'
   $('budgetGen').textContent = run
-    ? 'generation ' + run.history.length
+    ? 'round ' + run.history.length
     : lastRun
-      ? lastRun.generations + ' generations · done'
-      : 'about ' + estGenerations(b) + ' generations'
+      ? lastRun.generations + ' rounds · done'
+      : 'about ' + estGenerations(b) + ' rounds'
   $('trainState').textContent = training ? (run?.watching ? 'watching' : 'training') : 'ready'
   $('train').textContent = training ? 'Stop' : car ? 'Train a new car' : 'Start training'
   $('skip').hidden = !(training && run?.watching)
@@ -965,12 +965,12 @@ function renderPractice() {
     ? 'Keep training carries on from a car, so train one first.'
     : !canKeepTraining()
       ? 'Your car has a different number of rays from the garage, so it cannot be carried on. Train a new car instead.'
-      : 'Keep training carries on from your car in about a third of the time. Add practice tracks or change your driving style first, then press it. If the result is worse, switch back under Your car.'
+      : 'Keep training carries on from your car in about a third of the time. Add practice tracks or change what you reward first, then press it. If the result is worse, switch back under Your car.'
   $('swapCar').hidden = !previousCar
   $<HTMLButtonElement>('swapCar').disabled = training
   const spec = specOf(b)
   const rows: [string, string][] = [
-    ['Sensors', b.sensors.count + ' rays across ' + b.sensors.spread + '°'],
+    ['Sensors', b.sensors.count + ' rays over a ' + b.sensors.spread + '° view'],
     ['Brain', genomeLength(shapeOf(b.sensors)) + ' connections'],
     ['Top speed · cornering', spec.maxSpeed.toFixed(1) + ' · ' + spec.gripSpeed.toFixed(1)],
     ['Pace · crash · smooth', pct(b.reward.pace) + ' · ' + pct(b.reward.safety) + ' · ' + pct(b.reward.smooth)],
@@ -1019,7 +1019,7 @@ function drawGraph(history: History) {
   gctx.textBaseline = 'alphabetic'
   // the legend sits after the title, measured, so a wider fallback font never runs into it
   let x0 = left
-  for (const [text, colour] of [['LAPS DRIVEN IN 40 S, PER GENERATION', COL.muted], ['— BEST CAR', COL.accent], ['— AVERAGE CAR', COL.tele]]) {
+  for (const [text, colour] of [['LAPS DRIVEN IN 40 S, PER ROUND', COL.muted], ['— BEST CAR', COL.accent], ['— AVERAGE CAR', COL.tele]]) {
     gctx.fillStyle = colour
     gctx.fillText(text, x0, 18)
     x0 += gctx.measureText(text).width + 16
@@ -1150,7 +1150,7 @@ function drawTrainingScreen(r: Run) {
   if (!r.judging) hudWrap('Tip: ' + currentTip(r), cx, H / 2 + 116, 680, 25, COL.text, 31)
   hudText(r.watching ? 'THE FIRST REPLAY IS ON ITS WAY' : 'REPLAYS ARE OFF FOR THIS RUN · TICK THE BOX BEFORE STARTING TO WATCH THEM', cx, H - 20, 16, COL.muted, 'center')
   setStrip([
-    ['Generation', String(gen)],
+    ['Round', String(gen)],
     ['Budget used', Math.round(100 * done) + '<small>%</small>'],
     ['Best car', (last ? last.best.toFixed(2) : '–') + '<small> laps</small>'],
     ['Average car', (last ? last.mean.toFixed(2) : '–') + '<small> laps</small>'],
@@ -1193,7 +1193,7 @@ function draw() {
     hudText('GEN ' + (sw.gen + 1), 16, 42, 36)
     hudText('REPLAY ON ' + TRACK_NAMES[sw.trackId].toUpperCase() + ' · TRAINING IS ON GEN ' + run.history.length, 16, 64, 16, COL.muted)
     hudText('SCORED ON ALL ' + run.build.practice.length + ' PRACTICE TRACKS', 16, 82, 13, COL.muted)
-    hudText('EACH GENERATION IS BRED FROM THE BEST CARS OF THE ONE BEFORE', 16, 100, 13, COL.muted)
+    hudText('EACH ROUND IS BRED FROM THE BEST CARS OF THE ROUND BEFORE', 16, 100, 13, COL.muted)
     hudText(sw.cars.length === 1 ? 'BEST OF ' + sw.genomes.length + ' CARS' : alive + ' / ' + sw.cars.length + ' DRIVING', W - 16, H - 16, 18, COL.tele, 'right')
     const status = run.judging
       ? 'TRAINING DONE · PICKING YOUR CAR'
@@ -1201,7 +1201,7 @@ function draw() {
         ? 'SHOWING IT AGAIN · THE NEXT REPLAY IS STILL TRAINING'
         : sw.done[sw.lead]
           ? 'BEST CAR STOPPED · FINISHING THE REPLAY'
-          : "FOLLOWING THIS GENERATION'S BEST CAR"
+          : "FOLLOWING THIS ROUND'S BEST CAR"
     hudText(status, W - 16, H - 38, 13, COL.accent, 'right')
     setStrip([
       ['Replaying gen', String(sw.gen + 1)],
@@ -1259,7 +1259,7 @@ function draw() {
   })
   if (zoomedIn) {
     hudText(b.sensors.count + ' RAYS', 16, 38, 26)
-    hudText(b.sensors.spread + '° SPREAD · RANGE ' + p.spec.rayRange, 16, 58, 14, COL.accent)
+    hudText(b.sensors.spread + '° VIEW · RANGE ' + p.spec.rayRange, 16, 58, 14, COL.accent)
     hudText(TRACK_NAMES[focusTrack].toUpperCase() + ' · START LINE', 16, 76, 13, COL.muted)
     hudText('PICK A TRACK BELOW TO SEE IT WHOLE', W - 16, H - 16, 13, COL.muted, 'right')
   } else {
@@ -1267,13 +1267,13 @@ function draw() {
     const picked = b.practice.includes(focusTrack)
     hudText(TRACK_NAMES[focusTrack].toUpperCase(), 16, 38, 26)
     hudText(picked ? 'PRACTICE TRACK' : 'NOT PICKED', 16, 58, 14, picked ? COL.accent : COL.muted)
-    if (tab === 'garage') hudText('MOVE RAYS OR SPREAD TO ZOOM BACK IN ON THE CAR', W - 16, H - 16, 13, COL.muted, 'right')
+    if (tab === 'garage') hudText('MOVE RAYS OR VIEW WIDTH TO ZOOM BACK IN ON THE CAR', W - 16, H - 16, 13, COL.muted, 'right')
   }
   setStrip([
     ['Brain', genomeLength(shapeOf(b.sensors)) + '<small> connections</small>'],
     ['Top speed', specOf(b).maxSpeed.toFixed(1)],
     ['Practice', b.practice.length + '<small> tracks</small>'],
-    ['Generations', '~' + estGenerations(b)],
+    ['Rounds', '~' + estGenerations(b)],
   ])
 }
 
