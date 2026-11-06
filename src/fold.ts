@@ -31,11 +31,32 @@ function openIndex(tab: HTMLElement, index: number) {
   foldable(tab).forEach((p, i) => setOpen(p, i === index))
 }
 
-export function setupFolds(tabIds: string[]) {
+// A panel's name, from its heading without the step number or the note on the right
+const titleOf = (panel: HTMLElement) => {
+  const h2 = panel.querySelector(':scope > h2')!.cloneNode(true) as HTMLElement
+  h2.querySelectorAll('.n, .aside').forEach((e) => e.remove())
+  return h2.textContent!.trim()
+}
+
+// steps: tabs whose panels are steps in order, so each one ends with a button that opens the next
+export function setupFolds(tabIds: string[], steps: string[] = []) {
   const saved = load()
   for (const id of tabIds) {
     const tab = document.getElementById(id)!
     const panels = foldable(tab)
+    if (steps.includes(id)) {
+      panels.slice(0, -1).forEach((panel, i) => {
+        const next = Object.assign(document.createElement('button'), { type: 'button', className: 'btn small primary', textContent: 'Next: ' + titleOf(panels[i + 1]) + ' →' })
+        next.addEventListener('click', () => {
+          openIndex(tab, i + 1)
+          save(id, i + 1)
+          panels[i + 1].scrollIntoView({ behavior: 'smooth', block: 'start' })
+        })
+        const row = Object.assign(document.createElement('div'), { className: 'actions next' })
+        row.append(next)
+        panel.append(row)
+      })
+    }
     panels.forEach((panel, i) => {
       panel.classList.add('fold')
       const h2 = panel.querySelector<HTMLElement>(':scope > h2')!

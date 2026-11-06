@@ -1461,7 +1461,7 @@ function loop(now: number) {
 }
 
 // fold the side panels: one open at a time in each tab
-setupFolds(['garage', 'practice', 'race'])
+setupFolds(['garage', 'practice', 'race'], ['garage'])
 $('raceGo').addEventListener('click', () => reveal($('tower'))) // a race fills the timing tower, so show it
 
 const leaderboard = createLeaderboard({

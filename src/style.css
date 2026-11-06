@@ -394,3 +394,4 @@ select {
 .panel.fold > h2:focus-visible { outline: 2px solid var(--accent); outline-offset: 4px; }
 .panel.fold.folded > h2 { margin-bottom: 0; }
 .panel.fold.folded > :not(h2) { display: none !important; }
+.actions.next { justify-content: flex-end; margin-top: 10px; }
