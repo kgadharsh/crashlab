@@ -243,7 +243,8 @@ document.querySelector('#app')!.innerHTML = `
         <h2>Leaderboard<span class="aside"><button class="btn small primary" id="onlineDry">Dry</button> <button class="btn small" id="onlineWet">Wet</button></span></h2>
         <ol class="tower" id="onlineRows"></ol>
         <p class="tip" id="onlineEmpty" hidden>No cars on this board yet. Be the first.</p>
-        <div class="actions"><button class="btn primary" id="onlineEnter">Enter your car</button></div>
+        <p class="tip" id="onlineWho"></p>
+        <div class="actions"><button class="btn" id="onlineSignIn">Sign in with GitHub</button><button class="btn small" id="onlineSignOut" hidden>Sign out</button><button class="btn primary" id="onlineEnter">Enter your car</button></div>
         <p class="msg" id="onlineMsg"></p>
       </div>
       <div class="panel">

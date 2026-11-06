@@ -25,3 +25,6 @@ dist-ssr
 
 # Cloudflare local state
 .wrangler
+
+# Local secrets
+.dev.vars

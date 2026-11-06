@@ -5,9 +5,7 @@ compatibility_date = "2026-11-01"
 [[d1_databases]]
 binding = "DB"
 database_name = "crashlab"
-database_id = "local-only" # replace with the id from `wrangler d1 create crashlab` when deploying
+database_id = "8a5af9ec-bc2b-4afe-995f-8ded779fae91"
 
 [vars]
-# Local development only: lets a request name its player in the X-Dev-Player header.
-# Remove this once sign-in exists (the deployed Worker must never trust that header).
-DEV_PLAYER_HEADER = "1"
+GITHUB_CLIENT_ID = "Ov23liywdLCMc2AqYF3V" # public; the matching secret is set with `wrangler secret put GITHUB_CLIENT_SECRET`
