@@ -259,6 +259,11 @@ document.querySelector('#app')!.innerHTML = `
         <p class="tip warn" id="advice"></p>
         <div class="actions"><button class="btn small primary" id="resultGarage">Edit setup in Garage →</button><button class="btn small" id="resultPractice">Go to Practice →</button><button class="btn small" id="resultShare">Challenge a friend</button></div>
         <input id="resultLink" readonly hidden aria-label="Challenge link" style="width:100%;margin-top:6px" />
+        <div id="resultBoard" hidden>
+          <p class="tip" style="margin-top:12px;color:var(--text);font-weight:600">Put this on the leaderboard?</p>
+          <div class="actions" style="margin-top:4px"><button class="btn primary" id="resultBoardGo">Sign in with Google to enter</button></div>
+          <p class="msg" id="resultBoardMsg"></p>
+        </div>
         <p class="msg" id="resultMsg"></p>
       </div>
       <p class="tip" id="pb"></p>
@@ -1370,7 +1375,7 @@ function loop(now: number) {
 }
 
 raceView = createRaceView({ ctx, cam, getCar: () => car, isStale: carIsStale, getChallenge: () => challenge, getLook: () => look, goTo: setTab, hudText, setStrip })
-createLeaderboard(() => car)
+createLeaderboard({ getCar: () => car, getGpId: () => raceView!.gpId(), goRace: () => setTab('race') })
 
 // ---------- CHALLENGE LINKS ----------
 // Share: the car goes into a link, so a friend can race it with no server.

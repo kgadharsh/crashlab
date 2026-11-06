@@ -8,6 +8,8 @@ const API = (import.meta.env.VITE_API_URL as string | undefined) ?? (import.meta
 const NAME_KEY = 'crashlab.devname'
 const TOKEN_KEY = 'crashlab.token'
 const NONCE_KEY = 'crashlab.nonce'
+// The Grand Prix a player asked to enter from a race result before going off to sign in, so the entry can finish when they come back
+const PENDING_KEY = 'crashlab.pendingEntry'
 
 type Row = { rank: number; id: number; display: string; finished: number; totalTime: number; medal: string | null }
 
@@ -44,11 +46,18 @@ function headers(): Record<string, string> {
   return import.meta.env.DEV ? { 'X-Dev-Player': store.get(NAME_KEY) || 'player' } : {}
 }
 
-export function createLeaderboard(getCar: () => CarFile | null) {
+type Deps = {
+  getCar: () => CarFile | null
+  getGpId: () => string // the Grand Prix the Race tab is on, so a result goes on the matching board
+  goRace: () => void
+}
+
+export function createLeaderboard({ getCar, getGpId, goRace }: Deps) {
   const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T
   const panel = $('boardOnline')
   if (!API) return { render() {} }
   panel.hidden = false
+  $('resultBoard').hidden = false
   takeSignIn()
   let gpIndex = 0
 
@@ -62,6 +71,7 @@ export function createLeaderboard(getCar: () => CarFile | null) {
       myName = undefined
       $('onlineNameRow').hidden = true
       $('onlineWho').textContent = 'Sign in to enter the board.'
+      $('resultBoardGo').textContent = 'Sign in with Google to enter'
       return
     }
     if (myName === undefined) {
@@ -78,6 +88,7 @@ export function createLeaderboard(getCar: () => CarFile | null) {
       }
     }
     $('onlineNameRow').hidden = myName !== null
+    $('resultBoardGo').textContent = myName ? 'Enter it on the leaderboard' : 'Choose a board name to enter'
     $('onlineWho').textContent = myName ? 'Playing as ' + myName + '. ' : 'Signed in. Choose the name the board will show.'
     if (myName) {
       const change = document.createElement('button')
@@ -99,7 +110,12 @@ export function createLeaderboard(getCar: () => CarFile | null) {
       if (!res.ok) return say(data.error ?? 'That name could not be saved.', true)
       myName = data.name
       say('Your board name is ' + data.name + '.')
-      renderWho()
+      await renderWho()
+      const pending = store.get(PENDING_KEY)
+      if (pending) {
+        store.set(PENDING_KEY, null)
+        return enter(pending)
+      }
       refresh()
     } catch {
       say('The board is not reachable right now.', true)
@@ -150,25 +166,70 @@ export function createLeaderboard(getCar: () => CarFile | null) {
 
   $('onlineDry').addEventListener('click', () => ((gpIndex = 0), refresh()))
   $('onlineWet').addEventListener('click', () => ((gpIndex = 1), refresh()))
-  $('onlineEnter').addEventListener('click', async () => {
+  // Enter the current car on a Grand Prix's board. The server races it and says where it placed.
+  async function enter(gpId: string) {
     const car = getCar()
-    if (!car) return say('Train a car first.', true)
-    say('Racing your car on the server…')
+    const i = GRAND_PRIXES.findIndex((g) => g.id === gpId)
+    if (i < 0) return
+    gpIndex = i
+    const tell = (text: string, bad = false) => {
+      say(text, bad)
+      $('resultBoardMsg').textContent = text
+      $('resultBoardMsg').classList.toggle('bad', bad)
+    }
+    if (!car) return tell('Train a car first.', true)
+    tell('Racing your car on the server…')
     try {
-      const res = await fetch(API + '/entries', { method: 'POST', headers: headers(), body: JSON.stringify({ gp: GRAND_PRIXES[gpIndex].id, car: carToJson(car) }) })
+      const res = await fetch(API + '/entries', { method: 'POST', headers: headers(), body: JSON.stringify({ gp: gpId, car: carToJson(car) }) })
       const data = (await res.json()) as { error?: string; needName?: boolean; finished?: number; totalTime?: number; medal?: string | null; rank?: number; left?: number }
       if (res.status === 401) renderWho()
       if (res.status === 409 && data.needName) {
         myName = null
-        renderWho()
+        store.set(PENDING_KEY, gpId)
+        await renderWho()
+        $('onlineName').focus()
       }
-      if (!res.ok) return say(data.error ?? 'The board could not take that car.', true)
-      say('The server scored ' + car.name + ': ' + data.finished + ' of 8 in ' + data.totalTime!.toFixed(1) + ' s' + (data.medal ? ' (' + data.medal + ')' : '') + '. You are number ' + data.rank + ' on the board. ' + data.left + ' entries left today.')
+      if (!res.ok) return tell(data.error ?? 'The board could not take that car.', true)
+      tell('On the board: ' + car.name + ' finished ' + data.finished + ' of 8 in ' + data.totalTime!.toFixed(1) + ' s' + (data.medal ? ' (' + data.medal + ')' : '') + '. You are number ' + data.rank + '. ' + data.left + ' entries left today.')
       refresh()
     } catch {
-      say('The board is not reachable right now.', true)
+      tell('The board is not reachable right now.', true)
     }
+  }
+  $('onlineEnter').addEventListener('click', () => enter(GRAND_PRIXES[gpIndex].id))
+  // Under a race result: sign in if needed (the entry finishes when the player comes back), then enter
+  $('resultBoardGo').addEventListener('click', async () => {
+    const gpId = getGpId()
+    if (!nameIn(store.get(TOKEN_KEY))) {
+      store.set(PENDING_KEY, gpId)
+      return signIn()
+    }
+    if (myName === null) {
+      store.set(PENDING_KEY, gpId)
+      $('onlineNameRow').hidden = false
+      $('boardOnline').scrollIntoView({ behavior: 'smooth', block: 'center' })
+      $('onlineName').focus()
+      return say('Choose the name the board will show, and your car goes on the board.')
+    }
+    enter(gpId)
   })
+  // Back from signing in with an entry waiting: finish it, or ask for a board name first
+  void (async () => {
+    const pending = store.get(PENDING_KEY)
+    if (!pending) return
+    if (!nameIn(store.get(TOKEN_KEY))) return store.set(PENDING_KEY, null) // sign-in was abandoned
+    await renderWho()
+    goRace()
+    $('boardOnline').scrollIntoView({ block: 'center' })
+    if (myName) {
+      store.set(PENDING_KEY, null)
+      return enter(pending)
+    }
+    if (myName === null) {
+      $('onlineName').focus()
+      say('Signed in. Choose the name the board will show, and your car goes on the board.')
+    }
+  })()
   refresh()
   return { render() {} }
 }

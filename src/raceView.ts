@@ -234,6 +234,7 @@ export function createRaceView(d: RaceDeps) {
     if (!s) {
       // a new race has started: the last result's share message is about an older race
       $('resultMsg').textContent = ''
+      $('resultBoardMsg').textContent = ''
       $('resultLink').hidden = true
     }
     if (s) {
@@ -328,5 +329,5 @@ export function createRaceView(d: RaceDeps) {
     render()
   })
 
-  return { tick, draw, render }
+  return { tick, draw, render, gpId: () => gp().id }
 }
