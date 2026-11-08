@@ -2,7 +2,7 @@
 // Draws random seeds until one makes a day a reference car can race: every track must be a valid road, and the best
 // reference car must finish enough of the 8. The seed is written to the file given with --out, for the workflow to store
 // in the board database. Neither the seed nor the day's theme or twist is printed, because this repository's logs are public
-// and the day is secret until it is over.
+// and a day's tracks are only meant to be seen once the day starts at 00:00 UTC (they are open to everyone from then).
 // Usage: npx tsx scripts/dailyPick.ts --out <file> [--day <n>]     pick and test a seed for a day (default: tomorrow, UTC)
 //        npx tsx scripts/dailyPick.ts --survey <n>                  test n random seeds and print the pass rate by theme and twist
 import { randomInt } from 'node:crypto'

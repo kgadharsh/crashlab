@@ -1,6 +1,7 @@
 # Makes tomorrow's Daily Challenge: picks a random seed, tests it by racing the reference cars on its tracks (retrying
 # with a new seed if the day is not fit to race), and stores it in the board database before 00:00 UTC.
-# The seed is secret until the day is over, so it is masked and never printed (this repository's logs are public).
+# The seed is kept secret until the day starts (its tracks are open to everyone from 00:00 UTC), so it is masked and never printed
+# (this repository's logs are public).
 # Needs the same two repository secrets as the weekly one: CLOUDFLARE_API_TOKEN (permission: D1 Edit) and CLOUDFLARE_ACCOUNT_ID.
 # If this ever fails, nothing breaks: the server still picks an untested random seed the first time the day is asked for.
 name: Daily Challenge

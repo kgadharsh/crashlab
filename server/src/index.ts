@@ -17,7 +17,7 @@ export interface Env {
 
 const WEEKLY_LIMIT = 3 // entries per player in each Weekly Grand Prix; their best counts
 const PAST_WEEKS = 6 // finished weeks listed with their winners
-const DAILY_CHALLENGE_LIMIT = 2 // entries per player in each Daily Challenge; their best counts
+const DAILY_CHALLENGE_LIMIT = 1 // entries per player in each Daily Challenge: the tracks are open, so one entry means committing to a setup
 const PAST_DAYS = 3 // finished days listed with their winners
 const DAILY_LIMIT = 3 // ranked entries per player per day. Training cannot be limited (it runs in the browser), so this is what makes retrying for a lucky car cost something
 const BOARD_SIZE = 50
@@ -190,7 +190,7 @@ async function submit(req: Request, env: Env): Promise<Response> {
     : await env.DB.prepare("SELECT COUNT(*) AS n FROM jobs WHERE player = ? AND day = ? AND gp NOT LIKE 'w:%' AND gp NOT LIKE 'd:%'").bind(player.id, day).first<{ n: number }>()
   const limit = weekly ? WEEKLY_LIMIT : daily ? DAILY_CHALLENGE_LIMIT : DAILY_LIMIT
   if ((used?.n ?? 0) >= limit) {
-    return json(req, { error: daily ? 'You have used both entries for today\'s Daily Challenge. A new one starts at midnight UTC.' : weekly ? 'You have used all ' + WEEKLY_LIMIT + ' entries for this week. A new Grand Prix starts on Monday.' : 'You have used all ' + DAILY_LIMIT + ' board entries for today. Try again tomorrow.' }, 429)
+    return json(req, { error: daily ? 'You have already entered today\'s Daily Challenge. A new one starts at midnight UTC.' : weekly ? 'You have used all ' + WEEKLY_LIMIT + ' entries for this week. A new Grand Prix starts on Monday.' : 'You have used all ' + DAILY_LIMIT + ' board entries for today. Try again tomorrow.' }, 429)
   }
   const job = await env.DB.prepare('INSERT INTO jobs (player, display, gp, name, build, day, status, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?) RETURNING id')
     .bind(player.id, display, gp.id, name, JSON.stringify(build), day, 'queued', Date.now())
@@ -291,7 +291,13 @@ async function dayGp(env: Env, day: number): Promise<GrandPrix> {
   return dailyGp(day, row!.seed)
 }
 
-// Today (its name and twist, never its seed) and the last few finished days with their top 3. No trophies: a day is for a place.
+async function seedOfDay(env: Env, day: number): Promise<number> {
+  await dayGp(env, day) // makes sure the day has a seed
+  return (await env.DB.prepare('SELECT seed FROM days WHERE day = ?').bind(day).first<{ seed: number }>())!.seed
+}
+
+// Today (its name, twist and seed: the daily's tracks are open to everyone, so players can race them and see how an entry went)
+// and the last few finished days with their top 3. No trophies: a day is for a place.
 async function dailyInfo(req: Request, env: Env): Promise<Response> {
   const now = dayOf(Date.now())
   const gp = await dayGp(env, now)
@@ -309,7 +315,7 @@ async function dailyInfo(req: Request, env: Env): Promise<Response> {
     ).bind('d:' + d.day).all<{ id: number; display: string; finished: number; totalTime: number }>()
     past.push({ day: d.day, seed: d.seed, podium: top.map((e, i) => ({ place: i + 1, ...e })) })
   }
-  return json(req, { day: now, name: gp.name, wet: gp.wet, night: gp.night, ice: gp.ice, endsAt: dayStart(now + 1), limit: DAILY_CHALLENGE_LIMIT, past })
+  return json(req, { day: now, seed: await seedOfDay(env, now), name: gp.name, wet: gp.wet, night: gp.night, ice: gp.ice, endsAt: dayStart(now + 1), limit: DAILY_CHALLENGE_LIMIT, past })
 }
 
 // The top 3 players of every finished week (finishing at least one track), best first within each week
@@ -403,10 +409,10 @@ async function getMe(req: Request, env: Env): Promise<Response> {
             (SELECT COUNT(*) FROM jobs q WHERE q.status IN ('queued', 'training') AND q.id < j.id) AS ahead
      FROM jobs j LEFT JOIN entries e ON e.id = j.entry WHERE j.player = ? ORDER BY j.id DESC LIMIT 12`,
   ).bind(player.id).all<{ id: number; gp: string; name: string; status: string; entry: number | null; finished: number | null; totalTime: number | null; medal: string | null; tracks: string | null; ahead: number }>()
-  // While a day or week is running its tracks are secret, so an entry's per-track result says only finished or not (no cause,
-  // no time, no distance). Once the period is over, or for the fixed Grand Prix, it says all of it.
+  // While a week is running its tracks are secret, so an entry's per-track result says only finished or not (no cause,
+  // no time, no distance). Once the week is over, and always for a day (the daily's tracks are open) or a fixed Grand Prix, it says all of it.
   const jobs = mine.map(({ tracks, ...j }) => {
-    const over = j.gp.startsWith('d:') ? Number(j.gp.slice(2)) < dayOf(Date.now()) : j.gp.startsWith('w:') ? Number(j.gp.slice(2)) < weekOf(Date.now()) : true
+    const over = j.gp.startsWith('d:') ? true : j.gp.startsWith('w:') ? Number(j.gp.slice(2)) < weekOf(Date.now()) : true
     let list: { time: number | null; progress: number; cause: string | null }[] | null = null
     try {
       list = tracks ? JSON.parse(tracks) : null

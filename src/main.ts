@@ -274,7 +274,7 @@ document.querySelector('#app')!.innerHTML = `
         <button type="button" class="hubcard daily" id="hubDaily" hidden>
           <span class="hubtop"><span class="hubkind">Daily</span><em id="hubDailyEnds"></em></span>
           <b class="hubname">Daily Challenge</b>
-          <span class="hubpitch">One track style, one twist, eight tracks nobody has seen. A new one every day.</span>
+          <span class="hubpitch">One track style, one twist, eight open tracks everyone races. One entry a day.</span>
           <span class="hubfacts">
             <span><small>Tracks</small>8</span>
             <span><small>Entries</small><i id="hubDailyLimit">2 a day</i></span>
@@ -312,7 +312,7 @@ document.querySelector('#app')!.innerHTML = `
         <p class="tip" id="challengeVs" style="color:var(--text);font-weight:600"></p>
       </div>
       <div class="panel" id="gpPanel" data-fixed>
-        <h2><span id="gpTitle">Grand Prix 1</span><span class="aside">8 secret tracks</span></h2>
+        <h2><span id="gpTitle">Grand Prix 1</span><span class="aside" id="gpAside">8 secret tracks</span></h2>
         <div class="roads" id="gpRoads" role="group" aria-label="Which Grand Prix to race"><button type="button" class="road" id="gp0" aria-pressed="true"><i aria-hidden="true">☀</i><b>Dry road</b><small>Grand Prix 1</small></button><button type="button" class="road wetroad" id="gp1" aria-pressed="false"><i aria-hidden="true">🌧</i><b>Wet road</b><small>Grand Prix 2</small></button><button type="button" class="road" id="gp2" aria-pressed="false" hidden>Past week</button></div>
         <div class="actions">
           <button class="btn primary wide" id="raceGo">Race your car</button>
@@ -326,7 +326,7 @@ document.querySelector('#app')!.innerHTML = `
       <div class="panel" id="dailyPanel" data-fixed hidden>
         <h2>Daily Challenge<span class="aside" id="dailyEnds"></span></h2>
         <p class="tip" id="dailyLine" style="margin-top:0"></p>
-        <div class="actions"><button class="btn primary" id="dailyGo">Enter your car</button></div>
+        <div class="actions"><button class="btn primary" id="dailyGo">Enter your car</button><button class="btn" id="dailyRace" hidden>Race today's tracks</button></div>
         <p class="msg" id="dailyMsg"></p>
         <div class="jobs" id="dailyJobs"></div>
         <p class="tip" style="color:var(--text);font-weight:600">Today</p>
@@ -481,7 +481,7 @@ document.querySelectorAll<HTMLButtonElement>('.tab[data-tab]').forEach((btn) => 
 type RaceSection = 'hub' | 'gp' | 'daily' | 'weekly'
 const SECTION_TITLE: Record<RaceSection, string> = { hub: '', gp: 'Grand Prix', daily: 'Daily Challenge', weekly: 'Weekly Challenge' }
 const SECTION_IDLE: Record<'daily' | 'weekly', { title: string; sub: string }> = {
-  daily: { title: 'DAILY CHALLENGE', sub: "TODAY'S TRACKS ARE SECRET · ENTER BELOW, OR RACE A PAST DAY" },
+  daily: { title: 'DAILY CHALLENGE', sub: "TODAY'S TRACKS ARE OPEN · RACE THEM, THEN ENTER BELOW" },
   weekly: { title: 'WEEKLY CHALLENGE', sub: "THIS WEEK'S TRACKS ARE SECRET · ENTER BELOW, OR RACE A PAST WEEK" },
 }
 let raceSection: RaceSection = 'hub'
@@ -505,7 +505,11 @@ function openPastIn(gp: GrandPrix) {
   $('race').dataset.open = '1'
   raceView?.setIdle(null)
 }
-$('hubDaily').addEventListener('click', () => setRaceSection('daily'))
+$('hubDaily').addEventListener('click', () => {
+  setRaceSection('daily')
+  const today = leaderboard.dailyToday() // today's tracks are open, so the race screen is ready to use at once
+  if (today) openPastIn(today)
+})
 $('hubWeekly').addEventListener('click', () => setRaceSection('weekly'))
 $('hubGp').addEventListener('click', () => setRaceSection('gp'))
 $('raceBack').addEventListener('click', () => setRaceSection('hub'))

@@ -22,7 +22,7 @@ type Row = { rank: number; id: number; display: string; finished: number; totalT
 const runsOf = (e: Row) => (e.runs ? ' · ' + e.runs + (e.runs === 1 ? ' run' : ' runs') : '')
 // This week's Grand Prix as the server describes it (never its seed), and finished weeks with their seeds and top 3
 type Podium = { place: number; id: number; display: string; finished: number; totalTime: number }
-type Daily = { day: number; name: string; wet: boolean; night?: boolean; ice?: boolean; endsAt: number; limit: number; past: { day: number; seed: number; podium: Podium[] }[] }
+type Daily = { day: number; seed: number; name: string; wet: boolean; night?: boolean; ice?: boolean; endsAt: number; limit: number; past: { day: number; seed: number; podium: Podium[] }[] }
 type Weekly = { week: number; name: string; wet: boolean; night?: boolean; ice?: boolean; endsAt: number; limit: number; past: { week: number; seed: number; podium: Podium[] }[] }
 const TROPHY = ['🥇', '🥈', '🥉']
 // Weekly trophies after a name, e.g. 🥇2 🥉1
@@ -90,7 +90,7 @@ export function createLeaderboard({ getCar, getGpId, goRace, notify, raceAgainst
     return el
   }
   const panel = $('boardOnline')
-  if (!API) return { showResult() {}, identity: (): Identity => ({ kind: 'offline' }), signIn() {}, openBoard() {}, boardStats: async (): Promise<BoardStats | null> => null }
+  if (!API) return { showResult() {}, identity: (): Identity => ({ kind: 'offline' }), signIn() {}, openBoard() {}, boardStats: async (): Promise<BoardStats | null> => null, dailyToday: (): GrandPrix | null => null }
   panel.hidden = false
   $('resultBoard').hidden = false
   $('weeklyPanel').hidden = false
@@ -164,6 +164,7 @@ export function createLeaderboard({ getCar, getGpId, goRace, notify, raceAgainst
   let lastJobs: Job[] = []
   // The finished day or week a job was entered in (its tracks are public now), if it is still in the lists the server sends
   const pastGp = (id: string): GrandPrix | null => {
+    if (daily && typeof daily.seed === 'number' && id === 'd:' + daily.day) return dailyGp(daily.day, daily.seed) // today's tracks are open too
     if (id.startsWith('d:')) return (daily?.past ?? []).filter((p) => 'd:' + p.day === id).map((p) => dailyGp(p.day, p.seed))[0] ?? null
     if (id.startsWith('w:')) return (weekly?.past ?? []).filter((p) => 'w:' + p.week === id).map((p) => weeklyGp(p.week, p.seed))[0] ?? null
     return GRAND_PRIXES.find((g) => g.id === id) ?? null
@@ -183,7 +184,7 @@ export function createLeaderboard({ getCar, getGpId, goRace, notify, raceAgainst
     box.append(strip)
     const full = j.tracks.every((t) => 'cause' in t)
     if (!full) {
-      if (j.tracks.some((t) => 'ok' in t && !t.ok)) box.append(Object.assign(document.createElement('div'), { className: 'jobnote', textContent: 'The tracks are secret until this ends. Then you can see what went wrong and watch the car race them.' }))
+      if (j.tracks.some((t) => 'ok' in t && !t.ok)) box.append(Object.assign(document.createElement('div'), { className: 'jobnote', textContent: "This week's tracks are secret until it ends. Then you can see what went wrong and watch the car race them." }))
       return box
     }
     const tracks = j.tracks as { time: number | null; progress: number; cause: Cause | null }[]
@@ -504,8 +505,8 @@ export function createLeaderboard({ getCar, getGpId, goRace, notify, raceAgainst
     const signed = !!nameIn(store.get(TOKEN_KEY))
     $('dailyEnds').textContent = 'ends in ' + timeLeft(daily.endsAt - Date.now())
     $('dailyLine').textContent =
-      daily.name + ': 8 tracks in one style, all ' + (daily.wet ? 'on a wet road' : daily.night ? 'at night' : 'on an icy road') + ', secret until the day is over. ' +
-      'Your best of ' + daily.limit + ' entries counts. No trophies: it is for today\'s place, and a new one starts at midnight UTC.' +
+      daily.name + ': 8 tracks in one style, all ' + (daily.wet ? 'on a wet road' : daily.night ? 'at night' : 'on an icy road') + '. Everyone races the same tracks, and they are open: race them yourself first, then enter your setup. ' +
+      (daily.limit === 1 ? 'You get one entry, so make it count. ' : 'Your best of ' + daily.limit + ' entries counts. ') + 'No trophies: it is for today\'s place, and a new one starts at midnight UTC.' +
       (signed && dailyLeft !== undefined ? ' You have ' + dailyLeft + (dailyLeft === 1 ? ' entry' : ' entries') + ' left today.' : '')
     $('hubDailyLimit').textContent = daily.limit + ' a day'
     $('hubDailyEnds').textContent = 'ends in ' + timeLeft(daily.endsAt - Date.now())
@@ -530,6 +531,7 @@ export function createLeaderboard({ getCar, getGpId, goRace, notify, raceAgainst
         }),
       )
       $('dailyEmpty').hidden = rows.length > 0
+      $('dailyRace').hidden = typeof daily.seed !== 'number'
       $('dailyPast').replaceChildren(
         ...daily.past.map((p) => {
           const gp = dailyGp(p.day, p.seed)
@@ -561,6 +563,12 @@ export function createLeaderboard({ getCar, getGpId, goRace, notify, raceAgainst
       sayDaily('The Daily Challenge is not reachable right now.', true)
     }
   }
+  // today's tracks as a Grand Prix, once the server has sent them (they are open to everyone)
+  const dailyToday = (): GrandPrix | null => (daily && typeof daily.seed === 'number' ? dailyGp(daily.day, daily.seed) : null) // an older server sends no seed
+  $('dailyRace').addEventListener('click', () => {
+    const g = dailyToday()
+    if (g) openWeek(g)
+  })
   $('dailyGo').addEventListener('click', () => {
     if (!nameIn(store.get(TOKEN_KEY))) {
       store.set(PENDING_KEY, 'daily')
@@ -697,5 +705,5 @@ export function createLeaderboard({ getCar, getGpId, goRace, notify, raceAgainst
     }
     return { boards: out, trophies }
   }
-  return { showResult, identity, signIn, openBoard, boardStats }
+  return { showResult, identity, signIn, openBoard, boardStats, dailyToday }
 }

@@ -56,8 +56,9 @@ export function weeklyGp(week: number, seed: number): GrandPrix {
 
 // ---------- THE DAILY CHALLENGE ----------
 // Built to feel unlike the weekly: every track in a day has the SAME style (a theme day: all hairpins, all blocks...),
-// and one twist is always on (wet, night or ice), where a week is a mix and often plain. It is raced for a place
-// on the day's board, not for trophies. Days run from 00:00 UTC, and the tracks are secret until the day is over.
+// and one twist is always on (wet, night or ice). Unlike the weekly its tracks are OPEN: everyone sees the same eight from
+// midnight, can race them, and watches their entry race them once it is trained. It is raced for a place on the day's
+// board, not for trophies. Days run from 00:00 UTC, and the seed is only picked and kept secret until then.
 const DAY_MS = 86400000
 export const dayOf = (now: number) => Math.floor(now / DAY_MS)
 export const dayStart = (day: number) => day * DAY_MS

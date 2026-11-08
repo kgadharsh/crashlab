@@ -5,7 +5,7 @@ import { genomeToBrain } from './genome'
 import { CHECKPOINTS, createCar, drive, type Brain, type Car } from './sim'
 import { brainShape, specOf, type CarSpec } from './setup'
 import {
-  CAUSE_LABEL, GRAND_PRIXES, RACE_COUNT, isSecretGp, adviceFor, better, finishLap, gpTrack, lapIsOver, medalFor, medalRules, raceCar, summarise, versus,
+  CAUSE_LABEL, GRAND_PRIXES, RACE_COUNT, dayOf, isSecretGp, adviceFor, better, finishLap, gpTrack, lapIsOver, medalFor, medalRules, raceCar, summarise, versus,
   type GrandPrix, type Medal, type RaceResult, type TrackResult,
 } from './race'
 import { logEvent, recordChallenge } from './playLog'
@@ -109,7 +109,7 @@ export function cardText(carName: string, gp: GrandPrix, s: RaceResult, link: st
   const squares = s.tracks.map((t) => (t.time === null ? '⬛' : t.time <= quick ? '🟩' : '🟨')).join('')
   const medal = medalFor(s, gp)
   const badge = medal ? { gold: '🥇', silver: '🥈', bronze: '🥉' }[medal] + ' ' + medal.toUpperCase() : s.finished + '/' + RACE_COUNT
-  return ['CRASHLAB · ' + gp.name, '"' + carName + '" · ' + badge + (s.finished === RACE_COUNT ? ' · ' + s.totalTime.toFixed(1) + ' s' : ''), squares, 'My car drives tracks it has never seen. Can yours beat it?', link].join('\n')
+  return ['CRASHLAB · ' + gp.name, '"' + carName + '" · ' + badge + (s.finished === RACE_COUNT ? ' · ' + s.totalTime.toFixed(1) + ' s' : ''), squares, (gp.day !== undefined ? 'Same eight tracks for everyone. Can yours beat it?' : 'My car drives tracks it has never seen. Can yours beat it?'), link].join('\n')
 }
 
 export function createRaceView(d: RaceDeps) {
@@ -136,13 +136,16 @@ export function createRaceView(d: RaceDeps) {
   // Which Grand Prix is chosen: its name, rules and buttons (the race itself is chosen by gp())
   function renderGp() {
     $('gpTitle').textContent = gp().name
+    $('gpAside').textContent = isSecretGp(gp()) ? '8 open tracks' : '8 secret tracks' // a finished or daily set is open to everyone
     $('medalRules').textContent = isSecretGp(gp())
       ? gp().day !== undefined
-        ? 'These were a past day\'s secret tracks. They are open now: race them as often as you like. Today\'s are still secret.'
+        ? gp().day === dayOf(Date.now())
+          ? 'Today\'s Daily Challenge tracks are open to everyone. Race them as often as you like to see how your car copes, then enter your setup in the panel below to get a place on the board.'
+          : 'These were a past day\'s tracks. Race them as often as you like.'
         : 'These were last week\'s secret tracks. They are open now: race them as often as you like. This week\'s are still secret.'
       : medalRules(gp())
     $('gp2').hidden = !pastWeek
-    if (pastWeek) $('gp2').innerHTML = pastWeek.day !== undefined ? '<i aria-hidden="true">⚡</i><b></b><small>Past day · open now</small>' : '<i aria-hidden="true">📅</i><b></b><small>Past week · open now</small>'
+    if (pastWeek) $('gp2').innerHTML = pastWeek.day !== undefined ? '<i aria-hidden="true">⚡</i><b></b><small>' + (pastWeek.day === dayOf(Date.now()) ? 'Today · open to all' : 'Past day · open now') + '</small>' : '<i aria-hidden="true">📅</i><b></b><small>Past week · open now</small>'
     if (pastWeek) $('gp2').querySelector('b')!.textContent = pastWeek.name
     choices().forEach((_, i) => {
       const b = $('gp' + i)
@@ -377,7 +380,7 @@ export function createRaceView(d: RaceDeps) {
         $('scName').textContent = live!.car.name
         $('scMedal').textContent = medal ? medal.toUpperCase() : s.finished + ' OF ' + RACE_COUNT
         $('scMedal').style.color = medal ? MEDAL_COLOUR[medal] : COL.text
-        $('scLine').textContent = s.finished === RACE_COUNT ? s.totalTime.toFixed(1) + ' s over ' + RACE_COUNT + ' secret tracks' : s.finished + ' of ' + RACE_COUNT + ' secret tracks finished'
+        $('scLine').textContent = s.finished === RACE_COUNT ? s.totalTime.toFixed(1) + ' s over ' + RACE_COUNT + (live!.gp.day !== undefined ? ' tracks' : ' secret tracks') : s.finished + ' of ' + RACE_COUNT + (live!.gp.day !== undefined ? ' tracks' : ' secret tracks') + ' finished'
         $('resultPractice').textContent = 'Go to Practice →'
         $('resultPractice').className = 'btn small'
       }
@@ -418,7 +421,7 @@ export function createRaceView(d: RaceDeps) {
     }
     if (!r) {
       hudText(gp().name.toUpperCase(), W / 2, H / 2 - 20, 56, COL.text, 'center')
-      hudText(RACE_COUNT + ' TRACKS YOUR CAR HAS NEVER SEEN', W / 2, H / 2 + 14, 18, COL.muted, 'center')
+      hudText(gp().day !== undefined ? RACE_COUNT + ' OPEN TRACKS · RACE THEM AS OFTEN AS YOU LIKE' : RACE_COUNT + ' TRACKS YOUR CAR HAS NEVER SEEN', W / 2, H / 2 + 14, 18, COL.muted, 'center')
       hudText(d.getCar() ? 'PRESS RACE YOUR CAR' : 'TRAIN A CAR IN PRACTICE FIRST', W / 2, H / 2 + 50, 16, COL.accent, 'center')
       d.setStrip([['Tracks', String(RACE_COUNT)], ['Finished', '–'], ['Total time', '–'], ['Personal best', best ? best.finished + '/' + RACE_COUNT : '–']])
       return
