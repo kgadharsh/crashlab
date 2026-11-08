@@ -28,3 +28,10 @@ CREATE TABLE IF NOT EXISTS weeks (
   week INTEGER PRIMARY KEY,    -- weeks since Monday 5 Jan 1970 (UTC); entries for it have gp = 'w:' || week
   seed INTEGER NOT NULL
 );
+
+-- Short challenge links: a shared car under a code made from its contents (the server also makes this table on first use)
+CREATE TABLE IF NOT EXISTS challenges (
+  code TEXT PRIMARY KEY,       -- 10 characters from a hash of the car
+  car TEXT NOT NULL,           -- the car file
+  created_at INTEGER NOT NULL
+);

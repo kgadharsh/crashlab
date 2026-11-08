@@ -1,6 +1,6 @@
 // The CrashLab server: it takes a car, runs the Grand Prix itself with the same simulation the game
 // uses, and ranks the result. The score a player sees in the browser is never trusted.
-import { carFromJson } from '../../src/carFile'
+import { carFromJson, carToJson } from '../../src/carFile'
 import { sign, verify } from './auth'
 import { GRAND_PRIXES, medalFor, raceCar, weekOf, weekStart, weeklyGp, type GrandPrix } from '../../src/race'
 
@@ -279,13 +279,54 @@ async function entry(req: Request, env: Env, id: number): Promise<Response> {
   return row ? json(req, { ...row, car: JSON.parse(row.car) }) : json(req, { error: 'No such entry.' }, 404)
 }
 
+
+// ---------- SHORT CHALLENGE LINKS ----------
+// A shared car is kept under a short code made from its own contents, so sharing the same car twice gives the same code
+// and nothing piles up. The car is checked like any car file before it is kept. The table is made on first use.
+let challengeTable = false
+async function ensureChallenges(env: Env) {
+  if (challengeTable) return
+  await env.DB.prepare('CREATE TABLE IF NOT EXISTS challenges (code TEXT PRIMARY KEY, car TEXT NOT NULL, created_at INTEGER NOT NULL)').run()
+  challengeTable = true
+}
+const CODE = /^[A-Za-z0-9_-]{10}$/
+async function codeFor(text: string): Promise<string> {
+  const hash = new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(text)))
+  return btoa(String.fromCharCode(...hash.slice(0, 8))).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '').slice(0, 10)
+}
+async function saveChallenge(req: Request, env: Env): Promise<Response> {
+  const text = await req.text()
+  if (text.length > MAX_BODY) return json(req, { error: 'That car is too big.' }, 413)
+  let body: { car?: unknown }
+  try {
+    body = JSON.parse(text)
+  } catch {
+    return json(req, { error: 'That is not a car.' }, 400)
+  }
+  const car = typeof body.car === 'string' ? carFromJson(body.car) : { error: 'That is not a car.' }
+  if ('error' in car) return json(req, { error: car.error }, 400)
+  const canonical = carToJson(car)
+  const code = await codeFor(canonical)
+  await ensureChallenges(env)
+  await env.DB.prepare('INSERT OR IGNORE INTO challenges (code, car, created_at) VALUES (?, ?, ?)').bind(code, canonical, Date.now()).run()
+  return json(req, { code })
+}
+async function loadChallenge(req: Request, env: Env, code: string): Promise<Response> {
+  await ensureChallenges(env)
+  const row = await env.DB.prepare('SELECT car FROM challenges WHERE code = ?').bind(code).first<{ car: string }>()
+  return row ? json(req, { car: row.car }) : json(req, { error: 'That challenge link is not known.' }, 404)
+}
+
 export default {
   async fetch(req: Request, env: Env): Promise<Response> {
     if (req.method === 'OPTIONS') return new Response(null, { status: 204, headers: { ...cors(req), 'Access-Control-Allow-Methods': 'GET, POST, PUT' } })
     const url = new URL(req.url)
     const m = url.pathname.match(/^\/entries\/(\d+)$/)
     const auth = url.pathname.match(/^\/auth\/(google)(\/callback)?$/)
+    const ch = url.pathname.match(/^\/challenges\/([A-Za-z0-9_-]+)$/)
     if (req.method === 'GET' && auth) return auth[2] ? finishSignIn(auth[1], url, env) : startSignIn(auth[1], url, env)
+    if (req.method === 'POST' && url.pathname === '/challenges') return saveChallenge(req, env)
+    if (req.method === 'GET' && ch) return CODE.test(ch[1]) ? loadChallenge(req, env, ch[1]) : json(req, { error: 'That challenge link is damaged.' }, 400)
     if (req.method === 'POST' && url.pathname === '/entries') return submit(req, env)
     if (req.method === 'GET' && url.pathname === '/board') return board(req, env, url.searchParams.get('gp') ?? 'gp1')
     if (req.method === 'GET' && url.pathname === '/weekly') return weeklyInfo(req, env)

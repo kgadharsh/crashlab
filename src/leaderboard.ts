@@ -5,7 +5,7 @@ import { carFromJson, carToJson, type CarFile } from './carFile'
 import { reveal } from './fold'
 import { CAUSE_LABEL, GRAND_PRIXES, weeklyGp, type Cause, type GrandPrix } from './race'
 
-const API = (import.meta.env.VITE_API_URL as string | undefined) ?? (import.meta.env.DEV ? 'http://localhost:8787' : '')
+export const API = (import.meta.env.VITE_API_URL as string | undefined) ?? (import.meta.env.DEV ? 'http://localhost:8787' : '')
 const NAME_KEY = 'crashlab.devname'
 const TOKEN_KEY = 'crashlab.token'
 const NONCE_KEY = 'crashlab.nonce'

@@ -39,3 +39,37 @@ export function carFromChallenge(hash: string): CarFile | { error: string } | nu
   if ('error' in car && car.error.startsWith('That file')) return { error: 'That challenge link is damaged.' }
   return car
 }
+
+// ---------- SHORT LINKS ----------
+// The server keeps a shared car under a 10-character code, so the link is short: the game's address plus #c=code.
+// If the server cannot be reached, sharing falls back to the long link above, which needs no server.
+export const SHORT_PREFIX = '#c='
+const withTimeout = (ms: number) => {
+  const c = new AbortController()
+  setTimeout(() => c.abort(), ms)
+  return c.signal
+}
+export async function shortCode(car: CarFile, api: string): Promise<string | null> {
+  if (!api) return null
+  try {
+    const res = await fetch(api + '/challenges', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ car: carToJson(car) }), signal: withTimeout(5000) })
+    const data = (await res.json()) as { code?: string }
+    return res.ok && data.code ? data.code : null
+  } catch {
+    return null
+  }
+}
+export async function carFromShort(hash: string, api: string): Promise<CarFile | { error: string } | null> {
+  if (!hash.startsWith(SHORT_PREFIX)) return null
+  const code = hash.slice(SHORT_PREFIX.length)
+  if (!/^[A-Za-z0-9_-]{10}$/.test(code)) return { error: 'That challenge link is damaged.' }
+  if (!api) return { error: 'Challenge links need the board server, which is not set up here.' }
+  try {
+    const res = await fetch(api + '/challenges/' + code, { signal: withTimeout(8000) })
+    const data = (await res.json()) as { car?: string; error?: string }
+    if (!res.ok || !data.car) return { error: data.error ?? 'That challenge link could not be opened.' }
+    return carFromJson(data.car)
+  } catch {
+    return { error: 'The challenge could not be loaded. Check your connection and open the link again.' }
+  }
+}

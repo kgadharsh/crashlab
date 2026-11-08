@@ -79,6 +79,15 @@ const headline = (s: RaceResult, gp: GrandPrix) => (gp.week !== undefined ? s.fi
 const time = (s: number | null) => (s === null ? '--.--' : s.toFixed(2))
 const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T
 
+// The words that go with a shared car, for a message or a post: no spoilers, only the pattern of the race and a dare
+export function cardText(carName: string, gp: GrandPrix, s: RaceResult, link: string): string {
+  const quick = gp.goldTime / RACE_COUNT
+  const squares = s.tracks.map((t) => (t.time === null ? '⬛' : t.time <= quick ? '🟩' : '🟨')).join('')
+  const medal = medalFor(s, gp)
+  const badge = medal ? { gold: '🥇', silver: '🥈', bronze: '🥉' }[medal] + ' ' + medal.toUpperCase() : s.finished + '/' + RACE_COUNT
+  return ['CRASHLAB · ' + gp.name, '"' + carName + '" · ' + badge + (s.finished === RACE_COUNT ? ' · ' + s.totalTime.toFixed(1) + ' s' : ''), squares, 'My car drives tracks it has never seen. Can yours beat it?', link].join('\n')
+}
+
 export function createRaceView(d: RaceDeps) {
   let live: Live | null = null
   let speed = 4
@@ -381,12 +390,7 @@ export function createRaceView(d: RaceDeps) {
   // The words that go with the share card, for a message or a post: no spoilers, only the pattern and a dare
   function shareText(link: string): string | null {
     const s = live?.summary
-    if (!s || !live) return null
-    const quick = live.gp.goldTime / RACE_COUNT
-    const squares = s.tracks.map((t) => (t.time === null ? '⬛' : t.time <= quick ? '🟩' : '🟨')).join('')
-    const medal = medalFor(s, live.gp)
-    const badge = medal ? { gold: '🥇', silver: '🥈', bronze: '🥉' }[medal] + ' ' + medal.toUpperCase() : s.finished + '/' + RACE_COUNT
-    return ['CRASHLAB · ' + live.gp.name, '"' + live.car.name + '" · ' + badge + (s.finished === RACE_COUNT ? ' · ' + s.totalTime.toFixed(1) + ' s' : ''), squares, '🟩 quick  🟨 slow  ⬛ crashed', 'My car drives tracks it has never seen. Can yours beat it?', link].join('\n')
+    return s && live ? cardText(live.car.name, live.gp, s, link) : null
   }
   return { tick, draw, render, gpId: () => gp().id, selectGpId, showPastWeek, shareText }
 }

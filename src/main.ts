@@ -1,19 +1,19 @@
 import './style.css'
 import { GOLD_TIME, GRAND_PRIXES, RACE_COUNT, medalFor, raceCar } from './race'
-import { carFromChallenge, challengeCode } from './challenge'
+import { SHORT_PREFIX, carFromChallenge, carFromShort, challengeCode, shortCode } from './challenge'
 import { DEFAULT_BUILD, CHASSIS, KEEP_TRAINING_SHARE, LIMITS, POPULATION, REPLAY_EVERY, TRAINING_BUDGET, buildProblem, cleanBuild, genomeLength, brainShape, specOf, levelOf, maxPractice, maxRays, maxSpread, pointsUsed, POINT_BUDGET, type Build, type Parts } from './setup'
 import { CHECKPOINTS, NITRO_STEPS, STALL_STEPS, createCar, drive, getInputs, step, type Brain, type Car } from './sim'
 import { think } from './brain'
 import { PRACTICE, PRACTICE_COUNT, practiceOnRoad, practiceTrack, trackFeatures, trackStats, type Track } from './track'
 import { genomeToBrain } from './genome'
 import { carFromJson, carToJson, type CarFile } from './carFile'
-import { createLeaderboard } from './leaderboard'
+import { API, createLeaderboard } from './leaderboard'
 import { reveal, setupFolds } from './fold'
 import { PERKS, PAINTS, drawMine, hasPerk, loadPaint, paintColour, nextPerk, savePaint, shelfSize, streak, visit } from './perks'
 import { renderProfile } from './profile'
 import { createSkillTree } from './skilltree'
 import { createControls, handBest, handMedal, licence, recordHand } from './driver'
-import { createRaceView, loadBest, type Challenge } from './raceView'
+import { cardText, createRaceView, loadBest, type Challenge } from './raceView'
 import { bestOn, driveLap, lapMedal, loadMedals, parFor, recordLaps, totalStars, type Lap } from './board'
 import { PARTS, newlyUnlocked, type PartId, type Progress } from './parts'
 import { LOOKS, isUnlocked, loadLook, nextLook, saveLook } from './looks'
@@ -1835,19 +1835,39 @@ function refreshHot() {
 // ---------- CHALLENGE LINKS ----------
 // Share: the car goes into a link, so a friend can race it with no server.
 // It is offered under Your car in Practice, and under the result of a race, where the wish to show it off is greatest.
-async function shareCar(say: (text: string) => void, box: HTMLInputElement, withCard = false) {
+async function shareCar(say: (text: string) => void, box: HTMLInputElement, afterRace = false) {
   if (!car) return
-  const link = location.origin + location.pathname + challengeCode(car)
-  // after a race the link comes with the result card as text, so the message makes a friend curious before they open it
-  const text = (withCard ? raceView?.shareText(link) : null) ?? link
-  try {
-    await navigator.clipboard.writeText(text)
+  const c = car
+  say('Making your link…')
+  // a short link from the server when it can be reached, else the long one that carries the whole car.
+  // The link always comes with words: the latest race's card, or this car's result on Grand Prix 1.
+  const textP = shortCode(c, API).then((code) => {
+    const link = location.origin + location.pathname + (code ? SHORT_PREFIX + code : challengeCode(c))
+    return (afterRace ? raceView?.shareText(link) : null) ?? cardText(c.name, GRAND_PRIXES[0], raceCar(c, GRAND_PRIXES[0]), link)
+  })
+  const copied = () => {
     logEvent({ k: 'share' })
     refreshHot()
     box.hidden = true
-    say((withCard ? 'Result card and challenge link copied. Paste it into a chat.' : 'Challenge link copied.') + ' Anyone who opens it can race ' + car.name + ' on the Grand Prix and try to beat it.')
+    say('Copied: a message with ' + c.name + "'s result and a link. Paste it into a chat. Anyone who opens the link can race your car and try to beat it.")
+  }
+  try {
+    // Safari only lets a page copy during the tap itself; handing it the text as a promise keeps that tap valid while
+    // the server makes the short code
+    if (typeof ClipboardItem !== 'undefined' && navigator.clipboard?.write) {
+      await navigator.clipboard.write([new ClipboardItem({ 'text/plain': textP.then((t) => new Blob([t], { type: 'text/plain' })) })])
+    } else await navigator.clipboard.writeText(await textP)
+    copied()
+    return
   } catch {
-    box.value = text.replace(/\n/g, ' | ') // the browser would not copy for us: show the text to copy by hand
+    /* try the plain way, then show the text */
+  }
+  const text = await textP
+  try {
+    await navigator.clipboard.writeText(text)
+    copied()
+  } catch {
+    box.value = text.replace(/\n/g, ' ') // the browser would not copy for us: show the text to copy by hand
     box.hidden = false
     box.select()
     say('Copy this and send it. Anyone who opens the link can race your car.')
@@ -1873,6 +1893,20 @@ $('notes').addEventListener('click', async () => {
 })
 // Receive: a link brings a car to beat, or one remembered from earlier is brought back
 function takeChallenge() {
+  if (location.hash.startsWith(SHORT_PREFIX)) {
+    const hash = location.hash
+    history.replaceState(null, '', location.pathname + location.search)
+    setTab('race')
+    $('challengePanel').hidden = false
+    $('challengeLine').textContent = 'Loading the challenge…'
+    carFromShort(hash, API).then((got) => {
+      if (!got) return
+      if ('error' in got) challenge = got
+      else setChallenge(got)
+      raceView?.render()
+    })
+    return
+  }
   const fromLink = carFromChallenge(location.hash)
   if (fromLink) {
     history.replaceState(null, '', location.pathname + location.search) // the long code is not left in the address bar
@@ -1892,7 +1926,7 @@ $('challengeClear').addEventListener('click', () => {
   raceView?.render()
 })
 window.addEventListener('hashchange', () => {
-  if (location.hash.startsWith('#challenge=')) takeChallenge()
+  if (location.hash.startsWith('#challenge=') || location.hash.startsWith(SHORT_PREFIX)) takeChallenge()
 })
 takeChallenge()
 const today = visit()
