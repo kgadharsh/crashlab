@@ -260,3 +260,61 @@ Tourer are from the first round; the rest from the second, after a retune. "Clea
   or 5 s may be luck. Only dry roads, the default setup and no skill-tree nodes were tested.
 - Extra top speed seems worth little on these tracks: Dragster lost twice. Seeing further helped Scout a little but was not
   worth Hawk's costs.
+
+## 8 Nov 2026: intermediate tyres, second try
+
+Re-added at wet grip ×1.2 and dry top speed ×0.97, then tested with `scripts/nodeCheck.ts` (wet practice, seeds 1 to 3):
+
+| Build | Dry | Wet | Night | Ice |
+|---|---|---|---|---|
+| No nodes, wet practice | 8.0 (157 s) | 7.3 | 6.3 | 0.7 |
+| Intermediate tyres, wet practice | 4.0 | 3.3 | 4.3 | 1.3 |
+
+Almost the same as on 7 Nov: seed 1 was level, seeds 2 and 3 collapsed everywhere (1 or 2 of 8). They are no longer offered in the
+skill tree; `inters` stays a valid node so cars that fitted it still load and race.
+
+## 8 Nov 2026: combinations, Rally tyres and Bumper
+
+`scripts/nodeCheck.ts`, seeds 1 to 3, each car raced on the dry, wet, night and ice Grand Prix (tracks finished of 8,
+then the number of clean races and their mean time). All cars practised on dry roads except "wet-rally".
+
+| Build | Dry | Wet | Night | Ice |
+|---|---|---|---|---|
+| No nodes | 7.7 (2 clean, 149 s) | 3.0 | 3.0 | 2.0 |
+| Grip stack: Tourer, wing, steady | 6.7 (1 clean, 149 s) | 0.3 | 5.0 | 0.0 |
+| Steering stack: Drifter, quick, featherweight | 8.0 (3 clean, 144 s) | 4.3 | 5.3 | 2.0 |
+| Carbon brakes | 6.0 (2 clean, 149 s) | 2.7 | 3.3 | 0.7 |
+| Steady steering | 7.0 (2 clean, 147 s) | 2.0 | 4.0 | 1.7 |
+| Rally tyres | 7.3 (2 clean, 138 s) | 4.3 | 5.7 | 3.7 |
+| Bumper | 8.0 (3 clean, 151 s) | 3.3 | 5.0 | 0.7 |
+| Rally tyres, wet practice | 8.0 (3 clean, 142 s) | 6.3 | 6.0 | 7.3 (2 clean) |
+| No nodes, wet practice (tyre test above) | 8.0 (157 s) | 7.3 | 6.3 | 0.7 |
+
+- **The steering stack beat no nodes on every road** (or tied on ice): stacking Quick steering and the Featherweight
+  chassis on the Drifter frame is too strong. The grip stack is not; it lost on dry, wet and ice.
+- **Rally tyres are too strong:** 11 s faster on dry clean races and better wet, at night and on ice. With wet practice they
+  finished 7.3 of 8 on ice, more than Ice studs ever did, so they also take over the studs' job.
+- **Bumper does what it says:** every dry race clean, 2 s slower than no nodes. On the board, finishing counts first, so it
+  is a little strong on dry roads; it gave no help on ice.
+- Carbon brakes looked weak (one seed collapsed) and Steady steering a fair trade.
+
+## 8 Nov 2026: retest after the fixes, and four new nodes
+
+Same method (`scripts/nodeCheck.ts`, seeds 1 to 3). Fixes: Quick steering and the Featherweight chassis made exclusive; Rally
+tyres 2 points, grip ×0.85, fade power 1.5; Bumper top speed ×0.92. Ice practice baselines are the 7 Nov rows above.
+
+| Build | Dry | Wet | Night | Ice | Result |
+|---|---|---|---|---|---|
+| No nodes (dry practice, from the combinations test) | 7.7 (2 clean, 149 s) | 3.0 | 3.0 | 2.0 | baseline |
+| Drifter + Quick steering (the stack as it can be built now) | 6.0 (2 clean, 146 s) | 2.3 | 4.7 | 1.3 | no longer dominant |
+| Rally tyres, retuned | 6.0 (2 clean, 154 s) | 2.7 | 2.7 | 2.7 | now a little weak |
+| Rally tyres, retuned, wet practice | 6.7 (1 clean, 160 s) | 4.3 | 4.0 | 4.0 | an ice option; worse elsewhere than wet practice alone |
+| Bumper, 8% slower | 8.0 (3 clean, 155 s) | 3.3 | 6.3 | 0.3 | fair: always finishes dry, too slow for gold |
+| Swivel eyes | 1.7 | 0.3 | 1.3 | 0.0 | broke training in all 3 seeds: removed |
+| Driver aids, 1 point | 8.0 (3 clean, 150 s) | 4.3 | 4.0 | 1.3 | a little strong: now 2 points |
+| Traction control, 1 point | 7.3 (1 clean, 166 s) | 5.0 | 8.0 (3 clean) | 5.0 | strong off dry roads, 17 s slower on them: now 2 points |
+| Ice spotter, ice practice | 4.0 | 2.0 | 5.3 | 5.3 | between no node (3.7 on ice) and Ice studs (6.3), with no speed cost: kept |
+
+- Traction control finished all 8 at night in every seed without night practice, as headlights with night practice did.
+  It is the clearest "conditions specialist" so far; its dry-road time is its cost.
+- Driver aids and Traction control at 2 points, and Rally tyres between the two tunings, are untested.

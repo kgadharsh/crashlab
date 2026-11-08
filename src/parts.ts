@@ -8,13 +8,15 @@ import { NODES, type NodeId } from './setup'
 
 export type PartId = NodeId
 export type Progress = { stars: number; gpMedals: Medal[]; racedWet: boolean; racedWeekly: boolean; licence: number } // licence: practice tracks driven round by hand
-export type Branch = 'Eyes' | 'Engine' | 'Tyres' | 'Brain' | 'Practice'
+export type Branch = 'Eyes' | 'Engine' | 'Tyres' | 'Brain' | 'Practice' | 'Body'
 export type Part = { id: PartId; branch: Branch; parent?: PartId; // the node it hangs from in the picture only: nothing has to be fitted first
    name: string; does: string; cost: string; unlock: string; open: (p: Progress) => boolean; max: number; points: number }
 
 const P = (id: PartId) => NODES.find((n) => n.id === id)!
 const node = (id: PartId, rest: Omit<Part, 'id' | 'max' | 'points'>): Part => ({ id, max: P(id).max, points: P(id).cost, ...rest })
 
+// Intermediate tyres stay valid in setup.ts so cars that fitted them still load and race, but they are no longer offered:
+// they lost badly to no tyre node twice (docs/experiments.md, 7 and 8 Nov 2026).
 export const PARTS: Part[] = [
   // Eyes
   node('range', { branch: 'Eyes', name: 'Long rays', does: 'Rays see 320 pixels ahead instead of 200, so bends and blocks show up much sooner. Near walls read exactly as before.', cost: 'The car is 3% slower, and the brain has longer readings to learn to use.', unlock: 'Open from the start', open: () => true }),
@@ -28,17 +30,22 @@ export const PARTS: Part[] = [
   node('feather', { branch: 'Engine', parent: 'quick', name: 'Featherweight chassis', does: 'Half the weight: 20% quicker off the line and the car turns 15% faster.', cost: 'It is light, so the car starts to slide in bends at a 7% lower speed.', unlock: 'Drive 5 practice tracks yourself (Practice → Drive it yourself)', open: (p) => p.licence >= 5 }),
   node('wing', { branch: 'Engine', parent: 'quick', name: 'Downforce wing', does: 'The tyres hold on to a 12% higher speed in bends.', cost: 'Drag: top speed is 7% lower.', unlock: 'Win any Grand Prix medal', open: (p) => p.gpMedals.some((m) => m !== null) }),
   node('brakes', { branch: 'Engine', parent: 'launch', name: 'Carbon brakes', does: 'Braking is 70% stronger, so the car can leave its braking later and still make the bend.', cost: 'Heavier discs: top speed is 2% lower.', unlock: '★ 8', open: (p) => p.stars >= 8 }),
+  node('traction', { branch: 'Engine', parent: 'brakes', name: 'Traction control', does: 'When the car steers hard above its grip limit, the engine eases off so the tyres keep turning.', cost: 'Slower out of long bends, and the brain has less control.', unlock: '★ 15', open: (p) => p.stars >= 15 }),
   node('turbo', { branch: 'Engine', parent: 'brakes', name: 'Turbo', does: 'Top speed is 4% higher for each level.', cost: 'Slower to build speed: acceleration is 15% lower for each level.', unlock: '★ 55', open: (p) => p.stars >= 55 }),
   // Tyres
   node('steady', { branch: 'Tyres', name: 'Steady steering', does: 'The tyres hold on to an 8% higher speed in bends.', cost: 'The car turns 10% more slowly.', unlock: 'Drive 2 practice tracks yourself (Practice → Drive it yourself)', open: (p) => p.licence >= 2 }),
   node('tyres', { branch: 'Tyres', parent: 'steady', name: 'Wet tyres', does: 'Far more grip on a wet road.', cost: 'Top speed is 8% lower on a dry road.', unlock: 'Race the wet Grand Prix once', open: (p) => p.racedWet }),
-  node('inters', { branch: 'Tyres', parent: 'steady', name: 'Intermediate tyres', does: 'Some extra grip on a wet road, for the weeks that may or may not rain. Wet tyres do more, and cancel these.', cost: 'Top speed is 3% lower on a dry road.', unlock: '★ 16', open: (p) => p.stars >= 16 }),
+  node('spotter', { branch: 'Tyres', parent: 'studs', name: 'Ice spotter', does: 'The brain is told when an ice patch is coming up, so it can slow down in time.', cost: 'One more thing for the brain to learn, and it only helps if it learns to use it. Ice studs are the safe choice; this is the fast one.', unlock: '★ 26', open: (p) => p.stars >= 26 }),
   node('studs', { branch: 'Tyres', parent: 'steady', name: 'Ice studs', does: 'Ice patches hold almost like a dry road. Without them the car starts to slide at less than half the speed.', cost: 'The car is 3% slower everywhere.', unlock: '★ 40', open: (p) => p.stars >= 40 }),
+  node('rally', { branch: 'Tyres', parent: 'steady', name: 'Rally tyres', does: 'When the car goes into a bend too fast it still turns, only less: it drifts wide instead of sliding straight on.', cost: 'The car starts to slide at a 15% lower speed.', unlock: '★ 12', open: (p) => p.stars >= 12 }),
   // Brain
   node('brain', { branch: 'Brain', name: 'Bigger brain', does: 'Nine neurons instead of five, so the car can learn trickier driving.', cost: 'Many more connections to learn in the same practice budget.', unlock: '★ 30', open: (p) => p.stars >= 30 }),
   node('lean', { branch: 'Brain', parent: 'brain', name: 'Lean brain', does: 'Three neurons instead of five: far fewer connections, so a round of practice is quick to learn from.', cost: 'It cannot learn trickier driving. A bigger brain overrides it.', unlock: '★ 4', open: (p) => p.stars >= 4 }),
   node('grip', { branch: 'Brain', parent: 'brain', name: 'Grip sense', does: 'The car feels how close its tyres are to sliding, on any road.', cost: 'The sensor weighs the car down: top speed is 3% lower.', unlock: '★ 48', open: (p) => p.stars >= 48 }),
   node('huge', { branch: 'Brain', parent: 'brain', name: 'Huge brain', does: 'Thirteen neurons, for the most that a car can learn.', cost: 'A very large brain to train, and it overrides a bigger or lean brain.', unlock: '★ 60', open: (p) => p.stars >= 60 }),
+  // Body
+  node('bumper', { branch: 'Body', name: 'Bumper', does: 'Once a track, the car survives hitting a wall or a block: it stops dead and has to pull away again.', cost: 'Heavy: top speed is 8% lower, and the stop costs time.', unlock: '★ 35', open: (p) => p.stars >= 35 }),
+  node('aids', { branch: 'Body', parent: 'bumper', name: 'Driver aids', does: 'The car brakes hard by itself when a wall is right ahead and it is too fast to turn away.', cost: 'It also brakes on fast kinks the brain would have made, so laps are slower.', unlock: '★ 22', open: (p) => p.stars >= 22 }),
   // Practice
   node('slot', { branch: 'Practice', name: 'Extra practice track', does: 'Practise on up to 7 tracks instead of 6.', cost: 'Only the point: but more tracks also means fewer training rounds.', unlock: 'Win a gold medal in any Grand Prix', open: (p) => p.gpMedals.includes('gold') }),
   node('slot2', { branch: 'Practice', parent: 'slot', name: 'Second extra track', does: 'Practise on up to 8 tracks.', cost: 'Even fewer training rounds.', unlock: 'Win gold in both Grand Prix', open: (p) => p.gpMedals.filter((m) => m === 'gold').length >= 2 }),

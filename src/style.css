@@ -437,6 +437,8 @@ select {
 /* ---------- the skill tree ---------- */
 #treeSvg { margin: 8px -4px 0; }
 .tree { width: 100%; height: auto; display: block; user-select: none; }
+/* phones: draw the tree at full size and let it scroll sideways, so a node is big enough to hit */
+@media (max-width: 699px) { #treeSvg { overflow-x: auto; margin: 8px 0 0; } .tree { width: 560px; max-width: none; } }
 .tree .link { stroke: #2b3440; stroke-width: 3; stroke-linecap: round; }
 .tree .link.lit { stroke-width: 4; stroke-dasharray: 6 8; animation: flow 1.2s linear infinite; filter: drop-shadow(0 0 4px currentColor); }
 .tree .cross { stroke: #232a34; stroke-width: 1.5; stroke-dasharray: 2 6; }
@@ -469,6 +471,13 @@ select {
 .nhead { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
 .nt { font: 800 20px var(--head); letter-spacing: 0.06em; text-transform: uppercase; }
 .ncard .tip { margin: 6px 0 0; }
+.ncard.pop { position: absolute; width: 270px; z-index: 5; margin: 0; background: #1b222b; box-shadow: 0 8px 28px rgba(0,0,0,0.55); }
+.ncard.pop .nt { font-size: 16px; flex: 1 1 100%; }
+.ncard.pop .nhead { gap: 6px; }
+.ncard.stuck { position: sticky; bottom: 8px; z-index: 5; background: #1b222b; box-shadow: 0 -6px 18px rgba(0,0,0,0.5); }
+.nclose { display: none; }
+.ncard.pop .nclose { display: block; position: absolute; top: 2px; right: 6px; background: none; border: 0; color: var(--muted); font-size: 20px; line-height: 1; cursor: pointer; }
+.ncard.pop .nt { padding-right: 18px; }
 .ncard .nd { color: var(--text); }
 .ncard .nl { color: var(--accent); }
 

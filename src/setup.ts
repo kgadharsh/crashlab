@@ -24,7 +24,7 @@ export const WEATHERS: Weather[] = ['dry', 'wet', 'both']
 // POINT_BUDGET, so playing more opens new choices but never makes a car stronger, and each node also costs something
 // on the road. A player who fakes an unlock gains nothing unfair, and the server rejects a car that spends too much.
 // A node is on at level 1 (true in saved cars). Levels above 1 are allowed by the format, but no wave-1 node has them.
-export type NodeId = 'range' | 'focus' | 'lens' | 'wide' | 'lights' | 'launch' | 'quick' | 'brakes' | 'turbo' | 'feather' | 'wing' | 'steady' | 'tyres' | 'inters' | 'studs' | 'brain' | 'lean' | 'huge' | 'grip' | 'slot' | 'slot2'
+export type NodeId = 'range' | 'focus' | 'lens' | 'wide' | 'lights' | 'launch' | 'quick' | 'brakes' | 'turbo' | 'feather' | 'wing' | 'steady' | 'tyres' | 'inters' | 'studs' | 'brain' | 'lean' | 'huge' | 'grip' | 'slot' | 'slot2' | 'rally' | 'bumper' | 'spotter' | 'aids' | 'traction'
 export const NODES: { id: NodeId; max: number; cost: number }[] = [
   { id: 'range', max: 1, cost: 2 }, // long rays: RANGE_STEP further and 3% slower (levels of 40 were tried: one or two bought nothing, scripts/nodeCheck.ts)
   { id: 'focus', max: 1, cost: 1 }, // rays bunch towards the front: more detail ahead, less to the sides
@@ -36,6 +36,11 @@ export const NODES: { id: NodeId; max: number; cost: number }[] = [
   { id: 'lean', max: 1, cost: 1 }, // lean brain: three neurons, quick to train but limited
   { id: 'huge', max: 1, cost: 3 }, // huge brain: thirteen neurons
   { id: 'slot2', max: 1, cost: 1 }, // a second extra practice track
+  { id: 'rally', max: 1, cost: 2 }, // rally tyres: slide sooner, but turning fades gently above the limit
+  { id: 'bumper', max: 1, cost: 2 }, // bumper: survive one hit a track, stopping dead
+  { id: 'spotter', max: 1, cost: 1 }, // ice spotter: the brain is told an ice patch is coming
+  { id: 'aids', max: 1, cost: 2 }, // driver aids: the car brakes itself for a wall right ahead
+  { id: 'traction', max: 1, cost: 2 }, // traction control: no power while steering hard above the grip limit
   { id: 'launch', max: 1, cost: 1 }, // quicker acceleration, lower top speed
   { id: 'quick', max: 1, cost: 2 }, // faster steering, less grip and a little lower top speed
   { id: 'feather', max: 1, cost: 2 }, // featherweight chassis: quicker off the line and in turns, tyres let go sooner
@@ -49,6 +54,9 @@ export const NODES: { id: NodeId; max: number; cost: number }[] = [
   { id: 'slot', max: 1, cost: 1 }, // one more practice track
 ]
 export const NODE_IDS = NODES.map((n) => n.id)
+// Pairs that cannot both be fitted: stacked together they beat a car without them on every road (docs/experiments.md, 8 Nov 2026)
+export const EXCLUSIVE: [NodeId, NodeId][] = [['quick', 'feather']]
+export const rivalOf = (id: NodeId): NodeId | null => EXCLUSIVE.flatMap(([a, c]) => (a === id ? [c] : c === id ? [a] : []))[0] ?? null
 export const POINT_BUDGET = 10
 // What a car has fitted: a level per node. "eyes" is long-range eyes from before the tree, read as ray range 3.
 export type Parts = Partial<Record<NodeId | 'eyes', number | boolean>>
@@ -135,6 +143,9 @@ export const INTERS_GRIP = 1.2
 export const INTERS_DRY_SPEED = 0.97
 export const LEAN_HIDDEN = 3
 export const HUGE_HIDDEN = 13
+export const RALLY_GRIP = 0.85 // 0.9 was too strong (docs/experiments.md, 8 Nov 2026)
+export const RALLY_POWER = 1.5 // instead of GRIP_POWER 2: above the limit, turning fades more gently (1 was too strong)
+export const BUMPER_TOP_SPEED = 0.92 // 0.95 finished every dry race only 2 s slower
 export const LAUNCH_ACCEL = 1.5
 export const LAUNCH_TOP_SPEED = 0.96
 export const QUICK_TURN = 1.3
@@ -155,7 +166,7 @@ export const shapeOf = (s: Sensors, nitro = false): Shape => ({ inputs: s.count 
 export const brainShape = (b: Build): Shape => {
   const base = shapeOf(b.sensors, !!b.perks?.nitro)
   const hidden = b.parts?.huge ? HUGE_HIDDEN : b.parts?.brain ? BIG_HIDDEN : b.parts?.lean ? LEAN_HIDDEN : HIDDEN
-  return { inputs: base.inputs + (b.parts?.grip ? 1 : 0), hidden, outputs: base.outputs }
+  return { inputs: base.inputs + (b.parts?.grip ? 1 : 0) + (b.parts?.spotter ? 1 : 0), hidden, outputs: base.outputs }
 }
 export const genomeLength = (sh: Shape) => sh.hidden * sh.inputs + sh.hidden + sh.outputs * sh.hidden + sh.outputs
 
@@ -169,6 +180,11 @@ export type CarSpec = {
   wetTyres?: boolean // grip on a wet road is raised; top speed on a dry one is lowered
   gripSense?: boolean // the brain gets one more input: speed against the speed the tyres can turn at
   brake?: number // multiplies braking force (carbon brakes)
+  gripPower?: number // how sharply turning fades above the grip speed (rally tyres)
+  bumper?: boolean // survives one hit a track
+  spotter?: boolean // one more input: an ice patch ahead
+  aidRay?: number // driver aids: the ray that looks straight ahead
+  traction?: boolean // traction control
   wetGrip?: number // what tyres multiply a wet road's grip by (wet tyres or intermediates)
   dryTop?: number // what those tyres multiply top speed by on a dry road
   rayScale?: number // what a ray's distance is divided by for the brain (left out: rayRange). Ray range keeps the
@@ -190,6 +206,9 @@ export function rayAngles(s: Sensors, focus = false): number[] {
   })
 }
 
+// The ray pointing most nearly straight ahead
+const middleRay = (angles: number[]) => angles.reduce((best, a, i) => (Math.abs(a) < Math.abs(angles[best]) ? i : best), 0)
+
 // balance 0.5 is the original car: top speed 6 and grip up to speed 3
 export function specOf(b: Build): CarSpec {
   const p = b.parts
@@ -206,12 +225,14 @@ export function specOf(b: Build): CarSpec {
   if (on('studs')) maxSpeed *= STUDS_TOP_SPEED
   if (on('lights')) maxSpeed *= LIGHTS_TOP_SPEED
   if (on('brakes')) maxSpeed *= BRAKES_TOP_SPEED
+  if (on('bumper')) maxSpeed *= BUMPER_TOP_SPEED
   if (levelOf(p, 'turbo')) maxSpeed *= Math.pow(TURBO_TOP, levelOf(p, 'turbo'))
   let gripSpeed = lerp(3.5, 2.5, b.balance)
   if (on('wing')) gripSpeed *= WING_GRIP
   if (on('quick')) gripSpeed *= QUICK_GRIP
   if (on('feather')) gripSpeed *= FEATHER_GRIP
   if (on('steady')) gripSpeed *= STEADY_GRIP
+  if (on('rally')) gripSpeed *= RALLY_GRIP
   // nodes that change acceleration or steering rate stack, and a car with none of them gets exactly what it always had
   let accel = 1
   if (on('launch')) accel *= LAUNCH_ACCEL
@@ -241,6 +262,11 @@ export function specOf(b: Build): CarSpec {
     nitro: !!b.perks?.nitro,
     ...(on('tyres') ? { wetTyres: true, wetGrip: WET_TYRE_GRIP, dryTop: WET_TYRE_DRY_SPEED } : on('inters') ? { wetTyres: true, wetGrip: INTERS_GRIP, dryTop: INTERS_DRY_SPEED } : {}),
     ...(on('brakes') ? { brake: BRAKE_FORCE } : {}),
+    ...(on('rally') ? { gripPower: RALLY_POWER } : {}),
+    ...(on('bumper') ? { bumper: true } : {}),
+    ...(on('spotter') ? { spotter: true } : {}),
+    ...(on('aids') ? { aidRay: middleRay(rayAngles(b.sensors, on('focus'))) } : {}),
+    ...(on('traction') ? { traction: true } : {}),
     ...(on('grip') ? { gripSense: true } : {}),
     ...(accel !== 1 ? { accel } : {}),
     ...(turn !== 1 ? { turn } : {}),
@@ -273,6 +299,7 @@ export function buildProblem(b: unknown, practiceCount: number): string | null {
     }
     if (d.parts.eyes && d.parts.range) return 'unknown parts'
     if (pointsUsed(d.parts) > POINT_BUDGET) return 'it spends more than ' + POINT_BUDGET + ' points'
+    for (const [a, c] of EXCLUSIVE) if (levelOf(d.parts, a) && levelOf(d.parts, c)) return 'it fits both ' + a + ' and ' + c + ', which cannot go together'
   }
   const p = d.practice
   if (p.length < LIMITS.practice[0] || p.length > maxPractice(d)) return 'wrong number of practice tracks'

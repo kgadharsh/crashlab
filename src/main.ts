@@ -1,7 +1,7 @@
 import './style.css'
 import { GOLD_TIME, GRAND_PRIXES, RACE_COUNT, medalFor, raceCar } from './race'
 import { SHORT_PREFIX, carFromChallenge, carFromShort, challengeCode, shortCode } from './challenge'
-import { DEFAULT_BUILD, CHASSIS, KEEP_TRAINING_SHARE, LIMITS, POPULATION, REPLAY_EVERY, TRAINING_BUDGET, buildProblem, cleanBuild, genomeLength, brainShape, specOf, levelOf, maxPractice, maxRays, maxSpread, pointsUsed, POINT_BUDGET, type Build, type Parts } from './setup'
+import { DEFAULT_BUILD, CHASSIS, KEEP_TRAINING_SHARE, LIMITS, POPULATION, REPLAY_EVERY, TRAINING_BUDGET, buildProblem, cleanBuild, genomeLength, brainShape, specOf, levelOf, maxPractice, maxRays, maxSpread, rivalOf, pointsUsed, POINT_BUDGET, type Build, type Parts } from './setup'
 import { CHECKPOINTS, NITRO_STEPS, STALL_STEPS, createCar, drive, getInputs, step, type Brain, type Car } from './sim'
 import { think } from './brain'
 import { PRACTICE, PRACTICE_COUNT, practiceOnRoad, practiceTrack, trackFeatures, trackStats, type Track } from './track'
@@ -184,7 +184,7 @@ document.querySelector('#app')!.innerHTML = `
     <div id="skills" class="side">
       <div class="panel" data-fixed>
         <h2>Skill tree<span class="aside" id="partCount"></span></h2>
-        <p class="tip" style="margin-top:0">Every car has ${POINT_BUDGET} points to spend. Tap a node to read it, then fit it. Each node changes what the car can do and costs something on the road, so spend the points on what this week's tracks need. Racing, stars, the Weekly Grand Prix and driving by hand unlock more. The lines only group related nodes: there is no order, so fit any unlocked node at any time.</p>
+        <p class="tip" style="margin-top:0">Every car has ${POINT_BUDGET} points to spend. Point at a node (or tap it) to read it, then fit it. Each node changes what the car can do and costs something on the road, so spend the points on what this week's tracks need. Racing, stars, the Weekly Grand Prix and driving by hand unlock more. The lines only group related nodes: there is no order, so fit any unlocked node at any time.</p>
         <div id="treeSvg"></div>
         <div class="ncard" id="treeDetail"></div>
         <div class="actions"><button class="btn" id="resetTree">Reset skill tree</button><button class="btn primary" id="toPractice" style="flex:1">Go to practice →</button></div>
@@ -1040,6 +1040,9 @@ function setLevel(id: PartId, level: number) {
   if (id === 'range') delete parts.eyes // long-range eyes from before the tree become ray range only when range is changed
   if (level) parts[id] = level === 1 ? true : level
   else delete parts[id]
+  // fitting one of an exclusive pair takes the other off
+  const rival = rivalOf(id)
+  if (level && rival) delete parts[rival]
   if (pointsUsed(parts)) b.parts = parts
   else delete b.parts
   // the extra practice track goes when the slot does

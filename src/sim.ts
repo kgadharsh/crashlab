@@ -27,6 +27,8 @@ export const GRIP_POWER = 2
 // ---------- PROGRESS SETTINGS ----------
 export const CHECKPOINT_RADIUS = 50
 const MIN_FORWARD_SPEED = 0.5 // slower than this (or reversing) earns no checkpoints
+export const AIDS_RANGE = 40 // driver aids brake for a wall this close straight ahead
+export const TRACTION_STEER = 0.6 // traction control cuts power above this much steering
 export const STALL_STEPS = 300 // 5 seconds without a new checkpoint ends an attempt
 export const MAX_STEPS = 2400 // 40 seconds is the longest training attempt (about one lap)
 export const RACE_STEPS = 6000 // 100 seconds is the longest race lap
@@ -48,6 +50,7 @@ export type Car = {
   steerChange: number // total change in steering, for smoothness
   lastSteer: number
   boost: number // nitro steps left
+  bumps: number // bumper hits left on this track
   near: Float64Array // walls a ray could reach from nearAt, refreshed as the car moves (see nearbyWalls)
   touch: Float64Array // the few of them the car itself could touch (the crash test only needs these)
   nearAt: Point
@@ -70,6 +73,7 @@ export function createCar(track: Track = DEFAULT_TRACK, spec: CarSpec = DEFAULT_
     steerChange: 0,
     lastSteer: 0,
     boost: spec.nitro ? NITRO_STEPS : 0,
+    bumps: spec.bumper ? 1 : 0,
     near: new Float64Array(0),
     touch: new Float64Array(0),
     nearAt: { x: Infinity, y: Infinity },
@@ -235,15 +239,22 @@ export function step(car: Car, input: Input) {
   const gripSpeed = gripSpeedOf(car)
 
   const accel = car.spec.accel ? ACCEL * car.spec.accel : ACCEL
-  const pedal = input.throttle < 0 && car.spec.brake ? car.spec.brake : 1 // carbon brakes bite harder
-  car.speed += input.throttle * pedal * (boosting ? accel * NITRO_ACCEL : accel)
+  let throttle = input.throttle
+  // driver aids: brake hard when a wall is right ahead and the car is too fast to turn away
+  if (car.spec.aidRay !== undefined && car.speed > gripSpeed && car.rays[car.spec.aidRay] < AIDS_RANGE) throttle = -1
+  // traction control: no power while steering hard above the grip limit
+  if (car.spec.traction && car.speed > gripSpeed && Math.abs(input.steer) > TRACTION_STEER) throttle = Math.min(throttle, 0)
+  const pedal = throttle < 0 && car.spec.brake ? car.spec.brake : 1 // carbon brakes bite harder
+  car.speed += throttle * pedal * (boosting ? accel * NITRO_ACCEL : accel)
   car.speed *= FRICTION
   if (car.speed > maxSpeed) car.speed = maxSpeed
   if (car.speed < MAX_REVERSE) car.speed = MAX_REVERSE
 
-  const turnScale = car.speed > gripSpeed ? Math.pow(gripSpeed / car.speed, GRIP_POWER) : 1
+  const turnScale = car.speed > gripSpeed ? Math.pow(gripSpeed / car.speed, car.spec.gripPower ?? GRIP_POWER) : 1 // rally tyres fade more gently
   car.angle += input.steer * (car.spec.turn ? TURN_RATE * car.spec.turn : TURN_RATE) * car.speed * turnScale
 
+  const fromX = car.x
+  const fromY = car.y
   car.x += Math.cos(car.angle) * car.speed
   car.y += Math.sin(car.angle) * car.speed
   car.steps++
@@ -253,8 +264,16 @@ export function step(car: Car, input: Input) {
 
   const near = nearbyWalls(car)
   if (hitsWall(car.touch, car)) {
-    car.dead = true
-    return
+    // a bumper takes one hit a track: the car is put back where it was and stops dead
+    if (car.bumps > 0) {
+      car.bumps--
+      car.x = fromX
+      car.y = fromY
+      car.speed = 0
+    } else {
+      car.dead = true
+      return
+    }
   }
 
   updateProgress(car)
@@ -273,11 +292,21 @@ function onIce(car: Car): boolean {
   return car.track.ice!.some(([a, b]) => k >= a && k < b)
 }
 
+// Is there an ice patch in the next two stretches of the lap?
+function iceAhead(car: Car): boolean {
+  if (!car.track.ice) return false
+  return [1, 2].some((o) => {
+    const k = (car.passed + o) % CHECKPOINTS
+    return car.track.ice!.some(([a, b]) => k >= a && k < b)
+  })
+}
+
 // What the brain sees: each ray distance (0 to 1) and the speed, then with grip sense how near the tyres are to letting go
 export function getInputs(car: Car): number[] {
   const scale = car.spec.rayScale ?? car.spec.rayRange
   const inputs = [...car.rays.map((d) => d / scale), car.speed / car.spec.maxSpeed]
   if (car.spec.gripSense) inputs.push(Math.min(2, Math.max(0, car.speed) / gripSpeedOf(car)) / 2) // 0.5 is the limit
+  if (car.spec.spotter) inputs.push(iceAhead(car) ? 1 : 0) // ice spotter: an ice patch in the next two stretches
   if (car.spec.nitro) inputs.push(car.boost / NITRO_STEPS) // how much charge is left
   return inputs
 }

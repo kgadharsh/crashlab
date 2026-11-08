@@ -2,7 +2,7 @@
 // the full budget, then races every car on four Grand Prix: dry, wet, at night and with ice patches (the last two are a
 // fixed weekly Grand Prix with that condition). A node that wins everywhere is too strong; one that never helps is not
 // worth a point. The night and ice cars practise in that condition, with and without the node that answers it.
-// Usage: npx tsx scripts/nodeCheck.ts train <out.json> <seed> [variant]   (one training per variant, with rests between them)
+// Usage: npx tsx scripts/nodeCheck.ts train <out.json> <seed> [variant[,variant...] or name@seed,...]   (one training per variant, with rests between them)
 //        npx tsx scripts/nodeCheck.ts report <out.json>
 import { readFileSync, writeFileSync, existsSync } from 'node:fs'
 import { createTraining } from '../src/training'
@@ -25,6 +25,20 @@ const VARIANTS: Record<string, Build> = {
   quick: { ...DEFAULT_BUILD, parts: { quick: true } },
   wing: { ...DEFAULT_BUILD, parts: { wing: true } },
   'wet-none': { ...DEFAULT_BUILD, weather: 'wet' },
+  // 8 Nov 2026: combinations that stack grip or steering, two cheap untested nodes, and two new ones
+  'stack-grip': { ...DEFAULT_BUILD, chassis: 'tourer', parts: { wing: true, steady: true } },
+  'stack-turn': { ...DEFAULT_BUILD, chassis: 'drifter', parts: { quick: true, feather: true } }, // no longer allowed: quick and feather are exclusive
+  brakes: { ...DEFAULT_BUILD, parts: { brakes: true } },
+  steady: { ...DEFAULT_BUILD, parts: { steady: true } },
+  rally: { ...DEFAULT_BUILD, parts: { rally: true } },
+  'wet-rally': { ...DEFAULT_BUILD, weather: 'wet', parts: { rally: true } },
+  bumper: { ...DEFAULT_BUILD, parts: { bumper: true } },
+  'turn-quick': { ...DEFAULT_BUILD, chassis: 'drifter', parts: { quick: true } }, // the steering stack as it can be built now
+  // the second round of ideas
+  aids: { ...DEFAULT_BUILD, parts: { aids: true } },
+  traction: { ...DEFAULT_BUILD, parts: { traction: true } },
+  'ice-spotter': { ...DEFAULT_BUILD, cond: { ice: true }, parts: { spotter: true } },
+  'wet-inters': { ...DEFAULT_BUILD, weather: 'wet', parts: { inters: true } }, // re-added 8 Nov 2026 at wet grip 1.2, dry top 0.97
   range3: { ...DEFAULT_BUILD, parts: { range: 3 } },
   'night-none': { ...DEFAULT_BUILD, cond: { night: true } },
   'night-lights': { ...DEFAULT_BUILD, cond: { night: true }, parts: { lights: true } },
@@ -37,8 +51,11 @@ const cell = (r: Result) => r.finished + '/8' + (r.finished === 8 ? ' ' + r.tota
 const [mode, out, seedArg, only] = process.argv.slice(2)
 if (mode === 'train') {
   const seed = Number(seedArg)
-  const names = Object.keys(VARIANTS).filter((v) => !only || v === only)
-  for (const [n, variant] of names.entries()) {
+  // "name@seed,name@seed" runs those jobs with their own seeds; "name,name" runs those names with the seed given
+  const jobs: [string, number][] = only
+    ? only.split(',').map((j) => (j.includes('@') ? ([j.split('@')[0], Number(j.split('@')[1])] as [string, number]) : ([j, seed] as [string, number])))
+    : Object.keys(VARIANTS).map((v) => [v, seed] as [string, number])
+  for (const [n, [variant, seed]] of jobs.entries()) {
     if (n > 0) await new Promise((r) => setTimeout(r, REST_MS))
     const build = VARIANTS[variant]
     const training = createTraining(build, seed)

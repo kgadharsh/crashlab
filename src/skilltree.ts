@@ -1,25 +1,27 @@
 // The skill tree as a network: the car in the middle, five branches running out from it, and a node at each step. A node
-// glows when it is fitted, is plain when it can be fitted, and shows a lock when it has not been earned yet. Tapping a node
-// opens its card underneath, where it is fitted or taken off. The rules live in parts.ts and setup.ts; this file only draws.
+// glows when it is fitted, is plain when it can be fitted, and shows a lock when it has not been earned yet. On a wide screen
+// pointing at a node (or clicking it) opens its card in a popover beside it, so nobody scrolls between the tree and the card; on a
+// phone the card sits under the tree and stays stuck to the bottom of the screen while the tree is on show. It is where a node is fitted or taken off. The rules live in parts.ts and setup.ts; this file only draws.
 import { PARTS, type Branch, type Part, type PartId, type Progress } from './parts'
-import { POINT_BUDGET, levelOf, pointsUsed, type Build } from './setup'
+import { NODES, POINT_BUDGET, levelOf, pointsUsed, rivalOf, type Build } from './setup'
 
 const NS = 'http://www.w3.org/2000/svg'
 const CX = 290
 const CY = 306
 const BRANCHES: { name: Branch; angle: number; colour: string; blurb: string }[] = [
   { name: 'Eyes', angle: -90, colour: '#3fd0ff', blurb: 'what the car sees' },
-  { name: 'Engine', angle: -18, colour: '#ffb31a', blurb: 'how it moves' },
-  { name: 'Tyres', angle: 54, colour: '#3ddc84', blurb: 'what it grips' },
-  { name: 'Brain', angle: 126, colour: '#b48cff', blurb: 'how it thinks' },
-  { name: 'Practice', angle: 198, colour: '#ff7a9c', blurb: 'how it trains' },
+  { name: 'Engine', angle: -30, colour: '#ffb31a', blurb: 'how it moves' },
+  { name: 'Tyres', angle: 30, colour: '#3ddc84', blurb: 'what it grips' },
+  { name: 'Body', angle: 90, colour: '#f4f6f8', blurb: 'what it can take' },
+  { name: 'Brain', angle: 150, colour: '#b48cff', blurb: 'how it thinks' },
+  { name: 'Practice', angle: 210, colour: '#ff7a9c', blurb: 'how it trains' },
 ]
 const ICON: Record<PartId, string> = {
   range: '🔭', focus: '🎯', lens: '👀', lights: '🔦',
   launch: '🚀', quick: '⚡', feather: '🪶', wing: '✈️',
   tyres: '🌧️', steady: '🧭', studs: '❄️',
   brain: '🧠', grip: '🧲', slot: '🏁',
-  wide: '↔️', brakes: '🛑', turbo: '🌀', inters: '💧', lean: '🍃', huge: '🐘', slot2: '🗺️',
+  wide: '↔️', rally: '🏔️', bumper: '🛡️', spotter: '🧊', aids: '🚨', traction: '⚙️', brakes: '🛑', turbo: '🌀', inters: '💧', lean: '🍃', huge: '🐘', slot2: '🗺️',
 }
 const R0 = 126
 const RSTEP = 48
@@ -43,9 +45,14 @@ export type TreeDeps = {
 
 export function createSkillTree(d: TreeDeps) {
   let selected: PartId = 'range'
+  let shown = false // wide screens: is the popover open
+  let centred = false // phones: the tree is wider than the screen, so it starts scrolled to the car in the middle
+  const wide = window.matchMedia('(min-width: 700px)')
+  const hoverable = window.matchMedia('(hover: hover)')
   const svg = el('svg', { viewBox: '0 0 580 612', role: 'group', 'aria-label': 'Skill tree' })
   svg.classList.add('tree')
   d.svgBox.replaceChildren(svg)
+  d.svgBox.style.position = 'relative'
 
   // Each branch is a small tree: a node hangs from its parent, siblings fan out across the branch's slice of the circle, and
   // depth sets the distance from the car. Leaves get evenly spaced angles and a parent sits at the middle of its children.
@@ -54,7 +61,7 @@ export function createSkillTree(d: TreeDeps) {
   for (const br of BRANCHES) {
     const nodes = PARTS.filter((p) => p.branch === br.name)
     const leaves = nodes.filter((n) => !nodes.some((m) => m.parent === n.id)).length
-    const step = Math.min(24, 64 / Math.max(1, leaves))
+    const step = Math.min(22, 50 / Math.max(1, leaves))
     let next = 0
     const place = (part: Part, depth: number): number => {
       const children = kids(part.id, br.name)
@@ -104,8 +111,14 @@ export function createSkillTree(d: TreeDeps) {
     pips.textContent = String(part.points)
     const pick = () => {
       selected = part.id
+      shown = true
       render()
     }
+    let intent: number | undefined
+    g.addEventListener('pointerenter', (e) => {
+      if (e.pointerType === 'mouse' && wide.matches && hoverable.matches) intent = window.setTimeout(pick, 110) // a short pause, so sweeping across the tree does not flicker
+    })
+    g.addEventListener('pointerleave', () => window.clearTimeout(intent))
     g.addEventListener('click', pick)
     g.addEventListener('keydown', (e) => {
       if (e.key === 'Enter' || e.key === ' ') {
@@ -135,8 +148,36 @@ export function createSkillTree(d: TreeDeps) {
   card.cost.className = 'tip nc'
   card.lock.className = 'tip nl'
   const head = Object.assign(document.createElement('div'), { className: 'nhead' })
-  head.append(card.title, card.btn)
+  const close = Object.assign(document.createElement('button'), { type: 'button', className: 'nclose', textContent: '×', ariaLabel: 'Close' })
+  close.addEventListener('click', () => {
+    shown = false
+    render()
+  })
+  head.append(card.title, card.btn, close)
   d.detail.replaceChildren(head, card.does, card.cost, card.lock)
+  // wide: the card floats over the tree beside the node; narrow: it sits under the tree
+  const dock = () => {
+    const pop = wide.matches
+    d.detail.classList.toggle('pop', pop)
+    d.detail.classList.toggle('stuck', !pop)
+    if (pop) d.svgBox.appendChild(d.detail)
+    else d.svgBox.after(d.detail)
+    render()
+  }
+  wide.addEventListener('change', dock)
+  // clicking the empty tree, or pressing Escape, puts the popover away
+  svg.addEventListener('click', (e) => {
+    if (wide.matches && !(e.target as Element).closest('.node')) {
+      shown = false
+      render()
+    }
+  })
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && shown && wide.matches) {
+      shown = false
+      render()
+    }
+  })
   card.btn.addEventListener('click', () => {
     const part = PARTS.find((p) => p.id === selected)!
     const level = levelOf(d.getBuild().parts, part.id)
@@ -157,7 +198,7 @@ export function createSkillTree(d: TreeDeps) {
       n.g.classList.toggle('on', level > 0)
       n.g.classList.toggle('locked', !unlocked)
       n.g.classList.toggle('short', unlocked && level === 0 && !fits) // earned but not enough points left
-      n.g.classList.toggle('sel', part.id === selected)
+      n.g.classList.toggle('sel', part.id === selected && (shown || !wide.matches))
       n.lock.style.display = unlocked ? 'none' : ''
       n.g.setAttribute('aria-label', part.name + ', ' + (level ? 'fitted' : unlocked ? 'not fitted' : 'locked'))
       n.g.setAttribute('aria-pressed', String(part.id === selected))
@@ -174,6 +215,10 @@ export function createSkillTree(d: TreeDeps) {
     ring.classList.toggle('full', used >= POINT_BUDGET)
     hubTop.textContent = String(POINT_BUDGET - used)
     hubSub.textContent = 'POINTS LEFT'
+    if (!centred && d.svgBox.clientWidth > 0 && d.svgBox.scrollWidth > d.svgBox.clientWidth) {
+      d.svgBox.scrollLeft = (d.svgBox.scrollWidth - d.svgBox.clientWidth) / 2
+      centred = true
+    }
     // the card
     const part = PARTS.find((p) => p.id === selected)!
     const unlocked = part.open(prog)
@@ -185,11 +230,32 @@ export function createSkillTree(d: TreeDeps) {
     card.cost.textContent = 'Cost: ' + part.cost
     card.lock.textContent = unlocked ? '' : 'Locked · ' + part.unlock
     card.btn.hidden = false
-    card.btn.disabled = !unlocked && level === 0 ? true : level === 0 && used + part.points > POINT_BUDGET
-    card.btn.textContent = !unlocked && level === 0 ? 'Locked' : level >= part.max ? 'Take off' : level ? '+1 level' : used + part.points > POINT_BUDGET ? 'Not enough points' : 'Fit it'
+    // one of an exclusive pair: fitting it takes the other off, which also frees that one's points
+    const rival = rivalOf(part.id)
+    const rivalOn = rival ? levelOf(b.parts, rival) : 0
+    const freed = rivalOn ? rivalOn * (NODES.find((n) => n.id === rival)?.cost ?? 0) : 0
+    const fits = used - freed + part.points <= POINT_BUDGET
+    const rivalName = rival ? PARTS.find((p) => p.id === rival)!.name : ''
+    card.btn.disabled = !unlocked && level === 0 ? true : level === 0 && !fits
+    card.btn.textContent = !unlocked && level === 0 ? 'Locked' : level >= part.max ? 'Take off' : level ? '+1 level' : !fits ? 'Not enough points' : rivalOn ? 'Swap for ' + rivalName : 'Fit it'
+    if (rival) card.lock.textContent = (card.lock.textContent ? card.lock.textContent + ' · ' : '') + 'Only one of this and ' + rivalName + ' can be fitted.'
     card.btn.classList.toggle('primary', level < part.max)
+    // on a wide screen the card is a popover beside the chosen node (hidden until a node is chosen)
+    const pop = wide.matches
+    d.detail.hidden = pop && !shown
+    if (pop && shown) {
+      const box = d.svgBox.getBoundingClientRect()
+      const r = nodeEls.get(part.id)!.g.getBoundingClientRect()
+      const cx = r.left + r.width / 2 - box.left
+      const w = d.detail.offsetWidth
+      const left = cx < box.width / 2 ? r.right - box.left + 8 : r.left - box.left - w - 8
+      const top = Math.max(0, Math.min(r.top + r.height / 2 - box.top - 24, box.height - d.detail.offsetHeight))
+      d.detail.style.left = Math.max(0, Math.min(left, box.width - w)) + 'px'
+      d.detail.style.top = top + 'px'
+    }
     return { used, open }
   }
+  dock()
   return { render, select: (id: PartId) => ((selected = id), render()) }
 }
 
