@@ -21,7 +21,7 @@ import { counts, hasRaced, logEvent, playtestNotes } from './playLog'
 import { COL, H, W, clear, drawBrain, drawCar, drawCrash, drawMinimap, drawRays, drawSensorFan, drawThumb, drawTrack, fanFrame, fitTrack, follow, lookAt, newCamera, withCamera } from './draw'
 
 // ---------- SAVED STATE ----------
-const KEYS = { draft: 'crashlab.draft', car: 'crashlab.car', previous: 'crashlab.previous', challenge: 'crashlab.challenge', shelf: 'crashlab.shelf' }
+const KEYS = { draft: 'crashlab.draft', car: 'crashlab.car', previous: 'crashlab.previous', challenge: 'crashlab.challenge', shelf: 'crashlab.shelf', bestLaps: 'crashlab.bestlaps', lastCurve: 'crashlab.lastcurve' }
 function load<T>(key: string): T | null {
   try {
     const text = localStorage.getItem(key)
@@ -123,6 +123,7 @@ document.querySelector('#app')!.innerHTML = `
   <div class="shelfpop" id="shelfPop" role="dialog" aria-label="My cars" hidden>
     <div class="spHead"><b>My cars</b><span id="spCount"></span></div>
     <div class="spNow" id="spNow"></div>
+    <div class="slot" id="spPrev" hidden><span id="spPrevText"></span><button class="btn small" id="spSwap">Switch back</button></div>
     <div class="shelf" id="spShelf"></div>
     <p class="tip" id="spEmpty" style="margin-top:0"></p>
     <div class="actions"><button class="btn small primary" id="spShelve">Put your car on the shelf</button></div>
@@ -211,6 +212,7 @@ document.querySelector('#app')!.innerHTML = `
           <button class="btn primary" id="train">Start training</button>
           <button class="btn" id="keep">Keep training</button>
           <button class="btn" id="shelveQuick">Save to shelf</button>
+          <button class="btn" id="swapQuick" hidden>Back to previous car</button>
           <button class="btn" id="skip" hidden>Skip to the end</button>
         </div>
         <p class="tip" id="keepHint" style="margin-top:8px"></p>
@@ -773,9 +775,11 @@ function finishTraining(f: Finish) {
   carBrain = genomeToBrain(f.genome, brainShape(r.build))
   save(KEYS.car, carToJson(car))
   drawGraph(r.history)
+  lastCurves[refKey(r.build)] = r.history.map((h) => Math.round(h.best * 1000) / 1000) // the next run compares itself with this one
+  save(KEYS.lastCurve, lastCurves)
   // the test drive only starts if you are watching it; from another tab the car is simply ready
   const here = tab === 'practice'
-  const worse = r.keep ? ' If it feels worse, switch back with "Switch to previous car" under Your car.' : ''
+  const worse = r.keep ? ' If it feels worse, press "Back to previous car" next to Keep training, or find it under My cars.' : ''
   stopTraining('Done: ' + f.generations + ' rounds of training. ' + (here ? 'Here is your car driving its first lap.' : 'Your new car is ready: watch it drive in Practice, or race it.') + worse)
   renderChip()
   raceView?.render()
@@ -796,6 +800,7 @@ function startTraining(keep: boolean) {
   const watch = input('watchAll').checked
   const budget = keep ? TRAINING_BUDGET * KEEP_TRAINING_SHARE : TRAINING_BUDGET
   run = { build: clone(b), name: draft.name, history: [], watching: watch, judging: false, finish: null, spent: 0, budget, keep, startedAt: performance.now(), awayAtStart: hiddenNow(), tipStart: Math.floor(Math.random() * TIPS.length) }
+  ghostCurve = lastCurves[refKey(run.build)] ?? null
   drawGraph([])
   const pace = watch ? 'Every ' + REPLAY_EVERY + 'th round is replayed here.' : ''
   trainMsg(keep ? 'Carrying on from your car at full speed. ' + pace : watch ? 'Training at full speed. ' + pace : 'Training at full speed...')
@@ -805,6 +810,12 @@ function startTraining(keep: boolean) {
     if (!run) return
     if (m.type === 'progress') {
       run.history.push({ best: m.checkpoints / CHECKPOINTS, mean: m.meanCheckpoints / CHECKPOINTS })
+      const rk = refKey(run.build)
+      const laps = m.checkpoints / CHECKPOINTS
+      if (!(bestLaps[rk] >= laps)) {
+        bestLaps[rk] = laps // a new record on these practice tracks
+        save(KEYS.bestLaps, bestLaps)
+      }
       run.spent = m.spent
       // training never waits for the screen: the graph follows every generation, and each
       // replayable generation joins the queue to be shown in order
@@ -835,7 +846,7 @@ $('train').addEventListener('click', () => {
 $('keep').addEventListener('click', () => startTraining(true))
 
 // Swap back to the car before the latest run (and again, to go forward: the two cars trade places)
-$('swapCar').addEventListener('click', () => {
+function swapCars() {
   if (worker || !previousCar || !car) return
   const now = car
   car = previousCar
@@ -846,6 +857,14 @@ $('swapCar').addEventListener('click', () => {
   renderChip()
   raceView?.render()
   carMsg('Switched cars. Your other car is now the previous one.')
+  $('trainMsg').textContent = 'Switched back to ' + car.name + ' (' + carLabel(car) + '). Your other car is now the previous one, so press the button again to swap back.'
+  renderPractice()
+}
+$('swapCar').addEventListener('click', swapCars)
+$('swapQuick').addEventListener('click', swapCars)
+$('spSwap').addEventListener('click', () => {
+  swapCars()
+  setShelfPop(false)
 })
 
 $('skip').addEventListener('click', () => {
@@ -1558,6 +1577,7 @@ document.addEventListener('keydown', (e) => {
 // ---------- PRACTICE PANEL ----------
 function renderPractice() {
   renderWatchOptions()
+  if (!run && !lastRun) drawGraph([]) // idle (before anything has run this visit): the last run and your record for the chosen practice tracks
   const training = !!worker
   const spent = run?.spent ?? lastRun?.spent ?? 0
   const total = run?.budget ?? lastRun?.budget ?? TRAINING_BUDGET
@@ -1576,9 +1596,14 @@ function renderPractice() {
     ? 'Keep training carries on from a car, so train one first.'
     : !canKeepTraining()
       ? 'Your car has a different number of rays from the garage, so it cannot be carried on. Train a new car instead.'
-      : 'Keep training carries on from your car in about a third of the time. Add practice tracks or change what you reward first, then press it. If the result is worse, switch back under Your car.'
+      : 'Keep training carries on from your car in about a third of the time. Add practice tracks or change what you reward first, then press it. If the result is worse, press Back to previous car.'
   $('swapCar').hidden = !previousCar
   $<HTMLButtonElement>('swapCar').disabled = training
+  $('swapQuick').hidden = !previousCar
+  $<HTMLButtonElement>('swapQuick').disabled = training
+  $('swapQuick').title = previousCar ? 'Switch to ' + carLabel(previousCar) + ', the car you had before your last training' : ''
+  $('spPrev').hidden = !previousCar
+  if (previousCar) $('spPrevText').textContent = 'Before your last training: ' + carLabel(previousCar)
   const spec = specOf(b)
   const rows: [string, string][] = [
     ['Sensors', b.sensors.count + ' rays over a ' + b.sensors.spread + '° view'],
@@ -1618,30 +1643,49 @@ function renderPractice() {
   renderBoard()
 }
 
+// ---------- YOUR REFERENCE ----------
+// The best car's laps are only meaningful against something, so two references outlive a run: the best the game has ever seen
+// on this set of practice tracks and this weather (a faint dashed line), and the previous run's whole curve (a faint line behind
+// the new one). Both are kept per set of practice tracks and weather, because laps on different tracks cannot be compared.
+const refKey = (bd: Build) => [...bd.practice].sort((x, y) => x - y).join(',') + '|' + (bd.weather === 'wet' ? 'wet' : 'dry')
+const savedBests = load<Record<string, number>>(KEYS.bestLaps)
+const bestLaps: Record<string, number> = savedBests && typeof savedBests === 'object' ? savedBests : {}
+const savedCurves = load<Record<string, number[]>>(KEYS.lastCurve)
+const lastCurves: Record<string, number[]> = savedCurves && typeof savedCurves === 'object' ? savedCurves : {}
+let ghostCurve: number[] | null = null // the previous run's best-car curve, while a new run draws
+const lapsText = (v: number) => v.toFixed(2) + (v >= 1 ? ' laps' : ' of a lap') + ' in 40 s'
+
 // ---------- HOW TRAINING IS GOING ----------
 // One plain line (still improving, or levelled off and ready to race) and a small sparkline of the best and
 // average car, for anyone who wants the shape. A big chart was more than a game needs.
 const RECENT = 10 // rounds compared, to tell improving from levelled off
 const LEVEL_GAIN = 0.03 // the best car gaining less than 3% over the last 10 rounds counts as levelled off
-function trainingStatus(history: History): string {
-  if (history.length === 0) return 'Start training and you will see here whether your car is still getting better.'
+function trainingStatus(history: History, record?: number): string {
+  const rec = record !== undefined ? ' Your record on these practice tracks: ' + lapsText(record) + '.' : ''
+  if (history.length === 0) return record !== undefined ? 'Your best car on these practice tracks reached ' + lapsText(record) + '. Train to beat it.' : 'Start training and you will see here whether your car is still getting better.'
   const best = history[history.length - 1].best
-  const laps = best.toFixed(2) + (best >= 1 ? ' laps' : ' of a lap') + ' in 40 s'
-  if (history.length < RECENT * 2) return 'Learning. Best car so far: ' + laps + '.'
+  const laps = lapsText(best)
+  if (history.length < RECENT * 2) return 'Learning. Best car so far: ' + laps + '.' + rec
   const before = Math.max(...history.slice(-RECENT * 2, -RECENT).map((h) => h.best))
   const now = Math.max(...history.slice(-RECENT).map((h) => h.best))
   return now > before * (1 + LEVEL_GAIN)
-    ? 'Still improving: best car ' + laps + ', up ' + Math.round((now / before - 1) * 100) + '% in the last ' + RECENT + ' rounds.'
-    : 'Levelled off at ' + laps + '. More rounds will change little: race it, or change the setup.'
+    ? 'Still improving: best car ' + laps + ', up ' + Math.round((now / before - 1) * 100) + '% in the last ' + RECENT + ' rounds.' + rec
+    : 'Levelled off at ' + laps + '. More rounds will change little: race it, or change the setup.' + rec
 }
 function drawGraph(history: History) {
-  $('graphStatus').textContent = trainingStatus(history)
+  const key = refKey(run?.build ?? b)
+  const record = bestLaps[key]
+  // idle, the last run shows faintly; during a run, the run before it does
+  const ghost = history.length ? ghostCurve : (lastCurves[key] ?? null)
+  $('graphStatus').textContent = trainingStatus(history, record)
+  $('graph').title = 'Bright: this run. Faint: the run before it. Dashed: your record on these practice tracks.'
   const Wg = gcanvas.width
   const Hg = gcanvas.height
   gctx.clearRect(0, 0, Wg, Hg)
-  if (history.length < 2) return
-  const maxY = Math.max(0.01, ...history.map((h) => h.best)) * 1.08
-  const x = (i: number) => 2 + (i / (history.length - 1)) * (Wg - 4)
+  const n = Math.max(history.length, ghost?.length ?? 0)
+  if (n < 2) return
+  const maxY = Math.max(0.01, ...history.map((h) => h.best), ...(ghost ?? []), record ?? 0) * 1.08
+  const x = (i: number) => 2 + (i / (n - 1)) * (Wg - 4)
   const y = (v: number) => Hg - 3 - (v / maxY) * (Hg - 6)
   const line = (vals: number[], colour: string, width: number) => {
     gctx.strokeStyle = colour
@@ -1650,8 +1694,18 @@ function drawGraph(history: History) {
     vals.forEach((v, i) => (i === 0 ? gctx.moveTo(x(i), y(v)) : gctx.lineTo(x(i), y(v))))
     gctx.stroke()
   }
-  line(history.map((h) => h.mean), COL.tele, 1.5)
-  line(history.map((h) => h.best), COL.accent, 2)
+  gctx.globalAlpha = 0.4
+  if (ghost) line(ghost, COL.muted, 1.5)
+  if (record !== undefined) {
+    gctx.setLineDash([4, 3])
+    line([record, record], COL.accent, 1)
+    gctx.setLineDash([])
+  }
+  gctx.globalAlpha = 1
+  if (history.length > 1) {
+    line(history.map((h) => h.mean), COL.tele, 1.5)
+    line(history.map((h) => h.best), COL.accent, 2)
+  }
 }
 
 // ---------- THE BIG SCREEN ----------
