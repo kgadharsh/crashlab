@@ -132,7 +132,7 @@ document.querySelector('#app')!.innerHTML = `
       <div class="panel">
         <h2>Your job</h2>
         <p class="tip" style="margin-top:0">Build a car, train its brain on practice tracks, then race it on ${RACE_COUNT} tracks it has never seen. Gold: all ${RACE_COUNT} in under ${GOLD_TIME} s.</p>
-        <p class="tip">Not sure where to start? The setup below finished all ${RACE_COUNT} dry-road race tracks in all 7 of our test trainings. Use it as your starting point, then change one thing at a time in the next steps to see what it does. A car you have not touched is a car anyone can build.</p>
+        <p class="tip">Not sure where to start? The setup below is a fair starting point, not a winner: when the game trains it for the leaderboard, the same way it trains everyone's, it does not finish every track. Change one thing at a time in the next steps to see what it does. A car you have not touched is a car anyone can build.</p>
       </div>
       <div class="panel name">
         <label for="name" class="namelabel">Your car's name <span>tap the name to change it</span></label>
