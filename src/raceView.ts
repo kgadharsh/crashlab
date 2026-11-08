@@ -8,7 +8,7 @@ import {
   CAUSE_LABEL, GRAND_PRIXES, RACE_COUNT, adviceFor, better, finishLap, gpTrack, lapIsOver, medalFor, medalRules, raceCar, summarise, versus,
   type GrandPrix, type Medal, type RaceResult, type TrackResult,
 } from './race'
-import { logEvent } from './playLog'
+import { logEvent, recordChallenge } from './playLog'
 import { loadFewest, recordFewest } from './board'
 import { drawMine } from './perks'
 import { COL, H, W, clear, drawCrash, drawMinimap, drawRays, drawTrack, follow, withCamera, type Camera } from './draw'
@@ -165,6 +165,9 @@ export function createRaceView(d: RaceDeps) {
   function finish(r: Live) {
     r.index = RACE_COUNT - 1
     r.summary = summarise(r.results)
+    // a race against a friend's car from a challenge link counts as won or lost
+    const ch = d.getChallenge()
+    if (ch && !('error' in ch)) recordChallenge(better(r.summary, rivalResult(ch, r.gp)))
     logEvent({ k: 'race', gp: r.gp.name, finished: r.summary.finished, time: r.summary.totalTime, medal: medalFor(r.summary, r.gp), of: RACE_COUNT })
     const medal = medalFor(r.summary, r.gp)
     if (medal && r.car.generations) recordFewest(r.gp.id, medal, r.car.generations)

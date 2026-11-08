@@ -235,7 +235,8 @@ export function step(car: Car, input: Input) {
   const gripSpeed = gripSpeedOf(car)
 
   const accel = car.spec.accel ? ACCEL * car.spec.accel : ACCEL
-  car.speed += input.throttle * (boosting ? accel * NITRO_ACCEL : accel)
+  const pedal = input.throttle < 0 && car.spec.brake ? car.spec.brake : 1 // carbon brakes bite harder
+  car.speed += input.throttle * pedal * (boosting ? accel * NITRO_ACCEL : accel)
   car.speed *= FRICTION
   if (car.speed > maxSpeed) car.speed = maxSpeed
   if (car.speed < MAX_REVERSE) car.speed = MAX_REVERSE

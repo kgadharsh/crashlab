@@ -7,7 +7,7 @@ import { PARTS, type Progress } from './parts'
 import { LOOKS } from './looks'
 import { handBest, handMedal } from './driver'
 import { PERKS, streak } from './perks'
-import { counts } from './playLog'
+import { challengeRecord, counts } from './playLog'
 
 export type ProfileData = { carName: string; stars: number; progress: Progress; trackNames: string[]; look: number }
 
@@ -20,6 +20,7 @@ function badges(d: ProfileData, medals: Medals): Badge[] {
     return b ? medalFor(b, gp) : null
   })
   const c = counts()
+  const ch = challengeRecord()
   const s = streak()
   const clean = GRAND_PRIXES.some((gp) => loadBest(gp)?.finished === RACE_COUNT)
   return [
@@ -35,6 +36,7 @@ function badges(d: ProfileData, medals: Medals): Badge[] {
     { icon: '🌳', name: 'Fully grown', hint: 'Unlock every node in the skill tree', got: PARTS.every((p) => p.open(d.progress)) },
     { icon: '🔥', name: 'On a roll', hint: 'Play on 3 days in a row', got: s.best >= 3 },
     { icon: '🔁', name: 'Regular', hint: 'Play on 7 days in a row', got: s.best >= 7 },
+    { icon: '⚔️', name: 'Rival beaten', hint: 'Beat a friend\'s challenge car', got: ch.won > 0 },
     { icon: '📣', name: 'Showman', hint: 'Share a challenge', got: c.shares > 0 },
     { icon: '🧪', name: 'Tinkerer', hint: 'Train 5 cars', got: c.trainings >= 5 },
   ]
@@ -60,6 +62,7 @@ export function renderProfile(root: HTMLElement, d: ProfileData) {
   const earned = list.filter((b) => b.got).length
   const s = streak()
   const c = counts()
+  const ch = challengeRecord()
 
   // top: who this is
   const top = h('div', 'ptop')
@@ -68,6 +71,7 @@ export function renderProfile(root: HTMLElement, d: ProfileData) {
   const numbers = h('div', 'pnums')
   for (const [v, k] of [
     [String(c.races), 'races'],
+    [String(ch.won), 'challenges won' + (ch.tried ? ' of ' + ch.tried : '')],
     [String(c.trainings), 'trainings'],
     [String(d.progress.licence) + '/' + d.trackNames.length, 'driven by hand'],
     [s.days + (s.days === 1 ? ' day' : ' days'), 'streak'],

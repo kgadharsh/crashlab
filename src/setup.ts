@@ -24,11 +24,18 @@ export const WEATHERS: Weather[] = ['dry', 'wet', 'both']
 // POINT_BUDGET, so playing more opens new choices but never makes a car stronger, and each node also costs something
 // on the road. A player who fakes an unlock gains nothing unfair, and the server rejects a car that spends too much.
 // A node is on at level 1 (true in saved cars). Levels above 1 are allowed by the format, but no wave-1 node has them.
-export type NodeId = 'range' | 'focus' | 'lens' | 'launch' | 'quick' | 'feather' | 'wing' | 'tyres' | 'studs' | 'steady' | 'lights' | 'brain' | 'grip' | 'slot'
+export type NodeId = 'range' | 'focus' | 'lens' | 'wide' | 'lights' | 'launch' | 'quick' | 'brakes' | 'turbo' | 'feather' | 'wing' | 'steady' | 'tyres' | 'inters' | 'studs' | 'brain' | 'lean' | 'huge' | 'grip' | 'slot' | 'slot2'
 export const NODES: { id: NodeId; max: number; cost: number }[] = [
   { id: 'range', max: 1, cost: 2 }, // long rays: RANGE_STEP further and 3% slower (levels of 40 were tried: one or two bought nothing, scripts/nodeCheck.ts)
   { id: 'focus', max: 1, cost: 1 }, // rays bunch towards the front: more detail ahead, less to the sides
   { id: 'lens', max: 1, cost: 1 }, // two more eyes (up to 11 rays): more detail, a bigger brain to train
+  { id: 'wide', max: 1, cost: 1 }, // wide-angle lens: rays may fan out to 260 degrees
+  { id: 'brakes', max: 1, cost: 1 }, // carbon brakes: braking is 70% stronger, a little heavier
+  { id: 'turbo', max: 2, cost: 2 }, // turbo: higher top speed, slower to build speed
+  { id: 'inters', max: 1, cost: 1 }, // intermediate tyres: some wet grip, a smaller dry-road cost than wet tyres
+  { id: 'lean', max: 1, cost: 1 }, // lean brain: three neurons, quick to train but limited
+  { id: 'huge', max: 1, cost: 3 }, // huge brain: thirteen neurons
+  { id: 'slot2', max: 1, cost: 1 }, // a second extra practice track
   { id: 'launch', max: 1, cost: 1 }, // quicker acceleration, lower top speed
   { id: 'quick', max: 1, cost: 2 }, // faster steering, less grip and a little lower top speed
   { id: 'feather', max: 1, cost: 2 }, // featherweight chassis: quicker off the line and in turns, tyres let go sooner
@@ -71,9 +78,11 @@ export const LIMITS = {
   practice: [1, 6],
 } as const
 // the practice slot node allows one more
-export const maxPractice = (b: Build) => LIMITS.practice[1] + levelOf(b.parts, 'slot')
+export const maxPractice = (b: Build) => LIMITS.practice[1] + levelOf(b.parts, 'slot') + levelOf(b.parts, 'slot2')
 // the extra eyes node allows two more rays
 export const LENS_RAYS = 2
+export const WIDE_SPREAD = 60 // the wide-angle lens widens the fan by this many degrees
+export const maxSpread = (parts: Parts | undefined) => LIMITS.spread[1] + WIDE_SPREAD * levelOf(parts, 'wide')
 export const maxRays = (parts: Parts | undefined) => LIMITS.count[1] + LENS_RAYS * levelOf(parts, 'lens')
 
 export const DEFAULT_BUILD: Build = {
@@ -101,6 +110,14 @@ export const FEATHER_TURN = 1.15
 export const FEATHER_GRIP = 0.93 // the tyres let go at a lower speed: it is light
 export const STEADY_GRIP = 1.08
 export const STEADY_TURN = 0.9 // so the car turns more slowly
+export const TURBO_TOP = 1.04 // per level
+export const TURBO_ACCEL = 0.85 // per level: slower to build speed
+export const BRAKE_FORCE = 1.7
+export const BRAKES_TOP_SPEED = 0.98
+export const INTERS_GRIP = 1.2
+export const INTERS_DRY_SPEED = 0.97
+export const LEAN_HIDDEN = 3
+export const HUGE_HIDDEN = 13
 export const LAUNCH_ACCEL = 1.5
 export const LAUNCH_TOP_SPEED = 0.96
 export const QUICK_TURN = 1.3
@@ -120,7 +137,8 @@ export const shapeOf = (s: Sensors, nitro = false): Shape => ({ inputs: s.count 
 // The brain a build needs: grip sense adds an input, the bigger brain more hidden neurons
 export const brainShape = (b: Build): Shape => {
   const base = shapeOf(b.sensors, !!b.perks?.nitro)
-  return { inputs: base.inputs + (b.parts?.grip ? 1 : 0), hidden: b.parts?.brain ? BIG_HIDDEN : HIDDEN, outputs: base.outputs }
+  const hidden = b.parts?.huge ? HUGE_HIDDEN : b.parts?.brain ? BIG_HIDDEN : b.parts?.lean ? LEAN_HIDDEN : HIDDEN
+  return { inputs: base.inputs + (b.parts?.grip ? 1 : 0), hidden, outputs: base.outputs }
 }
 export const genomeLength = (sh: Shape) => sh.hidden * sh.inputs + sh.hidden + sh.outputs * sh.hidden + sh.outputs
 
@@ -133,6 +151,7 @@ export type CarSpec = {
   nitro: boolean // the car has a limited boost, and its brain a button for it
   wetTyres?: boolean // grip on a wet road is raised; top speed on a dry one is lowered
   gripSense?: boolean // the brain gets one more input: speed against the speed the tyres can turn at
+  brake?: number // multiplies braking force (carbon brakes)
   wetGrip?: number // what tyres multiply a wet road's grip by (wet tyres or intermediates)
   dryTop?: number // what those tyres multiply top speed by on a dry road
   rayScale?: number // what a ray's distance is divided by for the brain (left out: rayRange). Ray range keeps the
@@ -169,6 +188,8 @@ export function specOf(b: Build): CarSpec {
   if (on('wing')) maxSpeed *= WING_TOP_SPEED
   if (on('studs')) maxSpeed *= STUDS_TOP_SPEED
   if (on('lights')) maxSpeed *= LIGHTS_TOP_SPEED
+  if (on('brakes')) maxSpeed *= BRAKES_TOP_SPEED
+  if (levelOf(p, 'turbo')) maxSpeed *= Math.pow(TURBO_TOP, levelOf(p, 'turbo'))
   let gripSpeed = lerp(3.5, 2.5, b.balance)
   if (on('wing')) gripSpeed *= WING_GRIP
   if (on('quick')) gripSpeed *= QUICK_GRIP
@@ -178,6 +199,7 @@ export function specOf(b: Build): CarSpec {
   let accel = 1
   if (on('launch')) accel *= LAUNCH_ACCEL
   if (on('feather')) accel *= FEATHER_ACCEL
+  if (levelOf(p, 'turbo')) accel *= Math.pow(TURBO_ACCEL, levelOf(p, 'turbo'))
   let turn = 1
   if (on('quick')) turn *= QUICK_TURN
   if (on('feather')) turn *= FEATHER_TURN
@@ -191,7 +213,8 @@ export function specOf(b: Build): CarSpec {
     maxSpeed,
     gripSpeed,
     nitro: !!b.perks?.nitro,
-    ...(on('tyres') ? { wetTyres: true, wetGrip: WET_TYRE_GRIP, dryTop: WET_TYRE_DRY_SPEED } : {}),
+    ...(on('tyres') ? { wetTyres: true, wetGrip: WET_TYRE_GRIP, dryTop: WET_TYRE_DRY_SPEED } : on('inters') ? { wetTyres: true, wetGrip: INTERS_GRIP, dryTop: INTERS_DRY_SPEED } : {}),
+    ...(on('brakes') ? { brake: BRAKE_FORCE } : {}),
     ...(on('grip') ? { gripSense: true } : {}),
     ...(accel !== 1 ? { accel } : {}),
     ...(turn !== 1 ? { turn } : {}),
@@ -212,7 +235,7 @@ export function buildProblem(b: unknown, practiceCount: number): string | null {
   if (!d || typeof d !== 'object' || !d.sensors || !d.reward || !Array.isArray(d.practice)) return 'it is incomplete'
   const s = d.sensors
   if (!within(s.count, [LIMITS.count[0], maxRays(d.parts && typeof d.parts === 'object' ? d.parts : undefined)]) || !Number.isInteger(s.count)) return 'ray count out of range'
-  if (!within(s.spread, LIMITS.spread)) return 'ray spread out of range'
+  if (!within(s.spread, [LIMITS.spread[0], maxSpread(d.parts && typeof d.parts === 'object' ? d.parts : undefined)])) return 'ray spread out of range'
   if (!within(d.balance, [0, 1])) return 'car setup out of range'
   for (const k of ['pace', 'safety', 'smooth'] as const) if (!within(d.reward[k], [0, 1])) return 'reward out of range'
   if (d.parts !== undefined) {

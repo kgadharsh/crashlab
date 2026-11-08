@@ -68,3 +68,23 @@ export function counts() {
     shares: log.filter((e) => e.k === 'share').length,
   }
 }
+
+// Challenge links raced against a friend's car: how many were raced and how many were beaten (kept apart from the log,
+// which only holds the last 80 events)
+const CHALLENGE_KEY = 'crashlab.challenges'
+export function recordChallenge(won: boolean) {
+  const c = challengeRecord()
+  try {
+    localStorage.setItem(CHALLENGE_KEY, JSON.stringify({ won: c.won + (won ? 1 : 0), tried: c.tried + 1 }))
+  } catch {
+    /* storage blocked: the count only lasts this visit */
+  }
+}
+export function challengeRecord(): { won: number; tried: number } {
+  try {
+    const v = JSON.parse(localStorage.getItem(CHALLENGE_KEY) ?? '{}') as { won?: number; tried?: number }
+    return { won: Number.isInteger(v.won) ? v.won! : 0, tried: Number.isInteger(v.tried) ? v.tried! : 0 }
+  } catch {
+    return { won: 0, tried: 0 }
+  }
+}

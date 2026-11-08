@@ -1,7 +1,7 @@
 import './style.css'
 import { GOLD_TIME, GRAND_PRIXES, RACE_COUNT, medalFor, raceCar } from './race'
 import { carFromChallenge, challengeCode } from './challenge'
-import { DEFAULT_BUILD, KEEP_TRAINING_SHARE, LIMITS, POPULATION, REPLAY_EVERY, TRAINING_BUDGET, buildProblem, cleanBuild, genomeLength, brainShape, specOf, levelOf, maxPractice, maxRays, pointsUsed, POINT_BUDGET, type Build, type Parts } from './setup'
+import { DEFAULT_BUILD, KEEP_TRAINING_SHARE, LIMITS, POPULATION, REPLAY_EVERY, TRAINING_BUDGET, buildProblem, cleanBuild, genomeLength, brainShape, specOf, levelOf, maxPractice, maxRays, maxSpread, pointsUsed, POINT_BUDGET, type Build, type Parts } from './setup'
 import { CHECKPOINTS, NITRO_STEPS, STALL_STEPS, createCar, drive, getInputs, step, type Brain, type Car } from './sim'
 import { think } from './brain'
 import { PRACTICE, PRACTICE_COUNT, practiceOnRoad, practiceTrack, trackFeatures, trackStats, type Track } from './track'
@@ -181,10 +181,10 @@ document.querySelector('#app')!.innerHTML = `
     <div id="skills" class="side">
       <div class="panel" data-fixed>
         <h2>Skill tree<span class="aside" id="partCount"></span></h2>
-        <p class="tip" style="margin-top:0">Every car has ${POINT_BUDGET} points to spend. Tap a node to read it, then fit it. Each node changes what the car can do and costs something on the road, so spend the points on what this week's tracks need. Racing, stars, the Weekly Grand Prix and driving by hand unlock more.</p>
+        <p class="tip" style="margin-top:0">Every car has ${POINT_BUDGET} points to spend. Tap a node to read it, then fit it. Each node changes what the car can do and costs something on the road, so spend the points on what this week's tracks need. Racing, stars, the Weekly Grand Prix and driving by hand unlock more. The lines only group related nodes: there is no order, so fit any unlocked node at any time.</p>
         <div id="treeSvg"></div>
         <div class="ncard" id="treeDetail"></div>
-        <div class="actions"><button class="btn primary wide" id="toPractice">Go to practice →</button></div>
+        <div class="actions"><button class="btn" id="resetTree">Reset skill tree</button><button class="btn primary" id="toPractice" style="flex:1">Go to practice →</button></div>
       </div>
     </div>
     <div id="practice" class="side">
@@ -379,6 +379,7 @@ function setTab(t: Tab) {
     btn.classList.toggle('on', btn.dataset.tab === t)
     btn.setAttribute('aria-selected', String(btn.dataset.tab === t))
   })
+  document.body.classList.toggle('full', t === 'skills' || t === 'profile') // these two have no use for the track screen
   $('garage').hidden = t !== 'garage'
   $('skills').hidden = t !== 'skills'
   $('profile').hidden = t !== 'profile'
@@ -395,6 +396,7 @@ function setTab(t: Tab) {
 document.querySelectorAll<HTMLButtonElement>('.tab[data-tab]').forEach((btn) => btn.addEventListener('click', () => setTab(btn.dataset.tab as Tab)))
 $('toPractice').addEventListener('click', () => setTab('practice'))
 $('toSkills').addEventListener('click', () => setTab('skills'))
+$('resetTree').addEventListener('click', () => resetTree())
 $('toGarage').addEventListener('click', () => setTab('garage'))
 
 // ---------- RACE DAY (raceView.ts) ----------
@@ -511,6 +513,8 @@ const estGenerations = (build: Build) => Math.round(TRAINING_BUDGET / (POPULATIO
 function renderGarage() {
   const spec = specOf(b)
   $('weights').textContent = genomeLength(brainShape(b)) + ' connections'
+  input('spread').max = String(maxSpread(b.parts))
+  input('spread').value = String(b.sensors.spread)
   input('count').max = String(maxRays(b.parts))
   input('count').value = String(b.sensors.count)
   $('countOut').textContent = String(b.sensors.count)
@@ -1016,8 +1020,17 @@ function setLevel(id: PartId, level: number) {
   else delete b.parts
   // the extra practice track goes when the slot does
   if (b.practice.length > maxPractice(b)) b.practice.length = maxPractice(b)
-  // so does the extra eyes node
+  // so do the extra eyes and wide-angle lens nodes
   if (b.sensors.count > maxRays(b.parts)) b.sensors.count = maxRays(b.parts)
+  if (b.sensors.spread > maxSpread(b.parts)) b.sensors.spread = maxSpread(b.parts)
+  changed()
+}
+// Take every node off at once
+function resetTree() {
+  delete b.parts
+  if (b.practice.length > maxPractice(b)) b.practice.length = maxPractice(b)
+  b.sensors.count = Math.min(b.sensors.count, maxRays(b.parts))
+  b.sensors.spread = Math.min(b.sensors.spread, maxSpread(b.parts))
   changed()
 }
 const tree = createSkillTree({
@@ -1030,6 +1043,7 @@ const tree = createSkillTree({
 })
 function renderParts() {
   const { used, open } = tree.render()
+  $<HTMLButtonElement>('resetTree').disabled = used === 0
   $('partCount').textContent = used + ' of ' + POINT_BUDGET + ' points · ' + open + ' of ' + PARTS.length + ' unlocked'
 }
 // Tell the player when racing or medals have unlocked a part

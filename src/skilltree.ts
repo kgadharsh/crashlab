@@ -5,8 +5,8 @@ import { PARTS, type Branch, type Part, type PartId, type Progress } from './par
 import { POINT_BUDGET, levelOf, pointsUsed, type Build } from './setup'
 
 const NS = 'http://www.w3.org/2000/svg'
-const CX = 270
-const CY = 278
+const CX = 290
+const CY = 306
 const BRANCHES: { name: Branch; angle: number; colour: string; blurb: string }[] = [
   { name: 'Eyes', angle: -90, colour: '#3fd0ff', blurb: 'what the car sees' },
   { name: 'Engine', angle: -18, colour: '#ffb31a', blurb: 'how it moves' },
@@ -19,9 +19,10 @@ const ICON: Record<PartId, string> = {
   launch: '🚀', quick: '⚡', feather: '🪶', wing: '✈️',
   tyres: '🌧️', steady: '🧭', studs: '❄️',
   brain: '🧠', grip: '🧲', slot: '🏁',
+  wide: '↔️', brakes: '🛑', turbo: '🌀', inters: '💧', lean: '🍃', huge: '🐘', slot2: '🗺️',
 }
-const R0 = 108
-const RSTEP = 46
+const R0 = 126
+const RSTEP = 48
 
 const el = <K extends keyof SVGElementTagNameMap>(tag: K, attrs: Record<string, string | number> = {}, parent?: Element) => {
   const e = document.createElementNS(NS, tag)
@@ -42,13 +43,26 @@ export type TreeDeps = {
 
 export function createSkillTree(d: TreeDeps) {
   let selected: PartId = 'range'
-  const svg = el('svg', { viewBox: '0 0 540 556', role: 'group', 'aria-label': 'Skill tree' })
+  const svg = el('svg', { viewBox: '0 0 580 612', role: 'group', 'aria-label': 'Skill tree' })
   svg.classList.add('tree')
   d.svgBox.replaceChildren(svg)
 
+  // Each branch is a small tree: a node hangs from its parent, siblings fan out across the branch's slice of the circle, and
+  // depth sets the distance from the car. Leaves get evenly spaced angles and a parent sits at the middle of its children.
   const pos = new Map<PartId, { x: number; y: number; branch: (typeof BRANCHES)[number] }>()
+  const kids = (id: PartId | undefined, branch: Branch) => PARTS.filter((p) => p.branch === branch && p.parent === id)
   for (const br of BRANCHES) {
-    PARTS.filter((p) => p.branch === br.name).forEach((p, i) => pos.set(p.id, { ...polar(br.angle, R0 + RSTEP * i), branch: br }))
+    const nodes = PARTS.filter((p) => p.branch === br.name)
+    const leaves = nodes.filter((n) => !nodes.some((m) => m.parent === n.id)).length
+    const step = Math.min(24, 64 / Math.max(1, leaves))
+    let next = 0
+    const place = (part: Part, depth: number): number => {
+      const children = kids(part.id, br.name)
+      const angle = children.length ? children.map((c) => place(c, depth + 1)).reduce((a, c) => a + c, 0) / children.length : br.angle + (next++ - (leaves - 1) / 2) * step
+      pos.set(part.id, { ...polar(angle, R0 + RSTEP * depth), branch: br })
+      return angle
+    }
+    kids(undefined, br.name).forEach((root) => place(root, 0))
   }
 
   // the picture is built once and then only repainted, so a tap never makes the tree jump
@@ -61,20 +75,17 @@ export function createSkillTree(d: TreeDeps) {
   const hubTop = el('text', { x: CX, y: CY - 4, class: 'hub-t' }, svg)
   const hubSub = el('text', { x: CX, y: CY + 14, class: 'hub-s' }, svg)
   // inner ring joining the first node of each branch, so the tree reads as one network
-  const linkEls: { line: SVGElement; a: PartId | null; b: PartId; branch: (typeof BRANCHES)[number] }[] = []
-  for (const br of BRANCHES) {
-    const nodes = PARTS.filter((p) => p.branch === br.name)
-    nodes.forEach((p, i) => {
-      const from = i === 0 ? { x: CX, y: CY } : pos.get(nodes[i - 1].id)!
-      const to = pos.get(p.id)!
-      const line = el('line', { x1: from.x, y1: from.y, x2: to.x, y2: to.y, class: 'link' }, links)
-      linkEls.push({ line, a: i === 0 ? null : nodes[i - 1].id, b: p.id, branch: br })
-    })
+  const linkEls: { line: SVGElement; b: PartId; branch: (typeof BRANCHES)[number] }[] = []
+  for (const part of PARTS) {
+    const from = part.parent ? pos.get(part.parent)! : { x: CX, y: CY }
+    const to = pos.get(part.id)!
+    const line = el('line', { x1: from.x, y1: from.y, x2: to.x, y2: to.y, class: 'link' }, links)
+    linkEls.push({ line, b: part.id, branch: to.branch })
   }
   BRANCHES.forEach((br, i) => {
     const next = BRANCHES[(i + 1) % BRANCHES.length]
-    const a = pos.get(PARTS.find((p) => p.branch === br.name)!.id)!
-    const c = pos.get(PARTS.find((p) => p.branch === next.name)!.id)!
+    const a = pos.get(PARTS.find((p) => p.branch === br.name && !p.parent)!.id)!
+    const c = pos.get(PARTS.find((p) => p.branch === next.name && !p.parent)!.id)!
     el('line', { x1: a.x, y1: a.y, x2: c.x, y2: c.y, class: 'cross' }, links)
   })
   const nodeEls = new Map<PartId, { g: SVGGElement; disc: SVGElement; icon: SVGElement; lock: SVGElement; pips: SVGElement }>()
@@ -107,7 +118,8 @@ export function createSkillTree(d: TreeDeps) {
 
   // branch names sit between the car and the first node
   for (const br of BRANCHES) {
-    const p = polar(br.angle, 80)
+    const trunk = pos.get(PARTS.find((q) => q.branch === br.name && !q.parent)!.id)!
+    const p = polar((Math.atan2(trunk.y - CY, trunk.x - CX) * 180) / Math.PI, 88)
     const t = el('text', { x: p.x, y: p.y + 3, class: 'branch-t', fill: br.colour }, svg)
     t.textContent = br.name.toUpperCase()
   }
