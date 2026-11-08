@@ -77,11 +77,11 @@ export const pointsUsed = (p: Parts | undefined) => NODES.reduce((sum, n) => sum
 export type ChassisId = 'sprinter' | 'tourer' | 'drifter' | 'dancer' | 'scout'
 export type Chassis = { id: ChassisId; name: string; blurb: string; stars: number; top: number; grip: number; accel: number; turn: number; range: number }
 export const CHASSIS: Chassis[] = [
-  { id: 'sprinter', name: 'Sprinter', blurb: 'Leaps off the line. Lower top speed and grip.', stars: 10, top: 0.93, grip: 0.93, accel: 1.35, turn: 1, range: 1 },
-  { id: 'tourer', name: 'Tourer', blurb: 'Holds bends at speed. Lower top speed, slower to steer.', stars: 20, top: 0.92, grip: 1.14, accel: 0.95, turn: 0.95, range: 1 },
-  { id: 'drifter', name: 'Drifter', blurb: 'Punchy and agile, but it slides early in bends.', stars: 30, top: 1, grip: 0.88, accel: 1.2, turn: 1.2, range: 1 },
-  { id: 'dancer', name: 'Dancer', blurb: 'Turns on a coin. The car starts to slide at a lower speed in bends.', stars: 40, top: 0.98, grip: 0.9, accel: 1, turn: 1.15, range: 1 },
-  { id: 'scout', name: 'Scout', blurb: 'Sees a fifth further. A little slower overall.', stars: 55, top: 0.96, grip: 1.04, accel: 1, turn: 1.05, range: 1.2 },
+  { id: 'sprinter', name: 'Sprinter', blurb: 'Leaps off the line. Lower top speed and grip.', stars: 8, top: 0.93, grip: 0.93, accel: 1.35, turn: 1, range: 1 },
+  { id: 'tourer', name: 'Tourer', blurb: 'Holds bends at speed. Lower top speed, slower to steer.', stars: 15, top: 0.92, grip: 1.14, accel: 0.95, turn: 0.95, range: 1 },
+  { id: 'drifter', name: 'Drifter', blurb: 'Punchy and agile, but it slides early in bends.', stars: 23, top: 1, grip: 0.88, accel: 1.2, turn: 1.2, range: 1 },
+  { id: 'dancer', name: 'Dancer', blurb: 'Turns on a coin. The car starts to slide at a lower speed in bends.', stars: 30, top: 0.98, grip: 0.9, accel: 1, turn: 1.15, range: 1 },
+  { id: 'scout', name: 'Scout', blurb: 'Sees a fifth further. A little slower overall.', stars: 41, top: 0.96, grip: 1.04, accel: 1, turn: 1.05, range: 1.2 },
 ]
 export const chassisOf = (id: ChassisId | undefined) => CHASSIS.find((c) => c.id === id)
 
@@ -143,8 +143,8 @@ export const INTERS_GRIP = 1.2
 export const INTERS_DRY_SPEED = 0.97
 export const LEAN_HIDDEN = 3
 export const HUGE_HIDDEN = 13
-export const RALLY_GRIP = 0.85 // 0.9 was too strong (docs/experiments.md, 8 Nov 2026)
-export const RALLY_POWER = 1.5 // instead of GRIP_POWER 2: above the limit, turning fades more gently (1 was too strong)
+export const RALLY_GRIP = 0.875 // between 0.9 (too strong) and 0.85 (a little weak): docs/experiments.md, 8 Nov 2026
+export const RALLY_POWER = 1.25 // instead of GRIP_POWER 2: above the limit, turning fades more gently (1 too strong, 1.5 a little weak)
 export const BUMPER_TOP_SPEED = 0.92 // 0.95 finished every dry race only 2 s slower
 export const LAUNCH_ACCEL = 1.5
 export const LAUNCH_TOP_SPEED = 0.96

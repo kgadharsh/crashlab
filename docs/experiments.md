@@ -318,3 +318,17 @@ tyres 2 points, grip ×0.85, fade power 1.5; Bumper top speed ×0.92. Ice practi
 - Traction control finished all 8 at night in every seed without night practice, as headlights with night practice did.
   It is the clearest "conditions specialist" so far; its dry-road time is its cost.
 - Driver aids and Traction control at 2 points, and Rally tyres between the two tunings, are untested.
+
+## 8 Nov 2026: Rally tyres, middle setting
+
+Grip ×0.875 and fade power 1.25 (between the too-strong 0.9 / 1 and the slightly weak 0.85 / 1.5), 2 points. Seeds 1 to 3.
+
+| Build | Dry | Wet | Night | Ice |
+|---|---|---|---|---|
+| No nodes (from the combinations test) | 7.7 (2 clean, 149 s) | 3.0 | 3.0 | 2.0 |
+| Rally tyres, middle | 7.7 (2 clean, 143 s) | 4.0 | 4.0 | 0.7 |
+| Rally tyres, middle, wet practice | 6.7 (2 clean, 151 s) | 5.0 | 5.0 | 3.0 |
+| No nodes, wet practice (tyre test) | 8.0 (157 s) | 7.3 | 6.3 | 0.7 |
+
+A mild edge on dry roads (6 s quicker, as reliable) and a little better wet and at night, weaker on ice, for 2 points. Kept.
+With wet practice it is worse than wet practice alone everywhere but ice.

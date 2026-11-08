@@ -14,7 +14,7 @@ import { renderProfile } from './profile'
 import { createSkillTree } from './skilltree'
 import { createControls, handBest, handMedal, licence, recordHand } from './driver'
 import { cardText, createRaceView, loadBest, type Challenge } from './raceView'
-import { bestOn, driveLap, lapMedal, loadMedals, parFor, recordLaps, totalStars, type Lap } from './board'
+import { bestOn, driveLap, lapMedal, legacyStars, loadMedals, parFor, recordLaps, totalStars, type Lap } from './board'
 import { PARTS, newlyUnlocked, type PartId, type Progress } from './parts'
 import { LOOKS, isUnlocked, loadLook, nextLook, saveLook } from './looks'
 import { counts, hasRaced, logEvent, playtestNotes } from './playLog'
@@ -400,6 +400,7 @@ function setTab(t: Tab) {
   $('practice').hidden = t !== 'practice'
   $('race').hidden = t !== 'race'
   $('graphBox').hidden = t !== 'practice'
+  strip.hidden = t === 'garage' // everything in it is already in the Garage's panels
   if (t !== 'practice') {
     stopTestDrive()
     stopHand()
@@ -1025,7 +1026,9 @@ const gpMedals = () =>
     const best = loadBest(gp)
     return best ? medalFor(best, gp) : null
   })
-const starCount = () => totalStars(loadMedals(), gpMedals())
+// stars earned before the 8 Nov change keep counting, so nothing already unlocked locks again
+const starsBefore = legacyStars(loadMedals(), gpMedals())
+const starCount = () => Math.max(totalStars(loadMedals(), gpMedals()), starsBefore)
 
 // ---------- PARTS ----------
 // Has this browser raced a Weekly Grand Prix: a past week here (it saves a personal best) or an entry on the server
@@ -1125,7 +1128,7 @@ function renderLooks() {
   })
   const next = nextLook(stars)
   $('lookTip').textContent = next
-    ? 'Next design: ' + next.name + ', ' + next.need + ' more stars. A medal on a track is worth 1, 2 or 3 stars (bronze, silver, gold), and a Grand Prix medal 3, 6 or 10.'
+    ? 'Next design: ' + next.name + ', ' + next.need + ' more stars. A silver on a track is worth 1 star and a gold 2 (just finishing earns none), and a Grand Prix medal 3, 6 or 10.'
     : 'Every design is unlocked.'
 }
 

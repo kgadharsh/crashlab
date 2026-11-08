@@ -44,7 +44,25 @@ export function driveLap(car: CarFile, brain: Brain, id: number): Lap {
 
 // ---------- WHAT THE PLAYER HAS EARNED ----------
 // The best medal on each track and road, kept in this browser, and the stars they are worth
-export const STARS: Record<Exclude<Medal, null>, number> = { bronze: 1, silver: 2, gold: 3 }
+// Just finishing a practice lap earns no star: a first car finished most tracks and got 16 to 28 stars without trying, which
+// opened most of the game at once (8 Nov 2026). Stars now come from driving well: silver 1, gold 2.
+export const STARS: Record<Exclude<Medal, null>, number> = { bronze: 0, silver: 1, gold: 2 }
+const OLD_STARS: Record<Exclude<Medal, null>, number> = { bronze: 1, silver: 2, gold: 3 }
+// Stars under the old rule, worked out once and kept, so nobody loses a design or node they had already unlocked
+const LEGACY_KEY = 'crashlab.starsBefore'
+export function legacyStars(medals: Medals, grandPrixMedals: Medal[]): number {
+  try {
+    const kept = localStorage.getItem(LEGACY_KEY)
+    if (kept !== null) return Number(kept) || 0
+    let n = 0
+    for (const m of Object.values(medals)) n += OLD_STARS[m.medal] ?? 0
+    for (const m of grandPrixMedals) if (m) n += GP_STARS[m]
+    localStorage.setItem(LEGACY_KEY, String(n))
+    return n
+  } catch {
+    return 0
+  }
+}
 export const GP_STARS: Record<Exclude<Medal, null>, number> = { bronze: 3, silver: 6, gold: 10 }
 const RANK: Record<Exclude<Medal, null>, number> = { bronze: 1, silver: 2, gold: 3 }
 const KEY = 'crashlab.medals'

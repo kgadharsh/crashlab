@@ -3,10 +3,10 @@
 export type Look = { name: string; stars: number }
 export const LOOKS: Look[] = [
   { name: 'Classic', stars: 0 },
-  { name: 'Arrow', stars: 12 }, // a first trained car earns about 16 to 28 stars on the track board, so this one comes straight away
-  { name: 'Wedge', stars: 30 },
-  { name: 'Needle', stars: 48 },
-  { name: 'Hyper', stars: 70 }, // of 92 in all: 12 tracks on each road at 3 stars, and 10 for each Grand Prix gold
+  { name: 'Arrow', stars: 9 }, // a good first car earns several silvers on the track board, so this one comes early
+  { name: 'Wedge', stars: 23 },
+  { name: 'Needle', stars: 36 },
+  { name: 'Hyper', stars: 53 }, // of 68 in all: 12 tracks on each road at 2 stars, and 10 for each Grand Prix gold
 ]
 
 const KEY = 'crashlab.look'
