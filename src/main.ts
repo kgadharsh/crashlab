@@ -279,7 +279,7 @@ document.querySelector('#app')!.innerHTML = `
           <span class="hubfacts">
             <span><small>Tracks</small>8</span>
             <span><small>Entries</small><i id="hubDailyLimit">2 a day</i></span>
-            <span><small>You win</small>A place</span>
+            <span><small>Reward</small>Board rank</span>
           </span>
           <span class="hubnow" id="hubDailyNow">Loading today's challenge…</span>
           <span class="hubgo" aria-hidden="true">→</span>
@@ -291,7 +291,7 @@ document.querySelector('#app')!.innerHTML = `
           <span class="hubfacts">
             <span><small>Tracks</small>8</span>
             <span><small>Entries</small><i id="hubWeeklyLimit">3 a week</i></span>
-            <span><small>You win</small>Trophies</span>
+            <span><small>Reward</small>Top-3 trophies</span>
           </span>
           <span class="hubnow" id="hubWeeklyNow">Loading this week's challenge…</span>
           <span class="hubgo" aria-hidden="true">→</span>

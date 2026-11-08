@@ -506,7 +506,7 @@ export function createLeaderboard({ getCar, getGpId, goRace, notify, raceAgainst
     $('dailyEnds').textContent = 'ends in ' + timeLeft(daily.endsAt - Date.now())
     $('dailyLine').textContent =
       daily.name + ': 8 tracks in one style, all ' + (daily.wet ? 'on a wet road' : daily.night ? 'at night' : 'on an icy road') + '. Everyone races the same tracks, and they are open: race them yourself first, then enter your setup. ' +
-      (daily.limit === 1 ? 'You get one entry, so make it count. ' : 'Your best of ' + daily.limit + ' entries counts. ') + 'No trophies: it is for today\'s place, and a new one starts at midnight UTC.' +
+      (daily.limit === 1 ? 'You get one entry, so make it count. ' : 'Your best of ' + daily.limit + ' entries counts. ') + 'No trophies: you are ranked on today\'s board, and a new challenge starts at midnight UTC.' +
       (signed && dailyLeft !== undefined ? ' You have ' + dailyLeft + (dailyLeft === 1 ? ' entry' : ' entries') + ' left today.' : '')
     $('hubDailyLimit').textContent = daily.limit + ' a day'
     $('hubDailyEnds').textContent = 'ends in ' + timeLeft(daily.endsAt - Date.now())

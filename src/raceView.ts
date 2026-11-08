@@ -140,7 +140,7 @@ export function createRaceView(d: RaceDeps) {
     $('medalRules').textContent = isSecretGp(gp())
       ? gp().day !== undefined
         ? gp().day === dayOf(Date.now())
-          ? 'Today\'s Daily Challenge tracks are open to everyone. Race them as often as you like to see how your car copes, then enter your setup in the panel below to get a place on the board.'
+          ? 'Today\'s Daily Challenge tracks are open to everyone. Race them as often as you like to see how your car copes, then enter your setup in the panel below to get ranked on the board.'
           : 'These were a past day\'s tracks. Race them as often as you like.'
         : 'These were last week\'s secret tracks. They are open now: race them as often as you like. This week\'s are still secret.'
       : medalRules(gp())
