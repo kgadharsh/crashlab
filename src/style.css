@@ -607,3 +607,35 @@ body.full .layout { grid-template-columns: minmax(0, 720px); justify-content: ce
 .lbrow .pv { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 46%; }
 
 #topChallenge { white-space: nowrap; flex: none; }
+
+/* ---------- FOOTER ---------- */
+.made {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 8px 14px;
+  padding: 14px 16px 22px;
+  color: var(--muted);
+  font-size: 13px;
+}
+.made b { color: var(--text); font-weight: 600; }
+.made .soc {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 11px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--panel);
+  color: var(--text);
+  text-decoration: none;
+  transition: color .15s, border-color .15s, transform .15s, box-shadow .15s;
+}
+.made .soc:hover, .made .soc:focus-visible {
+  color: var(--accent);
+  border-color: var(--accent);
+  box-shadow: 0 0 12px rgba(255, 179, 26, .25);
+  transform: translateY(-1px);
+  outline: none;
+}

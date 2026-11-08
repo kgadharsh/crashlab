@@ -335,6 +335,11 @@ document.querySelector('#app')!.innerHTML = `
     </div>
   </aside>
 </main>
+<footer class="made">
+  <span>Made by <b>Adharsh</b></span>
+  <a class="soc" href="https://www.instagram.com/adhdrsh" target="_blank" rel="noopener noreferrer" aria-label="Instagram @adhdrsh"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="5"/><circle cx="12" cy="12" r="4"/><circle cx="17.5" cy="6.5" r="1" fill="currentColor" stroke="none"/></svg><span>@adhdrsh</span></a>
+  <a class="soc" href="https://www.linkedin.com/in/kgadharsh" target="_blank" rel="noopener noreferrer" aria-label="LinkedIn @kgadharsh"><svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor" aria-hidden="true"><path d="M4.98 3.5a2.5 2.5 0 1 1 0 5 2.5 2.5 0 0 1 0-5zM3 9.75h4V21H3zM9.75 9.75h3.8v1.6h.06c.53-1 1.82-2.05 3.75-2.05 4 0 4.74 2.63 4.74 6.05V21h-4v-5.1c0-1.22-.02-2.78-1.7-2.78-1.7 0-1.96 1.33-1.96 2.7V21h-4z"/></svg><span>@kgadharsh</span></a>
+</footer>
 <dialog class="dare" id="dareDialog" aria-labelledby="dareTitle">
   <div class="dare-ico" aria-hidden="true">⚔️</div>
   <h3 id="dareTitle">Dare a friend</h3>
