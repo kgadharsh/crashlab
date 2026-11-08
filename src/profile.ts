@@ -9,7 +9,19 @@ import { handBest, handMedal } from './driver'
 import { PERKS, streak } from './perks'
 import { challengeRecord, counts } from './playLog'
 
-export type ProfileData = { carName: string; stars: number; progress: Progress; trackNames: string[]; look: number }
+import type { Identity } from './leaderboard'
+
+export type ProfileData = {
+  carName: string
+  stars: number
+  progress: Progress
+  trackNames: string[]
+  look: number
+  identity: Identity
+  onRename: (name: string) => void // the car's name, changed here
+  onSignIn: () => void
+  onOpenBoard: () => void
+}
 
 type Badge = { icon: string; name: string; hint: string; got: boolean }
 
@@ -67,7 +79,37 @@ export function renderProfile(root: HTMLElement, d: ProfileData) {
   // top: who this is
   const top = h('div', 'ptop')
   const lookName = LOOKS[d.look]?.name ?? 'Classic'
-  top.append(h('div', 'pname', d.carName), h('div', 'psub', lookName + ' design · ★ ' + d.stars + ' · ' + earned + ' of ' + list.length + ' badges'))
+  // who this is: the name on the board (or how to get one), then the car's name, which can be changed right here
+  const who = h('div', 'pplayer')
+  const id = d.identity
+  who.append(h('span', 'pk', 'Board name'))
+  if (id.kind === 'in') {
+    who.append(h('b', 'pn', id.name))
+    const change = h('button', 'btn small', 'Change')
+    change.addEventListener('click', d.onOpenBoard)
+    who.append(change)
+  } else if (id.kind === 'noname') {
+    who.append(h('span', 'pn muted', 'signed in, no name yet'))
+    const pick = h('button', 'btn small primary', 'Choose a name')
+    pick.addEventListener('click', d.onOpenBoard)
+    who.append(pick)
+  } else if (id.kind === 'out') {
+    who.append(h('span', 'pn muted', 'not signed in'))
+    const sign = h('button', 'btn small primary', 'Sign in with Google')
+    sign.addEventListener('click', d.onSignIn)
+    who.append(sign)
+  } else {
+    who.append(h('span', 'pn muted', id.kind === 'checking' ? 'checking…' : 'the leaderboard is not connected here'))
+  }
+  const carBox = h('div', 'pcar')
+  carBox.append(h('span', 'pk', 'Car name'))
+  const nameBox = h('div', 'namebox')
+  const nameInput = Object.assign(document.createElement('input'), { className: 'pnameinput', value: d.carName, maxLength: 24, placeholder: 'Name your car', spellcheck: false })
+  nameInput.setAttribute('aria-label', 'Car name (you can change it)')
+  nameInput.addEventListener('input', () => d.onRename(nameInput.value))
+  nameBox.append(nameInput, h('span', 'pencil', '✎'))
+  carBox.append(nameBox)
+  top.append(who, carBox, h('div', 'psub', lookName + ' design · ★ ' + d.stars + ' · ' + earned + ' of ' + list.length + ' badges'))
   const numbers = h('div', 'pnums')
   for (const [v, k] of [
     [String(c.races), 'races'],

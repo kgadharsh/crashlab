@@ -178,7 +178,7 @@ input[type='range']:focus-visible { outline: 2px solid var(--tele); outline-offs
 
 /* stat bars */
 .stats { display: grid; gap: 6px; margin-top: 10px; }
-.stat { display: grid; grid-template-columns: 110px minmax(0, 1fr) 54px; align-items: center; gap: 10px; font-size: 13px; color: var(--muted); }
+.stat { display: grid; grid-template-columns: 110px minmax(0, 1fr) 84px; align-items: center; gap: 10px; font-size: 13px; color: var(--muted); }
 .bar { height: 8px; background: var(--panel-2); border-radius: 1px; overflow: hidden; }
 .bar i { display: block; height: 100%; background: var(--tele); }
 .bar.amber i { background: var(--accent); }
@@ -330,6 +330,7 @@ select {
 @media (max-width: 420px) {
   .tracks { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .row, .stat { grid-template-columns: 92px minmax(0, 1fr) 48px; }
+  .stat { grid-template-columns: 92px minmax(0, 1fr) 76px; }
 }
 
 /* car designs */
@@ -537,3 +538,39 @@ select {
 body.full .view { display: none; }
 body.full .layout { grid-template-columns: minmax(0, 720px); justify-content: center; }
 .pnums { grid-template-columns: repeat(auto-fit, minmax(84px, 1fr)); }
+
+/* ---------- dare a friend ---------- */
+.dare { border: 1px solid #5b4513; border-radius: 10px; background: radial-gradient(120% 140% at 0% 0%, #2a2108, var(--panel) 60%); color: var(--text); max-width: 380px; width: calc(100% - 32px); padding: 22px 22px 18px; text-align: center; box-shadow: 0 20px 60px rgba(0,0,0,0.6); }
+.dare::backdrop { background: rgba(5,7,10,0.7); backdrop-filter: blur(2px); }
+.dare-ico { font-size: 40px; line-height: 1; }
+.dare h3 { margin: 8px 0 6px; font: 800 26px var(--head); letter-spacing: 0.08em; text-transform: uppercase; }
+.dare p { margin: 0; color: var(--muted); }
+.dare .actions { justify-content: center; margin-top: 16px; }
+.hot.on { animation: hot 1.8s ease-in-out infinite; }
+@keyframes hot { 0%, 100% { box-shadow: 0 0 0 0 rgba(255,179,26,0.0); } 50% { box-shadow: 0 0 0 6px rgba(255,179,26,0.35), 0 0 18px rgba(255,179,26,0.5); } }
+@media (prefers-reduced-motion: reduce) { .hot.on { animation: none; box-shadow: 0 0 0 3px rgba(255,179,26,0.45); } }
+.more { margin-top: 12px; }
+.more summary { cursor: pointer; color: var(--muted); font: 600 12px var(--head); letter-spacing: 0.12em; text-transform: uppercase; }
+.more summary:hover { color: var(--text); }
+
+/* profile: board name and car name */
+.pplayer { display: flex; align-items: center; justify-content: center; gap: 10px; flex-wrap: wrap; }
+.pk { font: 700 11px var(--head); letter-spacing: 0.14em; text-transform: uppercase; color: var(--muted); }
+.pn { font: 700 17px var(--head); letter-spacing: 0.06em; text-transform: uppercase; }
+.pn.muted { color: var(--muted); font-weight: 500; text-transform: none; letter-spacing: 0; font-size: 14px; }
+.pcar { margin-top: 14px; text-align: left; }
+.pcar .pk { display: block; margin-bottom: 6px; text-align: center; }
+.pnameinput { width: 100%; padding: 10px 40px 10px 12px; background: var(--panel-2); border: 1px dashed var(--muted); border-radius: 3px; font: 800 26px var(--head); letter-spacing: 0.08em; text-transform: uppercase; text-align: center; }
+.pnameinput:hover { border-color: var(--accent); }
+.pnameinput:focus { outline: 2px solid var(--tele); outline-offset: -1px; }
+.pnameinput::placeholder { color: var(--muted); text-transform: none; letter-spacing: 0; font-weight: 500; }
+
+/* chassis */
+.sub { margin: 14px 0 6px; font: 700 12px var(--head); letter-spacing: 0.14em; text-transform: uppercase; color: var(--muted); }
+.chassis { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 6px; }
+.frame { text-align: left; padding: 8px 10px; background: var(--panel-2); border: 1px solid var(--line); border-radius: 3px; color: var(--text); cursor: pointer; }
+.frame b { display: block; font: 700 14px var(--head); letter-spacing: 0.08em; text-transform: uppercase; }
+.frame small { display: block; color: var(--muted); font-size: 11.5px; line-height: 1.3; margin-top: 2px; }
+.frame.on { border-color: var(--accent); box-shadow: inset 3px 0 0 var(--accent); }
+.frame.on small { color: var(--text); }
+.frame.locked { opacity: 0.6; cursor: help; }

@@ -1,7 +1,7 @@
 import './style.css'
 import { GOLD_TIME, GRAND_PRIXES, RACE_COUNT, medalFor, raceCar } from './race'
 import { carFromChallenge, challengeCode } from './challenge'
-import { DEFAULT_BUILD, KEEP_TRAINING_SHARE, LIMITS, POPULATION, REPLAY_EVERY, TRAINING_BUDGET, buildProblem, cleanBuild, genomeLength, brainShape, specOf, levelOf, maxPractice, maxRays, maxSpread, pointsUsed, POINT_BUDGET, type Build, type Parts } from './setup'
+import { DEFAULT_BUILD, CHASSIS, KEEP_TRAINING_SHARE, LIMITS, POPULATION, REPLAY_EVERY, TRAINING_BUDGET, buildProblem, cleanBuild, genomeLength, brainShape, specOf, levelOf, maxPractice, maxRays, maxSpread, pointsUsed, POINT_BUDGET, type Build, type Parts } from './setup'
 import { CHECKPOINTS, NITRO_STEPS, STALL_STEPS, createCar, drive, getInputs, step, type Brain, type Car } from './sim'
 import { think } from './brain'
 import { PRACTICE, PRACTICE_COUNT, practiceOnRoad, practiceTrack, trackFeatures, trackStats, type Track } from './track'
@@ -17,7 +17,7 @@ import { createRaceView, loadBest, type Challenge } from './raceView'
 import { bestOn, driveLap, lapMedal, loadMedals, parFor, recordLaps, totalStars, type Lap } from './board'
 import { PARTS, newlyUnlocked, type PartId, type Progress } from './parts'
 import { LOOKS, isUnlocked, loadLook, nextLook, saveLook } from './looks'
-import { hasRaced, logEvent, playtestNotes } from './playLog'
+import { counts, hasRaced, logEvent, playtestNotes } from './playLog'
 import { COL, H, W, clear, drawBrain, drawCar, drawCrash, drawMinimap, drawRays, drawSensorFan, drawThumb, drawTrack, fanFrame, fitTrack, follow, lookAt, newCamera, withCamera } from './draw'
 
 // ---------- SAVED STATE ----------
@@ -143,6 +143,9 @@ document.querySelector('#app')!.innerHTML = `
         <div class="looks" id="looks"></div>
         <p class="tip" id="lookTip"></p>
         <div class="paints" id="paints"></div>
+        <h3 class="sub">Chassis</h3>
+        <div class="chassis" id="chassis"></div>
+        <p class="tip" id="chassisTip"></p>
         <p class="tip" id="streakLine"></p>
       </div>
       <div class="panel">
@@ -158,7 +161,7 @@ document.querySelector('#app')!.innerHTML = `
           <div class="stat">Top speed<div class="bar amber"><i id="speedBar"></i></div><b id="speedOut"></b></div>
           <div class="stat">Cornering<div class="bar"><i id="gripBar"></i></div><b id="gripOut"></b></div>
         </div>
-        <p class="tip">Grip takes bends harder; speed is quicker on the straights. A fast car has to brake earlier, because the tyres let go sooner. In our tests a very fast car crashed too often to finish all ${RACE_COUNT} race tracks.</p>
+        <p class="tip">Grip takes bends harder; speed is quicker on the straights. A fast car has to brake earlier, because the tyres start to slide at a lower speed in bends. In our tests a very fast car crashed too often to finish all ${RACE_COUNT} race tracks.</p>
       </div>
       <div class="panel">
         <h2><span class="n">03</span>What to reward</h2>
@@ -231,19 +234,21 @@ document.querySelector('#app')!.innerHTML = `
       <div class="panel">
         <h2>Your car</h2>
         <p class="tip" id="carState" style="margin-top:0"></p>
-        <p class="tip">During a test drive, the box in the corner shows what the car sees (its rays), thinks (its neurons) and does (steering and gas).</p>
-        <div class="actions">
-          <select id="driveTrack" aria-label="Track for the test drive"></select>
-          <button class="btn" id="testDrive">Test drive</button>
-        </div>
-        <div class="actions">
-          <button class="btn" id="saveCar">Save car</button>
-          <button class="btn" id="loadCar">Load car</button>
-          <input type="file" id="file" accept=".json,application/json" hidden />
-        </div>
-        <div class="actions"><button class="btn" id="swapCar" hidden>Switch to previous car</button></div>
-        <div class="actions"><button class="btn" id="shareCar">Copy challenge link</button></div>
-        <div class="actions"><button class="btn" id="notes">Copy playtest notes</button></div>
+        <p class="tip">While you watch it drive, the box in the corner shows what the car sees (its rays), thinks (its neurons) and does (steering and gas).</p>
+        <div class="actions"><button class="btn primary hot" id="shareCar">⚔ Challenge a friend</button></div>
+        <p class="tip" style="margin-top:4px">Copies a link. Your friend opens it, races your car on the same secret tracks, and tries to beat it.</p>
+        <select id="driveTrack" aria-label="Track to watch the car on" hidden></select>
+        <div class="actions"><button class="btn small" id="testDrive">Watch it drive</button><button class="btn small" id="swapCar" hidden>Switch to previous car</button></div>
+        <p class="tip" style="margin-top:4px">To watch it on a particular track, tap that track on the Track board.</p>
+        <details class="more">
+          <summary>More: save, load, playtest notes</summary>
+          <div class="actions">
+            <button class="btn" id="saveCar">Save car to a file</button>
+            <button class="btn" id="loadCar">Load car from a file</button>
+            <input type="file" id="file" accept=".json,application/json" hidden />
+          </div>
+          <div class="actions"><button class="btn" id="notes">Copy playtest notes</button></div>
+        </details>
         <input id="shareLink" readonly hidden aria-label="Challenge link" style="width:100%;margin-top:6px" />
         <p class="msg" id="carMsg"></p>
       </div>
@@ -310,7 +315,7 @@ document.querySelector('#app')!.innerHTML = `
         </div>
         <p class="tip" id="resultLine" style="margin-top:4px"></p>
         <p class="tip warn" id="advice"></p>
-        <div class="actions"><button class="btn small primary" id="resultGarage">Edit setup in Garage →</button><button class="btn small" id="resultPractice">Go to Practice →</button><button class="btn small primary" id="resultShare">Share this result</button></div>
+        <div class="actions"><button class="btn small primary" id="resultGarage">Edit setup in Garage →</button><button class="btn small" id="resultPractice">Go to Practice →</button><button class="btn small primary hot" id="resultShare">⚔ Share this result</button></div>
         <input id="resultLink" readonly hidden aria-label="Challenge link" style="width:100%;margin-top:6px" />
         <div id="resultBoard" hidden>
           <p class="tip" id="resultBoardAsk" style="margin-top:12px;color:var(--text);font-weight:600">Put this on the leaderboard?</p>
@@ -327,6 +332,14 @@ document.querySelector('#app')!.innerHTML = `
     </div>
   </aside>
 </main>
+<dialog class="dare" id="dareDialog" aria-labelledby="dareTitle">
+  <div class="dare-ico" aria-hidden="true">⚔️</div>
+  <h3 id="dareTitle">Dare a friend</h3>
+  <p id="dareText"></p>
+  <div class="actions"><button type="button" class="btn primary" id="dareGo">Copy challenge link</button><button type="button" class="btn" id="dareNo">Not now</button></div>
+  <p class="msg" id="dareMsg"></p>
+  <input id="dareLink" readonly hidden aria-label="Challenge link" style="width:100%;margin-top:6px" />
+</dialog>
 <div class="nudge" id="raceNudge" role="status" hidden>
   <p id="nudgeText"></p>
   <button class="btn primary" id="nudgeGo">Race<span class="long"> your car</span> →</button>
@@ -408,13 +421,22 @@ const cam = newCamera()
 
 // ---------- GARAGE ----------
 const input = (id: string) => $<HTMLInputElement>(id)
+// speeds are shown in km/h everywhere: the sim's units are 40 km/h each
+const kmh = (v: number) => Math.round(v * 40) + ' km/h'
 const pct = (v: number) => Math.round(v * 100) + '%'
 const nameInput = input('name')
 nameInput.value = draft.name
-nameInput.addEventListener('input', () => {
-  draft.name = nameInput.value.trim() || 'Unnamed'
+// A car's name can be changed here or on the Profile. The trained car takes the new name too, so it never shows an old one.
+function setName(value: string) {
+  draft.name = value.trim() || 'Unnamed'
+  if (car && car.name !== draft.name) {
+    car.name = draft.name
+    save(KEYS.car, carToJson(car))
+  }
   changed()
-})
+  raceView?.render()
+}
+nameInput.addEventListener('input', () => setName(nameInput.value))
 
 const b = draft.build
 function bindSlider(id: string, get: () => number, set: (v: number) => void, scale = 1) {
@@ -519,8 +541,8 @@ function renderGarage() {
   input('count').value = String(b.sensors.count)
   $('countOut').textContent = String(b.sensors.count)
   $('spreadOut').textContent = b.sensors.spread + '°'
-  $('speedOut').textContent = spec.maxSpeed.toFixed(1)
-  $('gripOut').textContent = spec.gripSpeed.toFixed(1)
+  $('speedOut').textContent = kmh(spec.maxSpeed)
+  $('gripOut').textContent = kmh(spec.gripSpeed)
   $('speedBar').style.width = ((spec.maxSpeed - 4.5) / 3) * 100 + '%'
   $('gripBar').style.width = ((spec.gripSpeed - 2) / 2) * 100 + '%'
   $('paceOut').textContent = pct(b.reward.pace)
@@ -535,6 +557,7 @@ function renderGarage() {
     btn.setAttribute('aria-pressed', String(btn.dataset.road === weatherSel.value))
   })
   renderParts()
+  renderChassis()
   trackGrid.querySelectorAll<HTMLButtonElement>('.track').forEach((btn) => {
     const id = Number(btn.dataset.id)
     const on = b.practice.includes(id)
@@ -588,7 +611,7 @@ const TIPS = [
   'More practice tracks prepare the car better for tracks it has never seen, but every round then costs more of the budget.',
   'A wide view sees bends sooner. A narrow view sees straight ahead in more detail.',
   'More rays see more, but the brain has more to learn, so training needs more rounds.',
-  'A fast car has to brake earlier, because the tyres let go sooner.',
+  'A fast car has to brake earlier, because the tyres start to slide at a lower speed in bends.',
   'Rewarding speed keeps cars moving. Punishing crashes teaches them to take bends carefully.',
   'Blocks catch cars that see them too late. More rays, or a wider view, spot them sooner.',
   'Training has luck in it: the same setup can give a better or a worse car, so it can be worth training it twice.',
@@ -643,11 +666,12 @@ function finishTraining(f: Finish) {
   // the test drive only starts if you are watching it; from another tab the car is simply ready
   const here = tab === 'practice'
   const worse = r.keep ? ' If it feels worse, switch back with "Switch to previous car" under Your car.' : ''
-  stopTraining('Done: ' + f.generations + ' rounds of training. ' + (here ? 'Here is your car on its first test drive.' : 'Your new car is ready: test drive it in Practice, or race it.') + worse)
+  stopTraining('Done: ' + f.generations + ' rounds of training. ' + (here ? 'Here is your car driving its first lap.' : 'Your new car is ready: watch it drive in Practice, or race it.') + worse)
   renderChip()
   raceView?.render()
   if (here) startTestDrive()
   if (tab !== 'race') showNudge(car.name)
+  showDare('trained')
 }
 
 // Keep training carries on from the car you have, so its brain must be the same size as the garage's
@@ -1077,6 +1101,7 @@ const lookButtons: HTMLButtonElement[] = LOOKS.map((l, i) => {
 })
 function renderLooks() {
   renderPaints()
+  renderChassis()
   const stars = starCount()
   $('starCount').textContent = '★ ' + stars
   lookButtons.forEach((btn, i) => {
@@ -1127,7 +1152,58 @@ function renderPaints() {
     (next ? 'Next perk: ' + next.name + ' at ' + next.days + ' days (' + Math.max(1, next.days - Math.max(s.days, 0)) + ' to go). ' + (s.today ? 'Come back tomorrow to keep it.' : 'Play today to keep it going.') : 'Every perk is yours: ' + PERKS.map((p) => p.name).join(', ') + '.')
 }
 function showProfile() {
-  renderProfile($('profileBox'), { carName: car?.name ?? draft.name, stars: starCount(), progress: progress(), trackNames: TRACK_NAMES, look })
+  renderProfile($('profileBox'), {
+    carName: draft.name,
+    stars: starCount(),
+    progress: progress(),
+    trackNames: TRACK_NAMES,
+    look,
+    identity: leaderboard.identity(),
+    onRename: (v) => {
+      setName(v)
+      nameInput.value = draft.name
+    },
+    onSignIn: () => leaderboard.signIn(),
+    onOpenBoard: () => leaderboard.openBoard(),
+  })
+}
+
+
+// ---------- CHASSIS ----------
+// A frame changes how the car drives (setup.ts has the numbers). Frames are unlocked with stars, like designs.
+const effectsOf = (c: { top: number; grip: number; accel: number; turn: number; range: number }) =>
+  ([['acceleration', c.accel], ['top speed', c.top], ['grip', c.grip], ['steering', c.turn], ['sight', c.range]] as const)
+    .filter(([, v]) => v !== 1)
+    .map(([k, v]) => (v > 1 ? '+' : '−') + Math.round(Math.abs(v - 1) * 100) + '% ' + k)
+    .join(' · ')
+function renderChassis() {
+  const stars = starCount()
+  const choices = [{ id: undefined, name: 'Classic', blurb: 'No strengths and no weaknesses.', stars: 0, fx: 'the baseline' }, ...CHASSIS.map((c) => ({ id: c.id as string | undefined, name: c.name, blurb: c.blurb, stars: c.stars, fx: effectsOf(c) }))]
+  $('chassis').replaceChildren(
+    ...choices.map((c) => {
+      const open = stars >= c.stars
+      const on = (b.chassis ?? undefined) === c.id
+      const btn = document.createElement('button')
+      btn.type = 'button'
+      btn.className = 'frame' + (on ? ' on' : '') + (open ? '' : ' locked')
+      btn.setAttribute('aria-pressed', String(on))
+      const name = Object.assign(document.createElement('b'), { textContent: c.name })
+      const fx = Object.assign(document.createElement('small'), { textContent: open ? c.fx : '★ ' + c.stars + ' to unlock' })
+      btn.append(name, fx)
+      btn.addEventListener('click', () => {
+        if (!open) {
+          $('chassisTip').textContent = c.name + ' unlocks at ' + c.stars + ' stars. ' + c.blurb
+          return
+        }
+        if (c.id) b.chassis = c.id as typeof b.chassis
+        else delete b.chassis
+        changed()
+      })
+      return btn
+    }),
+  )
+  const cur = CHASSIS.find((c) => c.id === b.chassis)
+  $('chassisTip').textContent = cur ? cur.name + ': ' + cur.blurb + ' A frame is a different car to drive, not a stronger one.' : 'Frames change how the car drives. Each has a strength and a weakness, so pick the one that suits your tracks.'
 }
 
 type Board = { car: CarFile; brain: Brain; laps: (Lap | null)[]; next: number }
@@ -1348,7 +1424,7 @@ function renderPractice() {
   const rows: [string, string][] = [
     ['Sensors', b.sensors.count + ' rays over a ' + b.sensors.spread + '° view'],
     ['Brain', genomeLength(brainShape(b)) + ' connections'],
-    ['Top speed · cornering', spec.maxSpeed.toFixed(1) + ' · ' + spec.gripSpeed.toFixed(1)],
+    ['Top speed · cornering', kmh(spec.maxSpeed) + ' · ' + kmh(spec.gripSpeed)],
     ['Pace · crash · smooth', pct(b.reward.pace) + ' · ' + pct(b.reward.safety) + ' · ' + pct(b.reward.smooth)],
     ['Practice', b.practice.map((id) => TRACK_NAMES[id]).join(', ')],
     ['Road', (b.weather === 'wet' ? 'Wet' : 'Dry') + (b.cond?.night ? ' · night' : '') + (b.cond?.ice ? ' · ice patches' : '')],
@@ -1371,7 +1447,7 @@ function renderPractice() {
       ? car.name + ' was trained with a different setup. Train again to use the new one.'
       : car.name + ' is trained and ready.'
   $<HTMLButtonElement>('testDrive').disabled = !car || training
-  $('testDrive').textContent = test ? 'Stop driving' : 'Test drive'
+  $('testDrive').textContent = test ? 'Stop watching' : 'Watch it drive'
   $<HTMLButtonElement>('saveCar').disabled = !car
   $<HTMLButtonElement>('shareCar').disabled = !car
   $('handGo').textContent = hand ? 'Stop driving' : 'Take the wheel'
@@ -1427,7 +1503,7 @@ function focusCar(): Car | null {
 }
 let parkedCache: { key: string; car: Car } | null = null
 function parked(): Car {
-  const key = JSON.stringify(b.sensors) + b.balance + JSON.stringify(b.parts ?? {}) + ':' + focusTrack + ':' + (b.weather ?? 'dry') + JSON.stringify(b.cond ?? {})
+  const key = JSON.stringify(b.sensors) + (b.chassis ?? '') + b.balance + JSON.stringify(b.parts ?? {}) + ':' + focusTrack + ':' + (b.weather ?? 'dry') + JSON.stringify(b.cond ?? {})
   if (!parkedCache || parkedCache.key !== key) parkedCache = { key, car: createCar(practiceOn(focusTrack, b), specOf(b)) }
   return parkedCache.car
 }
@@ -1599,7 +1675,7 @@ function draw() {
       ['You', 'DRIVING'],
       ['Attempts', String(hd.tries + 1)],
       ['Lap progress', Math.round((100 * hd.car.passed) / CHECKPOINTS) + '<small>%</small>'],
-      ['Speed', (Math.max(0, hd.car.speed) * 40).toFixed(0) + '<small> km/h</small>'],
+      ['Speed', kmh(Math.max(0, hd.car.speed))],
     ])
     return
   }
@@ -1632,7 +1708,7 @@ function draw() {
       ['Lap time', time(t.car.steps / 60) + '<small>s</small>'],
       ['Best lap', time(t.bestLap) + '<small>s</small>'],
       ['Lap progress', Math.round((100 * t.car.passed) / CHECKPOINTS) + '<small>%</small>'],
-      ['Speed', (Math.max(0, t.car.speed) * 40).toFixed(0) + '<small> km/h</small>'],
+      ['Speed', kmh(Math.max(0, t.car.speed))],
     ])
     return
   }
@@ -1651,7 +1727,7 @@ function draw() {
   })
   if (zoomedIn) {
     hudText(b.sensors.count + ' RAYS', 16, 38, 26)
-    hudText(b.sensors.spread + '° VIEW · RANGE ' + p.spec.rayRange, 16, 58, 14, COL.accent)
+    hudText(b.sensors.spread + '° VIEW · RANGE ' + p.spec.rayRange + ' PX', 16, 58, 14, COL.accent)
     hudText(TRACK_NAMES[focusTrack].toUpperCase() + ' · START LINE', 16, 76, 13, COL.muted)
     hudText('PICK A TRACK BELOW TO SEE IT WHOLE', W - 16, H - 16, 13, COL.muted, 'right')
   } else {
@@ -1663,7 +1739,7 @@ function draw() {
   }
   setStrip([
     ['Brain', genomeLength(brainShape(b)) + '<small> connections</small>'],
-    ['Top speed', specOf(b).maxSpeed.toFixed(1)],
+    ['Top speed', kmh(specOf(b).maxSpeed)],
     ['Practice', b.practice.length + '<small> tracks</small>'],
     ['Rounds', '~' + estGenerations(b)],
   ])
@@ -1699,6 +1775,7 @@ const leaderboard = createLeaderboard({
   getGpId: () => raceView!.gpId(),
   goRace: () => setTab('race'),
   notify: showNotice,
+  onEntered: () => showDare('entered'),
   // a car from the board becomes the car to beat, raced on this device like a friend's challenge
   raceAgainst: (rival, gp) => {
     setChallenge(rival)
@@ -1718,6 +1795,43 @@ raceView = createRaceView({ onResult: (gpId, r) => {
   if (r) announceParts()
 },  ctx, cam, getCar: () => car, isStale: carIsStale, getChallenge: () => challenge, getLook: () => look, goTo: setTab, hudText, setStrip })
 
+
+// ---------- DARE A FRIEND ----------
+// Nothing else in the game says a car can be sent to a friend, so a dialog asks, right after a car is trained and right after
+// it goes on a board. It stops once the player has shared once, or has been asked three times.
+const ASKS = 'crashlab.dareAsks'
+const asked = () => Number(localStorage.getItem(ASKS)) || 0
+const dareDialog = $<HTMLDialogElement>('dareDialog')
+function showDare(kind: 'trained' | 'entered') {
+  if (!car || counts().shares > 0 || asked() >= 3 || dareDialog.open) return
+  try {
+    localStorage.setItem(ASKS, String(asked() + 1))
+  } catch {
+    /* storage blocked: it may ask again */
+  }
+  $('dareTitle').textContent = kind === 'trained' ? car.name + ' is trained' : car.name + ' is on the board'
+  $('dareText').textContent =
+    kind === 'trained'
+      ? 'Before you race it, dare a friend. They open your link, race your car on the same secret tracks, and try to beat it. Nobody has to sign in.'
+      : 'Now dare a friend to beat it. The link comes with your result card, ready to paste into a chat. Nobody has to sign in.'
+  $('dareMsg').textContent = ''
+  $('dareGo').textContent = 'Copy challenge link'
+  $('dareLink').hidden = true
+  dareDialog.showModal()
+}
+$('dareNo').addEventListener('click', () => dareDialog.close())
+$('dareGo').addEventListener('click', async () => {
+  await shareCar((text) => ($('dareMsg').textContent = text), $<HTMLInputElement>('dareLink'), true)
+  if (!$('dareLink').hidden) return // it could not copy: the link is shown to copy by hand
+  $('dareGo').textContent = 'Copied ✓'
+  setTimeout(() => dareDialog.open && dareDialog.close(), 1400)
+})
+// the challenge buttons glow until the first share
+function refreshHot() {
+  const hot = counts().shares === 0
+  document.querySelectorAll('.hot').forEach((e) => e.classList.toggle('on', hot))
+}
+
 // ---------- CHALLENGE LINKS ----------
 // Share: the car goes into a link, so a friend can race it with no server.
 // It is offered under Your car in Practice, and under the result of a race, where the wish to show it off is greatest.
@@ -1729,6 +1843,7 @@ async function shareCar(say: (text: string) => void, box: HTMLInputElement, with
   try {
     await navigator.clipboard.writeText(text)
     logEvent({ k: 'share' })
+    refreshHot()
     box.hidden = true
     say((withCard ? 'Result card and challenge link copied. Paste it into a chat.' : 'Challenge link copied.') + ' Anyone who opens it can race ' + car.name + ' on the Grand Prix and try to beat it.')
   } catch {
@@ -1781,6 +1896,7 @@ window.addEventListener('hashchange', () => {
 })
 takeChallenge()
 const today = visit()
+refreshHot()
 raceView.render()
 renderGarage()
 renderLooks()

@@ -232,3 +232,31 @@ Built from this: the **Keep training** button (30% of the budget, needs the same
 
 - Quick steering no longer beats a car without it outright; the wing is faster dry and at night, slower wet and on ice. Both are trade-offs now.
 - **One level of ray range (+40) bought nothing** in either round, so levels were a point that buys a worse car. Ray range became one node, Long rays: 2 points, +120 (320, like the old long-range eyes), 3% slower, keeping the ordinary scale. At that length it helped in the wet (5.0 against 3.0) and hurt on ice.
+
+## 8 Nov 2026: chassis (frames)
+
+A frame changes a car's top speed, grip, acceleration, steering and sight by fixed factors (`CHASSIS` in setup.ts), as a
+side-grade unlocked with stars. `scripts/chassisCheck.ts` trained the default build in each frame on seeds 1 to 3 and raced
+each car on three sets of dry tracks (Grand Prix 1 and two fixed weekly sets), so 9 races a frame. Classic, Sprinter and
+Tourer are from the first round; the rest from the second, after a retune. "Clean" means all 8 finished.
+
+| Frame | Factors | Tracks finished (of 8) | Clean races (of 9) | Mean time, clean races | Result |
+|---|---|---|---|---|---|
+| Classic | none | 7.78 | 7 | 149.6 s | baseline |
+| Sprinter | accel 1.35, top 0.93, grip 0.93 | 8.00 | 9 | 157.9 s | shipped: reliable, rarely gold |
+| Tourer | grip 1.14, top 0.92, accel 0.95, turn 0.95 | 7.56 | 6 | 148.3 s | shipped: fast, crashes more |
+| Drifter | accel 1.2, turn 1.2, grip 0.88 | 7.56 | 6 | 148.1 s | shipped |
+| Dancer, first try | turn 1.25, grip 0.92, top 0.98 | 8.00 | 9 | 147.5 s | too strong |
+| Dancer | turn 1.15, grip 0.9, top 0.98 | 7.78 | 7 | 153.4 s | shipped, a little weak |
+| Scout, first try | sight 1.3, grip 1.04, turn 1.05, top 0.98 | 8.00 | 9 | 145.1 s | too strong |
+| Scout | sight 1.2, grip 1.04, turn 1.05, top 0.96 | 7.78 | 7 | 147.8 s | shipped, a little quick |
+| Brawler | top 0.88, grip 1.1, accel 1.15 | 8.00 | 9 | 150.9 s | left out: never crashed and only 1 s slower |
+| Cruiser | top 1.06, grip 1.06, accel 0.8, turn 0.9 | 7.89 | 8 | 162.0 s | left out: 12 s slower |
+| Dragster, first try | top 1.08, accel 0.85, grip 0.97 | 7.78 | 8 | 156.5 s | too weak |
+| Dragster | top 1.08, accel 0.92, grip 0.97 | 7.44 | 5 | 159.7 s | left out: worse on both |
+| Hawk | sight 1.5, top 0.94, grip 0.97 | 6.22 | 6 | 154.3 s | left out: one training collapsed (2 to 4 of 8), the others slow |
+
+- Noise is large. The Dancer retune moved it from 9 clean races to 7. With 3 trainings a frame, gaps under about one track
+  or 5 s may be luck. Only dry roads, the default setup and no skill-tree nodes were tested.
+- Extra top speed seems worth little on these tracks: Dragster lost twice. Seeing further helped Scout a little but was not
+  worth Hawk's costs.

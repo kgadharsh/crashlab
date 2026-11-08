@@ -62,6 +62,9 @@ function headers(): Record<string, string> {
   return import.meta.env.DEV ? { 'X-Dev-Player': store.get(NAME_KEY) || 'player' } : {}
 }
 
+// Who the player is on the board, for the profile
+export type Identity = { kind: 'offline' | 'out' | 'checking' | 'noname' } | { kind: 'in'; name: string }
+
 type Deps = {
   getCar: () => CarFile | null
   getGpId: () => string // the Grand Prix the Race tab is on, so a result goes on the matching board
@@ -69,9 +72,10 @@ type Deps = {
   notify: (text: string) => void // a message in the bar at the bottom of the screen
   raceAgainst: (rival: CarFile, gp: string | GrandPrix) => void // make a board car the one to beat (a past week comes as its Grand Prix)
   openWeek: (gp: GrandPrix) => void // race a finished week's tracks
+  onEntered?: () => void // a car has just been taken onto a board
 }
 
-export function createLeaderboard({ getCar, getGpId, goRace, notify, raceAgainst, openWeek }: Deps) {
+export function createLeaderboard({ getCar, getGpId, goRace, notify, raceAgainst, openWeek, onEntered }: Deps) {
   const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T
   // an element the player must see now: its panel opens if it is folded
   const show = (id: string) => {
@@ -80,7 +84,7 @@ export function createLeaderboard({ getCar, getGpId, goRace, notify, raceAgainst
     return el
   }
   const panel = $('boardOnline')
-  if (!API) return { showResult() {} }
+  if (!API) return { showResult() {}, identity: (): Identity => ({ kind: 'offline' }), signIn() {}, openBoard() {} }
   panel.hidden = false
   $('resultBoard').hidden = false
   $('weeklyPanel').hidden = false
@@ -296,11 +300,13 @@ export function createLeaderboard({ getCar, getGpId, goRace, notify, raceAgainst
         store.set('crashlab.enteredWeekly', '1') // it unlocks headlights in the skill tree
         if (weekly && data.rank) rememberRank('w:' + weekly.week, data.rank)
         tell(car.name + ' finished ' + data.finished + ' of 8 in ' + data.totalTime!.toFixed(1) + ' s. You are #' + data.rank + ' this week.')
+        onEntered?.()
         showTracks(data.tracks ?? [])
         return refreshWeekly()
       }
       if (data.rank) rememberRank(gpId, data.rank)
       tell('On the board: ' + car.name + ' finished ' + data.finished + ' of 8 in ' + data.totalTime!.toFixed(1) + ' s' + (data.medal ? ' (' + data.medal + ')' : '') + '. You are number ' + data.rank + '. ' + data.left + ' entries left today.')
+      onEntered?.()
       await refresh()
     } catch {
       tell('The board is not reachable right now.', true)
@@ -493,5 +499,10 @@ export function createLeaderboard({ getCar, getGpId, goRace, notify, raceAgainst
 
   refresh()
   refreshWeekly()
-  return { showResult }
+  const identity = (): Identity => (!nameIn(store.get(TOKEN_KEY)) ? { kind: 'out' } : myName === undefined ? { kind: 'checking' } : myName === null ? { kind: 'noname' } : { kind: 'in', name: myName })
+  const openBoard = () => {
+    goRace()
+    show('boardOnline').scrollIntoView({ behavior: 'smooth', block: 'center' })
+  }
+  return { showResult, identity, signIn, openBoard }
 }

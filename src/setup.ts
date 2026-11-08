@@ -61,6 +61,22 @@ export function levelOf(p: Parts | undefined, id: NodeId): number {
 }
 export const pointsUsed = (p: Parts | undefined) => NODES.reduce((sum, n) => sum + levelOf(p, n.id) * n.cost, 0)
 
+// ---------- CHASSIS ----------
+// Each frame trades strengths for weaknesses, and none is meant to be better than the plain Classic frame overall: a
+// frame is a different car to drive, not a stronger one (scripts/chassisCheck.ts trains each and races it against Classic).
+// The server cannot check which frames a player has unlocked, which is fine because none is a strict upgrade.
+// Brawler, Cruiser, Dragster and Hawk were tried and left out (docs/experiments.md, 8 Nov 2026).
+export type ChassisId = 'sprinter' | 'tourer' | 'drifter' | 'dancer' | 'scout'
+export type Chassis = { id: ChassisId; name: string; blurb: string; stars: number; top: number; grip: number; accel: number; turn: number; range: number }
+export const CHASSIS: Chassis[] = [
+  { id: 'sprinter', name: 'Sprinter', blurb: 'Leaps off the line. Lower top speed and grip.', stars: 10, top: 0.93, grip: 0.93, accel: 1.35, turn: 1, range: 1 },
+  { id: 'tourer', name: 'Tourer', blurb: 'Holds bends at speed. Lower top speed, slower to steer.', stars: 20, top: 0.92, grip: 1.14, accel: 0.95, turn: 0.95, range: 1 },
+  { id: 'drifter', name: 'Drifter', blurb: 'Punchy and agile, but it slides early in bends.', stars: 30, top: 1, grip: 0.88, accel: 1.2, turn: 1.2, range: 1 },
+  { id: 'dancer', name: 'Dancer', blurb: 'Turns on a coin. The car starts to slide at a lower speed in bends.', stars: 40, top: 0.98, grip: 0.9, accel: 1, turn: 1.15, range: 1 },
+  { id: 'scout', name: 'Scout', blurb: 'Sees a fifth further. A little slower overall.', stars: 55, top: 0.96, grip: 1.04, accel: 1, turn: 1.05, range: 1.2 },
+]
+export const chassisOf = (id: ChassisId | undefined) => CHASSIS.find((c) => c.id === id)
+
 export type Build = {
   sensors: Sensors
   balance: number // car setup: 0 = all grip, 1 = all top speed
@@ -69,6 +85,7 @@ export type Build = {
   weather?: Weather // left out means dry, so every earlier car and build stays valid
   parts?: Parts // left out means none, so every earlier car and build stays valid
   cond?: { night?: true; ice?: true } // practice conditions besides the road: night (short rays without headlights) and ice patches
+  chassis?: ChassisId // the car's frame: a different mix of speed, grip, acceleration and steering. Left out means the Classic frame
   perks?: { nitro?: boolean } // an experiment (scripts/nitroCheck.ts), not a garage choice: it is not saved with a car
 }
 
@@ -204,12 +221,21 @@ export function specOf(b: Build): CarSpec {
   if (on('quick')) turn *= QUICK_TURN
   if (on('feather')) turn *= FEATHER_TURN
   if (on('steady')) turn *= STEADY_TURN
+  // the frame is applied last, so a car with the Classic frame gets exactly the numbers it always had
+  const ch = chassisOf(b.chassis)
+  if (ch) {
+    maxSpeed *= ch.top
+    gripSpeed *= ch.grip
+    accel *= ch.accel
+    turn *= ch.turn
+  }
+  const reach = ch ? ch.range : 1
   return {
     rayAngles: rayAngles(b.sensors, on('focus')),
-    rayRange: RAY_RANGE + RANGE_STEP * range,
+    rayRange: (RAY_RANGE + RANGE_STEP * range) * reach,
     // ray range keeps the ordinary scale. Long-range eyes from before the tree squeezed every distance into 0 to 1,
     // which lost detail near walls (scripts/nodeCheck.ts: range never helped), and they keep doing so, so old cars race as they did
-    ...(range && !p?.eyes ? { rayScale: RAY_RANGE } : {}),
+    ...((range && !p?.eyes) || reach !== 1 ? { rayScale: RAY_RANGE } : {}),
     maxSpeed,
     gripSpeed,
     nitro: !!b.perks?.nitro,
@@ -251,6 +277,7 @@ export function buildProblem(b: unknown, practiceCount: number): string | null {
   const p = d.practice
   if (p.length < LIMITS.practice[0] || p.length > maxPractice(d)) return 'wrong number of practice tracks'
   if (new Set(p).size !== p.length || p.some((id) => !Number.isInteger(id) || id < 0 || id >= practiceCount)) return 'unknown practice track'
+  if (d.chassis !== undefined && !chassisOf(d.chassis)) return 'unknown frame'
   if (d.weather !== undefined && !WEATHERS.includes(d.weather)) return 'unknown weather'
   if (d.cond !== undefined) {
     if (!d.cond || typeof d.cond !== 'object' || Object.entries(d.cond).some(([k, v]) => !(k === 'night' || k === 'ice') || v !== true)) return 'unknown conditions'
@@ -271,6 +298,7 @@ export function cleanBuild(b: Build): Build {
     // only the parts that are on, and nothing at all when none are, so a build without parts looks as it always did
     // (a level-1 node is written as true, as parts always were, and long-range eyes stay eyes, so old cars drive as they did)
     ...(pointsUsed(b.parts) ? { parts: Object.fromEntries([...(b.parts?.eyes ? [['eyes', true]] : []), ...NODE_IDS.filter((k) => (k !== 'range' || !b.parts?.eyes) && levelOf(b.parts, k)).map((k) => [k, levelOf(b.parts, k) === 1 ? true : levelOf(b.parts, k)])]) as Parts } : {}),
+    ...(b.chassis && chassisOf(b.chassis) ? { chassis: b.chassis } : {}),
     // practice conditions: only the ones that are on, and nothing when none are
     ...(b.cond?.night || b.cond?.ice ? { cond: { ...(b.cond.night ? { night: true as const } : {}), ...(b.cond.ice ? { ice: true as const } : {}) } } : {}),
   }
