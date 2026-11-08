@@ -109,7 +109,7 @@ function hours(steps: number) {
 // ---------- PAGE ----------
 document.querySelector('#app')!.innerHTML = `
 <header class="top">
-  <div class="brand">CRASH<span>LAB</span></div>
+  <div class="brand"><svg class="logo" viewBox="-1 -1 34 34" aria-hidden="true"><rect x="-1" y="-1" width="34" height="34" rx="8" fill="#ffb31a"/><path d="M28 16 15 10.5 4.5 12.5v7L15 21.5z" fill="#181204"/><ellipse cx="14" cy="16" rx="3.4" ry="1.9" fill="#ffb31a"/></svg><span class="word">CRASH<b>LAB</b></span></div>
   <nav class="tabs" role="tablist">
     <button class="tab" data-tab="garage" role="tab"><span class="tnum">1</span>Garage</button>
     <button class="tab" data-tab="skills" role="tab"><span class="tnum">2</span>Skill tree</button>

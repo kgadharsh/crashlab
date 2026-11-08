@@ -45,7 +45,9 @@ button, input { font: inherit; color: inherit; }
   letter-spacing: 0.04em;
   font-style: italic;
 }
-.brand span { color: var(--accent); }
+.brand .word b { color: var(--accent); font: inherit; }
+.brand { display: flex; align-items: center; gap: 10px; }
+.brand .logo { width: 28px; height: 28px; border-radius: 7px; flex: none; }
 .tabs { display: flex; gap: 4px; }
 .tab {
   background: none;
