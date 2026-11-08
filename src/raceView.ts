@@ -11,7 +11,7 @@ import {
 import { logEvent, recordChallenge } from './playLog'
 import { loadFewest, recordFewest } from './board'
 import { drawMine } from './perks'
-import { COL, H, W, clear, drawCrash, drawMinimap, drawRays, drawTrack, follow, withCamera, type Camera } from './draw'
+import { COL, H, W, clear, drawCar, drawCrash, drawMinimap, drawRays, drawTrack, follow, withCamera, type Camera } from './draw'
 
 // A friend's car to beat (with its result in each Grand Prix on this device), or why their link could not be used
 export type Challenge = { car: CarFile; results: RaceResult[] } | { error: string }
@@ -41,7 +41,12 @@ type Live = {
   hold: number // steps left to linger on a finished lap
   summary: RaceResult | null // set when the whole race is over
   newBest: boolean
+  ghost: Ghost | null // a friend's car from a challenge link, driving the same track beside yours
+  wait: number // steps spent waiting at the end of a track for the ghost to finish
+  watching: boolean // no car of your own: the friend's car is the one racing, and nothing is recorded
 }
+type Ghost = { car: CarFile; brain: Brain; spec: CarSpec; lap: Car; done: boolean }
+const GHOST_WAIT = 240 // at most 4 more seconds at the end of a track for the ghost to finish its lap
 
 const bestKey = (gp: GrandPrix) => 'crashlab.best.' + gp.id // the first Grand Prix keeps the key it always had
 const GP_KEY = 'crashlab.gp'
@@ -78,6 +83,25 @@ const headline = (s: RaceResult, gp: GrandPrix) => (gp.week !== undefined ? s.fi
 
 const time = (s: number | null) => (s === null ? '--.--' : s.toFixed(2))
 const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T
+
+// A race's score in a few characters: the time when all 8 finished, else how many did
+const scoreOf = (r: RaceResult) => (r.finished === RACE_COUNT ? r.totalTime.toFixed(1) + ' s' : r.finished + '/' + RACE_COUNT)
+// How far the winner was ahead: tracks finished count first, then time
+function lead(win: RaceResult, lose: RaceResult): string {
+  if (win.finished !== lose.finished) {
+    const n = win.finished - lose.finished
+    return ': ' + n + (n === 1 ? ' more track' : ' more tracks') + ' finished'
+  }
+  return ' by ' + (lose.totalTime - win.totalTime).toFixed(1) + ' s'
+}
+const emojiRow = (r: RaceResult, gp: GrandPrix) => r.tracks.map((t) => (t.time === null ? '⬛' : t.time <= gp.goldTime / RACE_COUNT ? '🟩' : '🟨')).join('')
+// The words after a race against a friend's car: who won and by how much, both rows of squares, and the next move
+export function duelText(me: string, them: string, gp: GrandPrix, mine: RaceResult, theirs: RaceResult, link: string): string {
+  const won = better(mine, theirs)
+  const lost = better(theirs, mine)
+  const head = won ? '"' + me + '" beat "' + them + '"' + lead(mine, theirs) + ' ⚔️' : lost ? '"' + them + '" beat "' + me + '"' + lead(theirs, mine) + '. Rematch coming 🔧' : 'Dead heat between "' + me + '" and "' + them + '"'
+  return ['CRASHLAB · ' + gp.name, head, emojiRow(mine, gp) + '  ' + me + ' · ' + scoreOf(mine), emojiRow(theirs, gp) + '  ' + them + ' · ' + scoreOf(theirs), won ? 'Your move:' : lost ? 'Think you can beat us both?' : 'Settle it:', link].join('\n')
+}
 
 // The words that go with a shared car, for a message or a post: no spoilers, only the pattern of the race and a dare
 export function cardText(carName: string, gp: GrandPrix, s: RaceResult, link: string): string {
@@ -138,8 +162,21 @@ export function createRaceView(d: RaceDeps) {
     render()
   }
 
+  // the friend's car from a challenge link, if there is one that could be read
+  const rivalCar = () => {
+    const ch = d.getChallenge()
+    return ch && !('error' in ch) ? ch.car : null
+  }
+  function makeGhost(rival: CarFile, track: ReturnType<typeof gpTrack>): Ghost {
+    const spec = specOf(rival.build)
+    return { car: rival, brain: genomeToBrain(rival.genome, brainShape(rival.build)), spec, lap: createCar(track, spec), done: false }
+  }
+
   function start() {
-    const car = d.getCar()
+    const own = d.getCar()
+    const rival = rivalCar()
+    // with no car of your own, a challenge link's car can still be watched
+    const car = own ?? rival
     if (!car) return
     const spec = specOf(car.build)
     live = {
@@ -153,6 +190,9 @@ export function createRaceView(d: RaceDeps) {
       hold: 0,
       summary: null,
       newBest: false,
+      ghost: own && rival ? makeGhost(rival, gpTrack(gp(), 0)) : null,
+      wait: 0,
+      watching: !own,
     }
     follow(d.cam, live.lap, true)
     render()
@@ -168,12 +208,16 @@ export function createRaceView(d: RaceDeps) {
     r.index++
     if (r.index >= RACE_COUNT) return finish(r)
     r.lap = createCar(gpTrack(r.gp, r.index), r.spec)
+    if (r.ghost) r.ghost = makeGhost(r.ghost.car, gpTrack(r.gp, r.index))
+    r.wait = 0
     follow(d.cam, r.lap, true)
   }
 
   function finish(r: Live) {
     r.index = RACE_COUNT - 1
     r.summary = summarise(r.results)
+    // watching a friend's car records nothing: it is not your race
+    if (r.watching) return render()
     // a race against a friend's car from a challenge link counts as won or lost
     const ch = d.getChallenge()
     if (ch && !('error' in ch)) recordChallenge(better(r.summary, rivalResult(ch, r.gp)))
@@ -209,12 +253,26 @@ export function createRaceView(d: RaceDeps) {
   function tick() {
     const r = live
     if (!r || r.summary) return
+    const stepGhost = () => {
+      const g = r.ghost
+      if (!g || g.done) return
+      drive(g.lap, g.brain)
+      if (lapIsOver(g.lap)) g.done = true
+    }
     if (r.hold > 0) {
-      if (--r.hold === 0) nextTrack(r)
-      return
+      for (let k = 0; k < speed; k++) stepGhost()
+      if (--r.hold > 0) return
+      // the ghost gets a little longer to finish its lap, so you see who was quicker
+      if (r.ghost && !r.ghost.done && r.wait < GHOST_WAIT) {
+        r.hold = 1
+        r.wait += speed
+        return
+      }
+      return nextTrack(r)
     }
     for (let k = 0; k < speed; k++) {
       drive(r.lap, r.brain)
+      stepGhost()
       if (lapIsOver(r.lap)) return endLap(r)
     }
   }
@@ -223,14 +281,18 @@ export function createRaceView(d: RaceDeps) {
   function render() {
     const car = d.getCar()
     const racing = !!live && !live.summary
+    const rival = rivalCar()
     const go = $<HTMLButtonElement>('raceGo')
-    go.disabled = !car || racing
-    go.textContent = live?.summary ? 'Race again' : 'Race your car'
+    go.disabled = (!car && !rival) || racing
+    // with no car of your own, a friend's challenge car can be watched straight away
+    go.textContent = !car && rival ? 'Watch ' + rival.name + ' race' : live?.summary ? 'Race again' : 'Race your car'
     $<HTMLButtonElement>('raceSkip').disabled = !racing
     choices().forEach((_, i) => ($<HTMLButtonElement>('gp' + i).disabled = racing)) // the Grand Prix cannot change mid-race
     $('raceSpeed').textContent = 'Speed ' + speed + '×'
     $('raceMsg').textContent = !car
-      ? 'Train a car in Practice first.'
+      ? rival
+        ? 'You have no car yet. Watch ' + rival.name + ' drive these tracks, then train a car in Practice to beat it.'
+        : 'Train a car in Practice first.'
       : d.isStale()
         ? 'Racing ' + car.name + ', as trained. Your latest garage changes are not in it yet.'
         : 'Racing ' + car.name + '.'
@@ -280,17 +342,43 @@ export function createRaceView(d: RaceDeps) {
       m.textContent = medal ? medal.toUpperCase() : headline(s, live!.gp)
       m.style.color = medal ? MEDAL_COLOUR[medal] : live!.gp.week !== undefined ? COL.text : COL.muted
       const gens = live!.car.generations
-      $('resultLine').textContent = s.finished + ' of ' + RACE_COUNT + ' finished · ' + s.totalTime.toFixed(1) + ' s total' + (gens ? ' · trained for ' + gens + ' rounds' : '')
-      $('advice').textContent = adviceFor(s, live!.gp, live!.car.build.weather === 'wet')
-      d.onResult?.(live!.gp.id, s)
+      const watched = live!.watching
+      $('resultLine').textContent = (watched ? 'That was ' + live!.car.name + "'s car: " : '') + s.finished + ' of ' + RACE_COUNT + ' finished · ' + s.totalTime.toFixed(1) + ' s total' + (gens && !watched ? ' · trained for ' + gens + ' rounds' : '')
+      $('advice').textContent = watched ? 'Now build and train your own car in the Garage and Practice, then race it here to beat it.' : adviceFor(s, live!.gp, live!.car.build.weather === 'wet')
+      $('resultShare').hidden = watched
+      if (!watched) d.onResult?.(live!.gp.id, s)
       // the share card: one coloured square a track, green for a quick lap, amber for a slow one, dark for a crash
       const quick = live!.gp.goldTime / RACE_COUNT
-      $('scGrid').replaceChildren(...s.tracks.map((t) => Object.assign(document.createElement('i'), { className: 'sq ' + (t.time === null ? 'bad' : t.time <= quick ? 'fast' : 'ok') })))
+      const squares = (res: RaceResult) => res.tracks.map((t) => Object.assign(document.createElement('i'), { className: 'sq ' + (t.time === null ? 'bad' : t.time <= quick ? 'fast' : 'ok') }))
       $('scGp').textContent = live!.gp.name.toUpperCase()
-      $('scName').textContent = live!.car.name
-      $('scMedal').textContent = medal ? medal.toUpperCase() : s.finished + ' OF ' + RACE_COUNT
-      $('scMedal').style.color = medal ? MEDAL_COLOUR[medal] : COL.text
-      $('scLine').textContent = s.finished === RACE_COUNT ? s.totalTime.toFixed(1) + ' s over ' + RACE_COUNT + ' secret tracks' : s.finished + ' of ' + RACE_COUNT + ' secret tracks finished'
+      const chNow = d.getChallenge()
+      const duel = chNow && !('error' in chNow) && !watched ? { name: chNow.car.name, res: rivalResult(chNow, live!.gp) } : null
+      $('scGrid').classList.toggle('duel', !!duel)
+      if (duel) {
+        // head to head: a row of squares for each car, and who won by how much
+        const won = better(s, duel.res)
+        const lost = better(duel.res, s)
+        const row = (who: string, res: RaceResult) => {
+          const div = Object.assign(document.createElement('div'), { className: 'sc-row' })
+          div.append(Object.assign(document.createElement('span'), { className: 'sc-who', textContent: who }), ...squares(res), Object.assign(document.createElement('span'), { className: 'sc-t', textContent: scoreOf(res) }))
+          return div
+        }
+        $('scGrid').replaceChildren(row(live!.car.name, s), row(duel.name, duel.res))
+        $('scName').textContent = live!.car.name + ' vs ' + duel.name
+        $('scMedal').textContent = won ? 'WON' : lost ? 'LOST' : 'DEAD HEAT'
+        $('scMedal').style.color = won ? COL.good : lost ? COL.bad : COL.text
+        $('scLine').textContent = won ? 'Beat ' + duel.name + lead(s, duel.res) : lost ? duel.name + ' won' + lead(duel.res, s) : 'Exactly level with ' + duel.name
+        $('resultPractice').textContent = lost ? 'Retrain and rematch →' : 'Go to Practice →'
+        $('resultPractice').className = lost ? 'btn small primary' : 'btn small'
+      } else {
+        $('scGrid').replaceChildren(...squares(s))
+        $('scName').textContent = live!.car.name
+        $('scMedal').textContent = medal ? medal.toUpperCase() : s.finished + ' OF ' + RACE_COUNT
+        $('scMedal').style.color = medal ? MEDAL_COLOUR[medal] : COL.text
+        $('scLine').textContent = s.finished === RACE_COUNT ? s.totalTime.toFixed(1) + ' s over ' + RACE_COUNT + ' secret tracks' : s.finished + ' of ' + RACE_COUNT + ' secret tracks finished'
+        $('resultPractice').textContent = 'Go to Practice →'
+        $('resultPractice').className = 'btn small'
+      }
     }
     $('shareCard').hidden = !s
     // a friend's challenge, and how your latest race compares with it
@@ -304,7 +392,7 @@ export function createRaceView(d: RaceDeps) {
       const rivalMedal = medalFor(rival, gp())
       $('challengeLine').textContent =
         (rivalMedal ? ch.car.name + ' got ' + rivalMedal.toUpperCase() + ' in ' + gp().name + ': ' : ch.car.name + "'s result in " + gp().name + ': ') + rival.finished + ' of ' + RACE_COUNT + ' finished · ' + rival.totalTime.toFixed(1) + ' s total.' +
-        (car ? ' Race your car on the same tracks and beat it.' : ' Train a car in Practice, then race it here.')
+        (car ? ' Race your car on the same tracks: its car drives beside yours as a ghost.' : ' Watch it race now, then train a car in Practice to beat it.')
       $('challengeVs').textContent = live?.summary ? versus(live.summary, rival, ch.car.name) : ''
     }
     const fewest = loadFewest(gp().id)
@@ -333,9 +421,16 @@ export function createRaceView(d: RaceDeps) {
     withCamera(ctx, cam, () => {
       drawTrack(ctx, lap.track)
       if (result?.at) drawCrash(ctx, result.at.x, result.at.y)
+      const g = r.ghost
+      if (g && !g.lap.dead && !g.done && !r.summary) {
+        ctx.globalAlpha = 0.5
+        drawCar(ctx, g.lap, 34, 18, COL.tele, 0)
+        ctx.globalAlpha = 1
+      }
       if (!lap.dead) {
         if (!result) drawRays(ctx, lap)
-        drawMine(ctx, lap, 34, 18, d.getLook())
+        if (r.watching) drawCar(ctx, lap, 34, 18, COL.tele, 0) // the friend's car is not yours, so not in your paint
+        else drawMine(ctx, lap, 34, 18, d.getLook())
       }
     })
     drawMinimap(ctx, lap.track, cam, lap)
@@ -357,6 +452,12 @@ export function createRaceView(d: RaceDeps) {
       hudText(time(result?.time ?? lap.steps / 60), 16, 74, 30, result ? (result.time !== null ? COL.good : COL.bad) : COL.text)
       if (result) hudText(result.time !== null ? 'FINISHED' : CAUSE_LABEL[result.cause!].toUpperCase(), W / 2, 60, 30, result.time !== null ? COL.good : COL.bad, 'center')
       hudText(speed + '× SPEED', W - 16, H - 16, 16, COL.muted, 'right')
+      if (r.watching) hudText('WATCHING ' + r.car.name.toUpperCase(), W / 2, H - 16, 16, COL.tele, 'center')
+      const g = r.ghost
+      if (g) {
+        const gt = g.done ? (g.lap.passed >= CHECKPOINTS ? time(g.lap.steps / 60) : 'CRASHED') : time(g.lap.steps / 60)
+        hudText('GHOST ' + g.car.name.toUpperCase() + '  ' + gt, 16, 104, 16, COL.tele)
+      }
     }
     d.setStrip([
       ['Track', Math.min(r.index + 1, RACE_COUNT) + '<small>/' + RACE_COUNT + '</small>'],
@@ -390,7 +491,10 @@ export function createRaceView(d: RaceDeps) {
   // The words that go with the share card, for a message or a post: no spoilers, only the pattern and a dare
   function shareText(link: string): string | null {
     const s = live?.summary
-    return s && live ? cardText(live.car.name, live.gp, s, link) : null
+    if (!s || !live || live.watching) return null
+    const ch = d.getChallenge()
+    if (ch && !('error' in ch)) return duelText(live.car.name, ch.car.name, live.gp, s, rivalResult(ch, live.gp), link)
+    return cardText(live.car.name, live.gp, s, link)
   }
   return { tick, draw, render, gpId: () => gp().id, selectGpId, showPastWeek, shareText }
 }

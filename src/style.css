@@ -585,3 +585,11 @@ body.full .layout { grid-template-columns: minmax(0, 720px); justify-content: ce
 .frame.on { border-color: var(--accent); box-shadow: inset 3px 0 0 var(--accent); }
 .frame.on small { color: var(--text); }
 .frame.locked { opacity: 0.6; cursor: help; }
+
+/* head to head on the share card */
+.sc-grid.duel { flex-direction: column; align-items: stretch; gap: 6px; }
+.sc-row { display: grid; grid-template-columns: minmax(0, 1fr) repeat(8, 22px) 64px; gap: 4px; align-items: center; }
+.sc-row .sq { width: 22px; height: 22px; border-radius: 4px; }
+.sc-who { font: 700 13px var(--head); letter-spacing: 0.06em; text-transform: uppercase; text-align: left; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sc-t { font: 500 12px var(--mono); color: var(--muted); text-align: right; }
+@media (max-width: 420px) { .sc-row { grid-template-columns: minmax(0, 1fr) repeat(8, 18px) 54px; gap: 3px; } .sc-row .sq { width: 18px; height: 18px; } }
