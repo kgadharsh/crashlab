@@ -9,6 +9,7 @@ name: Daily Challenge
 on:
   schedule:
     - cron: '0 12 * * *' # every day 12:00 UTC, twelve hours before the new day starts
+    - cron: '0 20 * * *' # and again at 20:00 UTC: a retry if the first run was skipped or failed (a day that already has a seed is left alone)
   workflow_dispatch:
 
 permissions:
@@ -28,9 +29,24 @@ jobs:
           node-version: 24
           cache: npm
       - run: npm ci
+      - name: Does tomorrow already have a seed?
+        id: have
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          DAY=$(( $(date -u +%s) / 86400 + 1 ))
+          npx wrangler d1 execute crashlab --remote --config server/wrangler.toml --json \
+            --command "SELECT COUNT(*) AS n FROM days WHERE day = $DAY" > "$RUNNER_TEMP/have.json"
+          if [ "$(node -p "require('$RUNNER_TEMP/have.json')[0].results[0].n")" = "1" ]; then
+            echo "Day $DAY already has a seed: nothing to do."
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+          fi
       - name: Pick and test tomorrow's seed
+        if: steps.have.outputs.skip != 'true'
         run: npx tsx scripts/dailyPick.ts --out "$RUNNER_TEMP/day.json"
       - name: Store it in the board database
+        if: steps.have.outputs.skip != 'true'
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
