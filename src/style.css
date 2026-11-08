@@ -719,13 +719,12 @@ body { padding-bottom: 44px; }
 .strip8 .ok { color: var(--good); border-color: rgba(61, 220, 132, 0.5); background: rgba(61, 220, 132, 0.08); }
 .strip8 .bad { color: var(--bad); border-color: rgba(255, 77, 77, 0.5); background: rgba(255, 77, 77, 0.08); }
 
-/* the CAR chip opens the shelf from any tab */
-button.chip { cursor: pointer; background: transparent; text-align: left; transition: border-color 0.12s ease, color 0.12s ease; }
-button.chip:hover, button.chip[aria-expanded='true'] { border-color: var(--muted); color: var(--text); }
-button.chip:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
-.chip .shelftag { color: var(--muted); letter-spacing: 0.06em; }
-.chip .caret { color: var(--muted); }
+/* the My cars button opens the saved cars from any tab */
+.shelfbtn { flex: none; white-space: nowrap; }
+.shelfbtn b { color: var(--accent); font-family: var(--mono); font-weight: 600; }
+.shelfbtn[aria-expanded='true'] { border-color: var(--accent); }
 .shelfpop { position: absolute; z-index: 20; top: calc(100% + 6px); right: 16px; width: min(420px, calc(100vw - 32px)); display: grid; gap: 10px; padding: 14px 16px; background: var(--panel); border: 1px solid var(--muted); border-radius: 4px; box-shadow: 0 14px 40px rgba(0, 0, 0, 0.55); }
 .spHead { display: flex; align-items: baseline; justify-content: space-between; font: 700 14px/1 var(--head); letter-spacing: 0.14em; text-transform: uppercase; }
 .spHead span { font: 500 12px var(--mono); letter-spacing: 0; text-transform: none; color: var(--muted); }
 .spNow { font-size: 13px; color: var(--muted); padding-bottom: 8px; border-bottom: 1px solid var(--line); }
+.shelfpop p:empty { display: none; }

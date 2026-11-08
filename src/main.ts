@@ -118,9 +118,10 @@ document.querySelector('#app')!.innerHTML = `
     <button class="tab profile" data-tab="profile" role="tab"><span class="pico" aria-hidden="true">☻</span>Profile</button>
   </nav>
   <button type="button" class="btn small primary hot" id="topChallenge" disabled title="Train a car first, then dare a friend to beat it">⚔ Challenge a friend</button>
-  <button type="button" class="chip" id="chip" aria-haspopup="dialog" aria-expanded="false" aria-controls="shelfPop"></button>
-  <div class="shelfpop" id="shelfPop" role="dialog" aria-label="Your cars" hidden>
-    <div class="spHead"><b>Your cars</b><span id="spCount"></span></div>
+  <div class="chip" id="chip"></div>
+  <button type="button" class="btn small shelfbtn" id="shelfBtn" aria-haspopup="dialog" aria-expanded="false" aria-controls="shelfPop" title="Cars you have saved: switch back to any of them">My cars</button>
+  <div class="shelfpop" id="shelfPop" role="dialog" aria-label="My cars" hidden>
+    <div class="spHead"><b>My cars</b><span id="spCount"></span></div>
     <div class="spNow" id="spNow"></div>
     <div class="shelf" id="spShelf"></div>
     <p class="tip" id="spEmpty" style="margin-top:0"></p>
@@ -684,15 +685,13 @@ function changed() {
 function renderChip() {
   const chip = $('chip')
   chip.classList.toggle('stale', carIsStale())
-  const caret = Object.assign(document.createElement('span'), { className: 'caret', textContent: ' ▾' })
-  const shelfTag = Object.assign(document.createElement('span'), { className: 'shelftag', textContent: ' · SHELF ' + shelf.length + '/' + maxSlots() })
   if (!car) {
-    chip.replaceChildren('No car yet: train one in Practice', shelfTag, caret)
+    chip.textContent = 'No car yet: train one in Practice'
     return
   }
   const label = document.createElement('b')
   label.textContent = car.name
-  chip.replaceChildren('CAR ', label, carIsStale() ? ' · setup changed, retrain' : ' · ready', shelfTag, caret)
+  chip.replaceChildren('CAR ', label, carIsStale() ? ' · setup changed, retrain' : ' · ready')
 }
 
 // ---------- TRAINING ----------
@@ -1514,7 +1513,8 @@ function renderShelf() {
   }
   shelfRows($('shelf'), training)
   shelfRows($('spShelf'), training)
-  $('spCount').textContent = shelf.length + ' of ' + maxSlots() + ' on the shelf'
+  $('shelfBtn').replaceChildren('My cars ', Object.assign(document.createElement('b'), { textContent: shelf.length + '/' + maxSlots() }), ' ▾')
+  $('spCount').textContent = shelf.length + ' of ' + maxSlots() + ' saved'
   $('spNow').textContent = car ? 'On the track now: ' + carLabel(car) : 'No car yet. Train one in Practice.'
   $('spEmpty').textContent = shelf.length ? '' : 'Keep a trained car here, try a different setup, and switch back if the new one is worse.'
   renderChip()
@@ -1526,18 +1526,22 @@ function shelveCar() {
   renderShelf()
   carMsg('Put ' + car.name + ' on the shelf.')
   $('spMsg').textContent = 'Put ' + car.name + ' on the shelf.'
-  $('trainMsg').textContent = 'Put ' + car.name + ' on the shelf. Find it under the CAR chip at the top, on any tab.'
+  $('trainMsg').textContent = 'Saved ' + car.name + '. Get it back any time from My cars, top right, on any tab.'
 }
 $('shelve').addEventListener('click', shelveCar)
 $('spShelve').addEventListener('click', shelveCar)
-$('shelveQuick').addEventListener('click', shelveCar)
+$('shelveQuick').addEventListener('click', (e) => {
+  e.stopPropagation() // so the click that saves does not also count as a click outside the list
+  shelveCar()
+  setShelfPop(true) // show where the car went
+})
 // The CAR chip in the top bar opens the shelf from any tab
 function setShelfPop(open: boolean) {
   $('shelfPop').hidden = !open
-  $('chip').setAttribute('aria-expanded', String(open))
+  $('shelfBtn').setAttribute('aria-expanded', String(open))
   if (open) $('spMsg').textContent = ''
 }
-$('chip').addEventListener('click', (e) => {
+$('shelfBtn').addEventListener('click', (e) => {
   e.stopPropagation()
   setShelfPop($('shelfPop').hidden === true)
 })
@@ -1547,7 +1551,7 @@ document.addEventListener('click', (e) => {
 document.addEventListener('keydown', (e) => {
   if (e.key === 'Escape' && !$('shelfPop').hidden) {
     setShelfPop(false)
-    $('chip').focus()
+    $('shelfBtn').focus()
   }
 })
 
