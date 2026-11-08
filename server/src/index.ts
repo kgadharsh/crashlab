@@ -1,6 +1,8 @@
 // The CrashLab server: it takes a car, runs the Grand Prix itself with the same simulation the game
 // uses, and ranks the result. The score a player sees in the browser is never trusted.
 import { carFromJson, carToJson } from '../../src/carFile'
+import { buildProblem, cleanBuild, type Build } from '../../src/setup'
+import { PRACTICE_COUNT } from '../../src/track'
 import { sign, verify } from './auth'
 import { GRAND_PRIXES, medalFor, raceCar, weekOf, weekStart, weeklyGp, type GrandPrix } from '../../src/race'
 
@@ -10,6 +12,7 @@ export interface Env {
   GOOGLE_CLIENT_ID: string
   GOOGLE_CLIENT_SECRET: string
   SESSION_SECRET: string
+  JOBS_TOKEN?: string // shared with the official trainer (a GitHub Actions secret); without it the trainer endpoints are closed
 }
 
 const WEEKLY_LIMIT = 3 // entries per player in each Weekly Grand Prix; their best counts
@@ -112,12 +115,36 @@ async function finishSignIn(name: string, url: URL, env: Env): Promise<Response>
   return Response.redirect(state.ret + '#signin=' + token + '&nonce=' + state.nonce, 302)
 }
 
+// ---------- OFFICIAL TRAINING ----------
+// Players enter a setup, not a trained car. The official trainer (scripts/officialTrain.ts, run by a scheduled GitHub job)
+// trains every setup once, with the same budget and the same seed, and sends back the brain; the server races it and ranks it.
+// So the board measures setup choices only: free time to retrain, and training luck, count for nothing.
+const OFFICIAL_SINCE_WEEK = 2965 // weekly boards from this week on rank only officially trained cars
+let officialReady = false
+async function ensureOfficial(env: Env) {
+  if (officialReady) return
+  try {
+    await env.DB.prepare('ALTER TABLE entries ADD COLUMN official INTEGER NOT NULL DEFAULT 0').run()
+  } catch {
+    /* the column is already there */
+  }
+  await env.DB.prepare(
+    `CREATE TABLE IF NOT EXISTS jobs (id INTEGER PRIMARY KEY AUTOINCREMENT, player TEXT NOT NULL, display TEXT NOT NULL, gp TEXT NOT NULL,
+       name TEXT NOT NULL, build TEXT NOT NULL, day TEXT NOT NULL, status TEXT NOT NULL, created_at INTEGER NOT NULL,
+       started_at INTEGER, done_at INTEGER, entry INTEGER, error TEXT)`,
+  ).run()
+  officialReady = true
+}
+// entries that count on a board: officially trained ones, plus anything on a weekly board from before official training
+const COUNTS = `(official = 1 OR (gp LIKE 'w:%' AND CAST(substr(gp, 3) AS INTEGER) < ${OFFICIAL_SINCE_WEEK}))`
+
 async function submit(req: Request, env: Env): Promise<Response> {
+  await ensureOfficial(env)
   const player = await playerOf(req, env)
   if (!player) return json(req, { error: 'Sign in to enter the board.' }, 401)
   const text = await req.text()
-  if (text.length > MAX_BODY) return json(req, { error: 'That is too big to be a car.' }, 413)
-  let body: { gp?: unknown; car?: unknown }
+  if (text.length > MAX_BODY) return json(req, { error: 'That is too big to be a setup.' }, 413)
+  let body: { gp?: unknown; car?: unknown; build?: unknown; name?: unknown }
   try {
     body = JSON.parse(text)
   } catch {
@@ -126,8 +153,20 @@ async function submit(req: Request, env: Env): Promise<Response> {
   const weekly = body.gp === 'weekly' // always this week's: past weeks are closed
   const gp = weekly ? await weekGp(env, weekOf(Date.now())) : GRAND_PRIXES.find((g) => g.id === body.gp)
   if (!gp) return json(req, { error: 'Unknown Grand Prix.' }, 400)
-  const car = carFromJson(typeof body.car === 'string' ? body.car : '')
-  if ('error' in car) return json(req, { error: car.error }, 400)
+  // the setup: sent on its own, or taken from a whole car (as older pages send it); the car's brain is not used
+  let build: Build
+  let name: string
+  if (typeof body.car === 'string') {
+    const car = carFromJson(body.car)
+    if ('error' in car) return json(req, { error: car.error }, 400)
+    build = car.build
+    name = car.name
+  } else {
+    const problem = buildProblem(body.build, PRACTICE_COUNT)
+    if (problem) return json(req, { error: 'That setup is not allowed: ' + problem + '.' }, 400)
+    build = cleanBuild(body.build as Build)
+    name = typeof body.name === 'string' && body.name.trim() ? body.name.trim().slice(0, 40) : 'Unnamed'
+  }
 
   // a signed-in player must have chosen a board name (a local dev-header player is named by the header)
   let display = player.display
@@ -138,27 +177,90 @@ async function submit(req: Request, env: Env): Promise<Response> {
   }
   const day = new Date().toISOString().slice(0, 10)
   const used = weekly
-    ? await env.DB.prepare('SELECT COUNT(*) AS n FROM entries WHERE player = ? AND gp = ?').bind(player.id, gp.id).first<{ n: number }>()
-    : await env.DB.prepare("SELECT COUNT(*) AS n FROM entries WHERE player = ? AND day = ? AND gp NOT LIKE 'w:%'").bind(player.id, day).first<{ n: number }>()
+    ? await env.DB.prepare('SELECT COUNT(*) AS n FROM jobs WHERE player = ? AND gp = ?').bind(player.id, gp.id).first<{ n: number }>()
+    : await env.DB.prepare("SELECT COUNT(*) AS n FROM jobs WHERE player = ? AND day = ? AND gp NOT LIKE 'w:%'").bind(player.id, day).first<{ n: number }>()
   const limit = weekly ? WEEKLY_LIMIT : DAILY_LIMIT
   if ((used?.n ?? 0) >= limit) {
     return json(req, { error: weekly ? 'You have used all ' + WEEKLY_LIMIT + ' entries for this week. A new Grand Prix starts on Monday.' : 'You have used all ' + DAILY_LIMIT + ' board entries for today. Try again tomorrow.' }, 429)
   }
+  const job = await env.DB.prepare('INSERT INTO jobs (player, display, gp, name, build, day, status, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?) RETURNING id')
+    .bind(player.id, display, gp.id, name, JSON.stringify(build), day, 'queued', Date.now())
+    .first<{ id: number }>()
+  const ahead = await env.DB.prepare("SELECT COUNT(*) AS n FROM jobs WHERE status IN ('queued', 'training') AND id < ?").bind(job!.id).first<{ n: number }>()
+  return json(req, { queued: true, job: job!.id, ahead: ahead?.n ?? 0, left: limit - (used?.n ?? 0) - 1 })
+}
 
-  const result = raceCar(car, gp) // the server's own run
+// ---------- THE OFFICIAL TRAINER'S DOOR ----------
+const trainerOk = (req: Request, env: Env) => !!env.JOBS_TOKEN && req.headers.get('Authorization') === 'Bearer ' + env.JOBS_TOKEN
+// Hand out waiting setups (and take back any the trainer started over an hour ago and never finished)
+async function nextJobs(req: Request, env: Env, limit: number): Promise<Response> {
+  if (!trainerOk(req, env)) return json(req, { error: 'Not allowed.' }, 403)
+  await ensureOfficial(env)
+  await env.DB.prepare("UPDATE jobs SET status = 'queued', started_at = NULL WHERE status = 'training' AND started_at < ?").bind(Date.now() - 3600000).run()
+  const { results } = await env.DB.prepare("SELECT id, gp, name, build FROM jobs WHERE status = 'queued' ORDER BY id LIMIT ?").bind(limit).all<{ id: number; gp: string; name: string; build: string }>()
+  for (const j of results) await env.DB.prepare("UPDATE jobs SET status = 'training', started_at = ? WHERE id = ?").bind(Date.now(), j.id).run()
+  return json(req, { jobs: results.map((j) => ({ id: j.id, gp: j.gp, name: j.name, build: JSON.parse(j.build) })) })
+}
+// The trainer sends back the brain it trained; the server races it itself and puts it on the board
+async function finishJob(req: Request, env: Env, id: number): Promise<Response> {
+  if (!trainerOk(req, env)) return json(req, { error: 'Not allowed.' }, 403)
+  await ensureOfficial(env)
+  const job = await env.DB.prepare('SELECT * FROM jobs WHERE id = ?').bind(id).first<{ id: number; player: string; display: string; gp: string; name: string; build: string; day: string; status: string }>()
+  if (!job || job.status !== 'training') return json(req, { error: 'No such job in training.' }, 404)
+  let body: { genome?: unknown; generations?: unknown }
+  try {
+    body = JSON.parse(await req.text())
+  } catch {
+    return json(req, { error: 'That is not valid JSON.' }, 400)
+  }
+  const car = carFromJson(JSON.stringify({ format: 'crashlab-car', version: 3, name: job.name, build: JSON.parse(job.build), genome: body.genome, generations: body.generations }))
+  if ('error' in car) {
+    await env.DB.prepare("UPDATE jobs SET status = 'failed', error = ?, done_at = ? WHERE id = ?").bind(car.error, Date.now(), id).run()
+    return json(req, { error: car.error }, 400)
+  }
+  const gp = job.gp.startsWith('w:') ? await weekGp(env, Number(job.gp.slice(2))) : GRAND_PRIXES.find((g) => g.id === job.gp)!
+  const result = raceCar(car, gp)
   const medal = medalFor(result, gp)
-  await env.DB.prepare('INSERT INTO entries (player, display, gp, finished, total_time, medal, car, day, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)')
-    .bind(player.id, display, gp.id, result.finished, result.totalTime, medal, JSON.stringify(car), day, Date.now())
-    .run()
-  // the player's place on the board: one more than the number of players whose best entry is better than their own best
-  const score = 'finished * 100000 - total_time'
-  const rank = await env.DB.prepare(
-    `SELECT COUNT(*) + 1 AS rank FROM (SELECT MAX(${score}) AS s FROM entries WHERE gp = ? GROUP BY player)
-       WHERE s > (SELECT MAX(${score}) FROM entries WHERE gp = ? AND player = ?)`,
-  ).bind(gp.id, gp.id, player.id).first<{ rank: number }>()
-  // a weekly result also says how each secret track went, but not where the car stopped, which would give the track away
-  const tracks = weekly ? result.tracks.map((t) => ({ time: t.time, progress: t.progress, cause: t.cause })) : undefined
-  return json(req, { finished: result.finished, totalTime: result.totalTime, medal, rank: rank?.rank ?? 1, left: limit - (used?.n ?? 0) - 1, tracks })
+  const entry = await env.DB.prepare('INSERT INTO entries (player, display, gp, finished, total_time, medal, car, day, created_at, official) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1) RETURNING id')
+    .bind(job.player, job.display, job.gp, result.finished, result.totalTime, medal, JSON.stringify(car), job.day, Date.now())
+    .first<{ id: number }>()
+  await env.DB.prepare("UPDATE jobs SET status = 'done', done_at = ?, entry = ? WHERE id = ?").bind(Date.now(), entry!.id, id).run()
+  return json(req, { ok: true, entry: entry!.id, finished: result.finished, totalTime: result.totalTime, medal })
+}
+// Once, when official training starts: queue the setup of every player's best entry on each open board, so they keep a place
+async function migrate(req: Request, env: Env): Promise<Response> {
+  if (!trainerOk(req, env)) return json(req, { error: 'Not allowed.' }, 403)
+  await ensureOfficial(env)
+  const boards = [...GRAND_PRIXES.map((g) => g.id), 'w:' + weekOf(Date.now())]
+  let queued = 0
+  let skipped = 0
+  for (const gp of boards) {
+    const { results } = await env.DB.prepare(
+      `SELECT player, display, car, day FROM (SELECT *, ROW_NUMBER() OVER (PARTITION BY player ORDER BY finished DESC, total_time ASC, id ASC) AS r
+         FROM entries WHERE gp = ? AND official = 0) WHERE r = 1`,
+    ).bind(gp).all<{ player: string; display: string; car: string; day: string }>()
+    for (const e of results) {
+      let car: { name?: string; build?: unknown }
+      try {
+        car = JSON.parse(e.car)
+      } catch {
+        skipped++
+        continue
+      }
+      // a car saved by an older version may hold a setup this version no longer allows: it keeps no place
+      if (buildProblem(car.build, PRACTICE_COUNT)) {
+        skipped++
+        continue
+      }
+      const build = JSON.stringify(cleanBuild(car.build as Build))
+      const done = await env.DB.prepare('SELECT 1 FROM jobs WHERE player = ? AND gp = ? AND build = ?').bind(e.player, gp, build).first()
+      if (done) continue // queued already: running this twice changes nothing
+      await env.DB.prepare('INSERT INTO jobs (player, display, gp, name, build, day, status, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)')
+        .bind(e.player, e.display, gp, typeof car.name === 'string' ? car.name.slice(0, 40) : 'Unnamed', build, e.day, 'queued', Date.now()).run()
+      queued++
+    }
+  }
+  return json(req, { queued, skipped })
 }
 
 // ---------- THE WEEKLY GRAND PRIX ----------
@@ -173,12 +275,13 @@ async function weekGp(env: Env, week: number): Promise<GrandPrix> {
 // The top 3 players of every finished week (finishing at least one track), best first within each week
 type Podium = { gp: string; place: number; id: number; display: string; finished: number; totalTime: number; player: string }
 async function podiums(env: Env): Promise<Podium[]> {
+  await ensureOfficial(env)
   const { results } = await env.DB.prepare(
     `SELECT gp, place, id, display, finished, totalTime, player FROM (
        SELECT b.gp, b.id, COALESCE(p.name, b.display) AS display, b.finished, b.total_time AS totalTime, b.player,
               ROW_NUMBER() OVER (PARTITION BY b.gp ORDER BY b.finished DESC, b.total_time ASC, b.id ASC) AS place
        FROM (SELECT *, ROW_NUMBER() OVER (PARTITION BY gp, player ORDER BY finished DESC, total_time ASC, id ASC) AS r
-             FROM entries WHERE gp LIKE 'w:%' AND gp <> ?) b
+             FROM entries WHERE gp LIKE 'w:%' AND gp <> ? AND ${COUNTS}) b
        LEFT JOIN players p ON p.id = b.player
        WHERE b.r = 1 AND b.finished > 0
      ) WHERE place <= 3 ORDER BY gp DESC, place ASC`,
@@ -217,10 +320,11 @@ const boardExists = (gpId: string) => GRAND_PRIXES.some((g) => g.id === gpId) ||
 
 // Each player's best entry for a Grand Prix, best first
 async function board(req: Request, env: Env, gpId: string): Promise<Response> {
+  await ensureOfficial(env)
   if (!boardExists(gpId)) return json(req, { error: 'Unknown Grand Prix.' }, 400)
   const { results } = await env.DB.prepare(
     `SELECT e.id, e.player, COALESCE(p.name, e.display) AS display, e.finished, e.total_time AS totalTime, e.medal, json_extract(e.car, '$.runs') AS runs FROM (
-       SELECT *, ROW_NUMBER() OVER (PARTITION BY player ORDER BY finished DESC, total_time ASC, id ASC) AS r FROM entries WHERE gp = ?
+       SELECT *, ROW_NUMBER() OVER (PARTITION BY player ORDER BY finished DESC, total_time ASC, id ASC) AS r FROM entries WHERE gp = ? AND ${COUNTS}
      ) e LEFT JOIN players p ON p.id = e.player WHERE e.r = 1 ORDER BY e.finished DESC, e.total_time ASC, e.id ASC LIMIT ?`,
   ).bind(gpId, BOARD_SIZE).all<{ id: number; player: string; display: string; finished: number; totalTime: number; medal: string | null; runs: number | null }>()
   const won = await trophies(env)
@@ -232,24 +336,31 @@ async function board(req: Request, env: Env, gpId: string): Promise<Response> {
 const SCORE = 'finished * 100000 - total_time'
 async function rankOf(env: Env, gpId: string, playerId: string): Promise<number | null> {
   const row = await env.DB.prepare(
-    `SELECT (SELECT MAX(${SCORE}) FROM entries WHERE gp = ?1 AND player = ?2) AS mine,
-            (SELECT COUNT(*) FROM (SELECT MAX(${SCORE}) AS s FROM entries WHERE gp = ?1 GROUP BY player)
-              WHERE s > (SELECT MAX(${SCORE}) FROM entries WHERE gp = ?1 AND player = ?2)) AS ahead`,
+    `SELECT (SELECT MAX(${SCORE}) FROM entries WHERE gp = ?1 AND player = ?2 AND ${COUNTS}) AS mine,
+            (SELECT COUNT(*) FROM (SELECT MAX(${SCORE}) AS s FROM entries WHERE gp = ?1 AND ${COUNTS} GROUP BY player)
+              WHERE s > (SELECT MAX(${SCORE}) FROM entries WHERE gp = ?1 AND player = ?2 AND ${COUNTS})) AS ahead`,
   ).bind(gpId, playerId).first<{ mine: number | null; ahead: number }>()
   return row && row.mine !== null ? row.ahead + 1 : null
 }
 
 // The signed-in player's board name (null until they choose one) and their place on each board
 async function getMe(req: Request, env: Env): Promise<Response> {
+  await ensureOfficial(env)
   const player = await playerOf(req, env)
   if (!player) return json(req, { error: 'Sign in first.' }, 401)
   const me = await env.DB.prepare('SELECT name FROM players WHERE id = ?').bind(player.id).first<{ name: string }>()
   const ranks: Record<string, number | null> = {}
   for (const gp of GRAND_PRIXES) ranks[gp.id] = await rankOf(env, gp.id, player.id)
   const week = 'w:' + weekOf(Date.now())
-  const used = await env.DB.prepare('SELECT COUNT(*) AS n FROM entries WHERE player = ? AND gp = ?').bind(player.id, week).first<{ n: number }>()
+  const used = await env.DB.prepare('SELECT COUNT(*) AS n FROM jobs WHERE player = ? AND gp = ?').bind(player.id, week).first<{ n: number }>()
   const weekly = { rank: await rankOf(env, week, player.id), left: WEEKLY_LIMIT - (used?.n ?? 0) }
-  return json(req, { name: me?.name ?? null, ranks, weekly })
+  // the player's latest entries in official training: waiting (and how many are ahead), in training, done or failed
+  const { results: mine } = await env.DB.prepare(
+    `SELECT j.id, j.gp, j.name, j.status, e.finished, e.total_time AS totalTime, e.medal,
+            (SELECT COUNT(*) FROM jobs q WHERE q.status IN ('queued', 'training') AND q.id < j.id) AS ahead
+     FROM jobs j LEFT JOIN entries e ON e.id = j.entry WHERE j.player = ? ORDER BY j.id DESC LIMIT 5`,
+  ).bind(player.id).all()
+  return json(req, { name: me?.name ?? null, ranks, weekly, jobs: mine })
 }
 
 const NAME_RULE = /^[\p{L}\p{N}][\p{L}\p{N} _.-]{1,18}[\p{L}\p{N}]$/u // 3 to 20 characters: letters, numbers, and inside the name spaces . _ -
@@ -328,6 +439,10 @@ export default {
     if (req.method === 'POST' && url.pathname === '/challenges') return saveChallenge(req, env)
     if (req.method === 'GET' && ch) return CODE.test(ch[1]) ? loadChallenge(req, env, ch[1]) : json(req, { error: 'That challenge link is damaged.' }, 400)
     if (req.method === 'POST' && url.pathname === '/entries') return submit(req, env)
+    if (req.method === 'GET' && url.pathname === '/jobs/next') return nextJobs(req, env, Math.min(20, Math.max(1, Number(url.searchParams.get('limit')) || 5)))
+    if (req.method === 'POST' && url.pathname === '/jobs/migrate') return migrate(req, env)
+    const jm = url.pathname.match(/^\/jobs\/(\d+)$/)
+    if (req.method === 'POST' && jm) return finishJob(req, env, Number(jm[1]))
     if (req.method === 'GET' && url.pathname === '/board') return board(req, env, url.searchParams.get('gp') ?? 'gp1')
     if (req.method === 'GET' && url.pathname === '/weekly') return weeklyInfo(req, env)
     if (url.pathname === '/me' && req.method === 'GET') return getMe(req, env)

@@ -3,7 +3,7 @@
 // With no server address (the live site until the server is deployed) the whole panel stays hidden.
 import { carFromJson, carToJson, type CarFile } from './carFile'
 import { reveal } from './fold'
-import { CAUSE_LABEL, GRAND_PRIXES, weeklyGp, type Cause, type GrandPrix } from './race'
+import { GRAND_PRIXES, weeklyGp, type GrandPrix } from './race'
 
 export const API = (import.meta.env.VITE_API_URL as string | undefined) ?? (import.meta.env.DEV ? 'http://localhost:8787' : '')
 const NAME_KEY = 'crashlab.devname'
@@ -66,6 +66,9 @@ function headers(): Record<string, string> {
 
 // Who the player is on the board, for the profile
 export type Identity = { kind: 'offline' | 'out' | 'checking' | 'noname' } | { kind: 'in'; name: string }
+// Your standing on each board, for the profile
+export type BoardStat = { name: string; place: number | null; of: number; mine: string | null; leader: { name: string; score: string } | null }
+export type BoardStats = { boards: BoardStat[]; trophies: number[] | null }
 
 type Deps = {
   getCar: () => CarFile | null
@@ -86,7 +89,7 @@ export function createLeaderboard({ getCar, getGpId, goRace, notify, raceAgainst
     return el
   }
   const panel = $('boardOnline')
-  if (!API) return { showResult() {}, identity: (): Identity => ({ kind: 'offline' }), signIn() {}, openBoard() {} }
+  if (!API) return { showResult() {}, identity: (): Identity => ({ kind: 'offline' }), signIn() {}, openBoard() {}, boardStats: async (): Promise<BoardStats | null> => null }
   panel.hidden = false
   $('resultBoard').hidden = false
   $('weeklyPanel').hidden = false
@@ -142,6 +145,36 @@ export function createLeaderboard({ getCar, getGpId, goRace, notify, raceAgainst
       $('onlineWho').append(change)
     }
   }
+  // ---------- ENTRIES IN OFFICIAL TRAINING ----------
+  type Job = { id: number; gp: string; name: string; status: string; ahead: number; finished: number | null; totalTime: number | null; medal: string | null }
+  const gpName = (id: string) => (id.startsWith('w:') ? 'the Weekly Grand Prix' : GRAND_PRIXES.find((g) => g.id === id)?.name ?? id)
+  let jobTimer: number | undefined
+  let wasPending = false
+  async function refreshJobs() {
+    window.clearTimeout(jobTimer)
+    if (!nameIn(store.get(TOKEN_KEY))) return void ($('onlineJobs').textContent = '')
+    let jobs: Job[] = []
+    try {
+      const res = await fetch(API + '/me', { headers: headers() })
+      if (!res.ok) return
+      jobs = ((await res.json()) as { jobs?: Job[] }).jobs ?? []
+    } catch {
+      return
+    }
+    const line = (j: Job) =>
+      j.name + ' for ' + gpName(j.gp) + ': ' +
+      (j.status === 'queued' ? 'waiting' + (j.ahead ? ', ' + j.ahead + ' ahead' : ', next') : j.status === 'training' ? 'being trained now' : j.status === 'failed' ? 'could not be trained' : j.finished + ' of 8' + (j.finished === 8 && j.totalTime !== null ? ' in ' + j.totalTime.toFixed(1) + ' s' : '') + (j.medal ? ' (' + j.medal + ')' : '') + ', on the board')
+    const recent = jobs.slice(0, 3)
+    $('onlineJobs').textContent = recent.length ? 'Your entries: ' + recent.map(line).join(' · ') : ''
+    const pending = jobs.some((j) => j.status === 'queued' || j.status === 'training')
+    if (wasPending && !pending) {
+      refresh() // something just came off the trainer: show the board with it
+      refreshWeekly()
+    }
+    wasPending = pending
+    if (pending) jobTimer = window.setTimeout(refreshJobs, 60000)
+  }
+
   $('onlineNameSave').addEventListener('click', async () => {
     const name = ($('onlineName') as HTMLInputElement).value
     try {
@@ -181,16 +214,7 @@ export function createLeaderboard({ getCar, getGpId, goRace, notify, raceAgainst
     if (news.length) notify('Since your last visit, ' + news.join(' And ') + ' Race again to win your place back.')
     store.set(RANKS_KEY, JSON.stringify(now))
   }
-  function rememberRank(gpId: string, rank: number) {
-    let ranks: Ranks = {}
-    try {
-      ranks = JSON.parse(store.get(RANKS_KEY) ?? '{}') as Ranks
-    } catch {
-      /* start afresh */
-    }
-    ranks[gpId] = rank
-    store.set(RANKS_KEY, JSON.stringify(ranks))
-  }
+
 
   const signIn = () => {
     const nonce = crypto.randomUUID().replace(/-/g, '')
@@ -284,10 +308,11 @@ export function createLeaderboard({ getCar, getGpId, goRace, notify, raceAgainst
           $('resultBoardMsg').classList.toggle('bad', bad)
         }
     if (!car) return tell('Train a car first.', true)
-    tell('Racing your car on the server…')
+    tell('Entering your setup…')
     try {
-      const res = await fetch(API + '/entries', { method: 'POST', headers: headers(), body: JSON.stringify({ gp: gpId, car: carToJson(car) }) })
-      const data = (await res.json()) as { error?: string; needName?: boolean; finished?: number; totalTime?: number; medal?: string | null; rank?: number; left?: number; tracks?: { time: number | null; progress: number; cause: Cause | null }[] }
+      // the setup goes in, not the trained car: the game trains every setup itself, the same way for everyone
+      const res = await fetch(API + '/entries', { method: 'POST', headers: headers(), body: JSON.stringify({ gp: gpId, build: car.build, name: car.name }) })
+      const data = (await res.json()) as { error?: string; needName?: boolean; queued?: boolean; ahead?: number; left?: number }
       if (res.status === 401) renderWho()
       if (res.status === 409 && data.needName) {
         myName = null
@@ -297,19 +322,18 @@ export function createLeaderboard({ getCar, getGpId, goRace, notify, raceAgainst
         $('onlineName').focus()
       }
       if (!res.ok) return tell(data.error ?? 'The board could not take that car.', true)
+      const queue = data.ahead ? ' ' + data.ahead + (data.ahead === 1 ? ' setup is' : ' setups are') + ' ahead of it.' : ''
       if (isWeekly) {
         weeklyLeft = data.left
         store.set('crashlab.enteredWeekly', '1') // it unlocks headlights in the skill tree
-        if (weekly && data.rank) rememberRank('w:' + weekly.week, data.rank)
-        tell(car.name + ' finished ' + data.finished + ' of 8 in ' + data.totalTime!.toFixed(1) + ' s. You are #' + data.rank + ' this week.')
+        tell('Entered: ' + car.name + "'s setup is queued for official training." + queue + " Its result shows on this week's board within about 30 minutes.")
         onEntered?.()
-        showTracks(data.tracks ?? [])
+        refreshJobs()
         return refreshWeekly()
       }
-      if (data.rank) rememberRank(gpId, data.rank)
-      tell('On the board: ' + car.name + ' finished ' + data.finished + ' of 8 in ' + data.totalTime!.toFixed(1) + ' s' + (data.medal ? ' (' + data.medal + ')' : '') + '. You are number ' + data.rank + '. ' + data.left + ' entries left today.')
+      tell('Entered: ' + car.name + "'s setup is queued for official training." + queue + ' Its result shows on the board within about 30 minutes. ' + data.left + (data.left === 1 ? ' entry' : ' entries') + ' left today.')
       onEntered?.()
-      await refresh()
+      refreshJobs()
     } catch {
       tell('The board is not reachable right now.', true)
     }
@@ -364,7 +388,7 @@ export function createLeaderboard({ getCar, getGpId, goRace, notify, raceAgainst
       return
     }
     const past = gpId.startsWith('w:') // a finished week: no entering, only how it compares with that week's board
-    $('resultBoardAsk').textContent = past ? 'Against that week\'s board' : 'Put this on the leaderboard?'
+    $('resultBoardAsk').textContent = past ? 'Against that week\'s board' : 'Put this setup on the leaderboard? The game trains it itself, the same way for everyone, so its official result can differ from this race.'
     $('resultBoardGo').hidden = past
     const key = gpId + ':' + r.finished + ':' + r.totalTime
     if (key === shownFor) return // render runs often; work this out once per result
@@ -385,7 +409,7 @@ export function createLeaderboard({ getCar, getGpId, goRace, notify, raceAgainst
     const others = rows.filter((e) => e !== mine)
     const yours = mine && !beats(r, mine) ? mine : r // your board entry stays if this run is not better
     const ahead = others.filter((e) => beats(e, yours))
-    const where = past ? 'This would have placed #' + (ahead.length + 1) + ' that week.' : mine && yours === mine ? 'Your board entry is #' + (ahead.length + 1) + ' and stays there.' : 'This would place #' + (ahead.length + 1) + (ahead.length >= rows.length && rows.length >= 50 ? ' or lower' : '') + '.'
+    const where = past ? 'This would have placed #' + (ahead.length + 1) + ' that week.' : mine && yours === mine ? 'Your board entry is #' + (ahead.length + 1) + ' and stays there.' : 'This race would place #' + (ahead.length + 1) + (ahead.length >= rows.length && rows.length >= 50 ? ' or lower' : '') + '.'
     const above = ahead[ahead.length - 1]
     if (!above) return (place.textContent = where + (rows.length ? ' That is the top of the board.' : ' The board is empty, so you would be first.'))
     const target =
@@ -405,22 +429,6 @@ export function createLeaderboard({ getCar, getGpId, goRace, notify, raceAgainst
     const t = trophyText(e.trophies)
     if (t) who.append(Object.assign(document.createElement('span'), { className: 'troph', textContent: ' ' + t, title: 'Weekly Grand Prix trophies' }))
     return who
-  }
-  // How each secret track went (the server sends no positions, so the tracks stay secret)
-  function showTracks(tracks: { time: number | null; progress: number; cause: Cause | null }[]) {
-    $('weeklyTracks').hidden = !tracks.length
-    $('weeklyTracks').replaceChildren(
-      ...tracks.map((t, i) => {
-        const li = document.createElement('li')
-        const span = (cls: string, text: string) => Object.assign(document.createElement('span'), { className: cls, textContent: text })
-        li.append(
-          span('n', String(i + 1)),
-          span('st ' + (t.time !== null ? 'ok' : 'bad'), t.time !== null ? '✓' : '✕'),
-          span('t', t.time !== null ? t.time.toFixed(2) + ' s' : CAUSE_LABEL[t.cause!] + ' · ' + Math.round(t.progress * 100) + '%'),
-        )
-        return li
-      }),
-    )
   }
   function renderWeekly() {
     if (!weekly) return
@@ -501,10 +509,31 @@ export function createLeaderboard({ getCar, getGpId, goRace, notify, raceAgainst
 
   refresh()
   refreshWeekly()
+  refreshJobs()
   const identity = (): Identity => (!nameIn(store.get(TOKEN_KEY)) ? { kind: 'out' } : myName === undefined ? { kind: 'checking' } : myName === null ? { kind: 'noname' } : { kind: 'in', name: myName })
   const openBoard = () => {
     goRace()
     show('boardOnline').scrollIntoView({ behavior: 'smooth', block: 'center' })
   }
-  return { showResult, identity, signIn, openBoard }
+  // Your place on each board (the fixed Grand Prix and this week's), how you did there, and who leads it
+  async function boardStats(): Promise<BoardStats | null> {
+    const score = (e: Row) => e.finished + ' of 8' + (e.finished === 8 ? ' · ' + e.totalTime.toFixed(1) + ' s' : '')
+    const boards = [...GRAND_PRIXES.map((g) => ({ id: g.id, name: g.name })), ...(weekly ? [{ id: 'w:' + weekly.week, name: 'This week' }] : [])]
+    let trophies: number[] | null = null
+    const out: BoardStat[] = []
+    for (const b of boards) {
+      let rows: Row[] = rowsFor[b.id] ?? []
+      try {
+        const res = await fetch(API + '/board?gp=' + b.id)
+        rows = rowsFor[b.id] = ((await res.json()) as { entries?: Row[] }).entries ?? []
+      } catch {
+        if (!rowsFor[b.id]) return null
+      }
+      const mine = myName ? rows.find((e) => e.display === myName) : undefined
+      if (mine?.trophies) trophies = mine.trophies
+      out.push({ name: b.name, place: mine?.rank ?? null, of: rows.length, mine: mine ? score(mine) : null, leader: rows[0] ? { name: rows[0].display, score: score(rows[0]) } : null })
+    }
+    return { boards: out, trophies }
+  }
+  return { showResult, identity, signIn, openBoard, boardStats }
 }

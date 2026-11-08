@@ -9,7 +9,7 @@ import { handBest, handMedal } from './driver'
 import { PERKS, streak } from './perks'
 import { challengeRecord, counts } from './playLog'
 
-import type { Identity } from './leaderboard'
+import type { BoardStats, Identity } from './leaderboard'
 
 export type ProfileData = {
   carName: string
@@ -21,6 +21,7 @@ export type ProfileData = {
   onRename: (name: string) => void // the car's name, changed here
   onSignIn: () => void
   onOpenBoard: () => void
+  boardStats: () => Promise<BoardStats | null>
 }
 
 type Badge = { icon: string; name: string; hint: string; got: boolean }
@@ -175,5 +176,29 @@ export function renderProfile(root: HTMLElement, d: ProfileData) {
   }
   ps.append(h('div', 'psmall', 'A perk stays yours once you have it, even if the streak ends. Best streak so far: ' + s.best + (s.best === 1 ? ' day.' : ' days.')))
 
-  root.replaceChildren(top, bs, rs, ts, ps)
+  // leaderboard standing: filled in when the boards arrive
+  const lb = section('Leaderboard')
+  const lbBody = h('div', '', 'Loading the boards…')
+  lbBody.className = 'psmall'
+  lb.append(lbBody)
+  d.boardStats().then((st) => {
+    if (!st) {
+      lbBody.textContent = 'The leaderboard is not reachable from here.'
+      return
+    }
+    const rows = st.boards.map((b) => {
+      const row = h('div', 'prow lbrow')
+      const place = h('span', 'lbplace' + (b.place === 1 ? ' first' : ''), b.place ? '#' + b.place : '–')
+      const mid = h('span', 'pl')
+      mid.append(h('b', '', b.name), h('small', '', b.place ? b.mine + ' · of ' + b.of : d.identity.kind === 'in' ? 'not entered yet' : 'sign in to enter'))
+      const lead = h('span', 'pv', b.leader ? (b.place === 1 ? 'you lead' : 'leader ' + b.leader.name + ' · ' + b.leader.score) : 'empty board')
+      row.append(place, mid, lead)
+      return row
+    })
+    lbBody.replaceWith(...rows)
+    const t = st.trophies
+    if (t && t.some((n) => n)) lb.querySelector('h3')!.append(h('span', 'aside', '🥇 ' + t[0] + '  🥈 ' + t[1] + '  🥉 ' + t[2]))
+  })
+
+  root.replaceChildren(top, lb, bs, rs, ts, ps)
 }

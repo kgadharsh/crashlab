@@ -1,0 +1,33 @@
+# The official trainer: every 10 minutes, trains the setups players entered on the leaderboard (scripts/officialTrain.ts)
+# and sends the brains back to the board server, which races and ranks them. Needs the JOBS_TOKEN repository secret,
+# the same value as the Worker's JOBS_TOKEN secret.
+name: Official training
+
+on:
+  schedule:
+    - cron: '*/10 * * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# one run at a time; a run that is still training makes the next one wait rather than train the same setups twice
+concurrency:
+  group: official-training
+  cancel-in-progress: false
+
+jobs:
+  train:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: npx tsx scripts/officialTrain.ts
+        env:
+          JOBS_TOKEN: ${{ secrets.JOBS_TOKEN }}
+          MAX_JOBS: 8

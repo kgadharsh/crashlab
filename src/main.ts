@@ -293,8 +293,9 @@ document.querySelector('#app')!.innerHTML = `
         <div class="roads slim" role="group" aria-label="Which leaderboard"><button type="button" class="road on" id="onlineDry" aria-pressed="true"><i aria-hidden="true">☀</i><b>Dry road</b></button><button type="button" class="road wetroad" id="onlineWet" aria-pressed="false"><i aria-hidden="true">🌧</i><b>Wet road</b></button></div>
         <ol class="rank" id="onlineRows"></ol>
         <p class="tip" id="onlineEmpty" hidden>No cars on this board yet. Be the first.</p>
-        <p class="tip" style="margin-top:4px">Runs: how many training runs went into a car. Keep training adds one each time.</p>
+        <p class="tip" style="margin-top:4px">Every car on these boards was trained by the game itself: one run, the same way for everyone. Only your setup counts, not how often you retrain. An entry shows up within about 30 minutes.</p>
         <p class="tip" id="onlineWho"></p>
+        <p class="tip" id="onlineJobs" style="color:var(--text)"></p>
         <div class="actions" id="onlineNameRow" hidden><input id="onlineName" maxlength="20" placeholder="Choose a board name" aria-label="Board name" autocomplete="off" /><button class="btn small primary" id="onlineNameSave">Save name</button></div>
         <div class="actions"><button class="btn primary" id="onlineSignIn">Sign in with Google</button><button class="btn small" id="onlineSignOut" hidden>Sign out</button><button class="btn primary" id="onlineEnter">Enter your car</button></div>
         <p class="msg" id="onlineMsg"></p>
@@ -1174,6 +1175,7 @@ function showProfile() {
     },
     onSignIn: () => leaderboard.signIn(),
     onOpenBoard: () => leaderboard.openBoard(),
+    boardStats: () => leaderboard.boardStats(),
   })
 }
 
@@ -1818,11 +1820,11 @@ function showDare(kind: 'trained' | 'entered') {
   } catch {
     /* storage blocked: it may ask again */
   }
-  $('dareTitle').textContent = kind === 'trained' ? car.name + ' is trained' : car.name + ' is on the board'
+  $('dareTitle').textContent = kind === 'trained' ? car.name + ' is trained' : car.name + ' is entered'
   $('dareText').textContent =
     kind === 'trained'
       ? 'Before you race it, dare a friend. They open your link, race your car on the same secret tracks, and try to beat it. Nobody has to sign in.'
-      : 'Now dare a friend to beat it. The link comes with your result card, ready to paste into a chat. Nobody has to sign in.'
+      : 'While the game trains your setup for the board, dare a friend to beat your car. The link comes with your result card, ready to paste into a chat. Nobody has to sign in.'
   $('dareMsg').textContent = ''
   $('dareGo').textContent = 'Copy challenge link'
   $('dareLink').hidden = true
