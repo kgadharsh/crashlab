@@ -207,7 +207,7 @@ document.querySelector('#app')!.innerHTML = `
         <h2>Training<span class="aside" id="trainState">ready</span></h2>
         <div class="budget"><div class="bar"><i id="budgetBar" style="width:0%"></i></div>
           <div class="legend"><span id="budgetUsed"></span><span id="budgetGen"></span></div></div>
-        <p class="tip">Practice budget: every run gets the same ${hours(TRAINING_BUDGET)} hours of simulated driving, shared by all ${POPULATION} cars and your practice tracks. It is counted in driving, not seconds, so a faster device gets no advantage. More practice tracks use it up faster, so you get fewer rounds. Every new run starts with a full budget; Keep training uses ${Math.round(KEEP_TRAINING_SHARE * 100)}% of it.</p>
+        <p class="tip">Every training run gets the same amount of practice, shared by all ${POPULATION} cars and all your practice tracks. It is counted in simulated driving, not seconds, so a faster device gets no advantage. More practice tracks use it up faster, so you get fewer rounds. Nothing carries over between runs: every new run starts with a full amount, so you can train as often as you like. Keep training uses ${Math.round(KEEP_TRAINING_SHARE * 100)}% of a full run. In numbers, a full run is ${hours(TRAINING_BUDGET)} hours of simulated driving, which the game plays through in about a minute.</p>
         <div class="actions">
           <button class="btn primary" id="train">Start training</button>
           <button class="btn" id="keep">Keep training</button>
@@ -1538,8 +1538,17 @@ function renderShelf() {
   $('spEmpty').textContent = shelf.length ? '' : 'Keep a trained car here, try a different setup, and switch back if the new one is worse.'
   renderChip()
 }
+// the same car twice: an identical brain on an identical setup (two trainings of one setup differ, so both can be kept)
+const sameCar = (a: CarFile, c: CarFile) => JSON.stringify(a.genome) === JSON.stringify(c.genome) && JSON.stringify(a.build) === JSON.stringify(c.build)
 function shelveCar() {
   if (!car || shelf.length >= maxSlots()) return
+  if (shelf.some((c) => sameCar(c, car!))) {
+    const text = car.name + ' is already on your shelf.'
+    carMsg(text)
+    $('spMsg').textContent = text
+    $('trainMsg').textContent = text
+    return
+  }
   shelf.push(clone(car))
   saveShelf()
   renderShelf()
@@ -1582,12 +1591,12 @@ function renderPractice() {
   const spent = run?.spent ?? lastRun?.spent ?? 0
   const total = run?.budget ?? lastRun?.budget ?? TRAINING_BUDGET
   $('budgetBar').style.width = (100 * spent) / total + '%'
-  $('budgetUsed').textContent = hours(spent) + ' of ' + hours(total) + ' hours'
+  $('budgetUsed').textContent = Math.round((100 * spent) / total) + '% of ' + (run ? (run.keep ? 'this short run' : 'a full run') : lastRun ? 'that run' : 'a full run')
   $('budgetGen').textContent = run
     ? 'round ' + run.history.length
     : lastRun
       ? lastRun.generations + ' rounds · done'
-      : 'about ' + estGenerations(b) + ' rounds'
+      : 'about ' + estGenerations(b) + ' rounds for a full run, ' + Math.max(1, Math.round(estGenerations(b) * KEEP_TRAINING_SHARE)) + ' for Keep training'
   $('trainState').textContent = training ? (run?.watching ? 'watching' : 'training') : 'ready'
   $('train').textContent = training ? 'Stop' : car ? 'Train a new car' : 'Start training'
   $('skip').hidden = !(training && run?.watching)
