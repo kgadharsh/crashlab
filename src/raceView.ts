@@ -5,7 +5,7 @@ import { genomeToBrain } from './genome'
 import { CHECKPOINTS, createCar, drive, type Brain, type Car } from './sim'
 import { brainShape, specOf, type CarSpec } from './setup'
 import {
-  CAUSE_LABEL, GRAND_PRIXES, RACE_COUNT, adviceFor, better, finishLap, gpTrack, lapIsOver, medalFor, medalRules, raceCar, summarise, versus,
+  CAUSE_LABEL, GRAND_PRIXES, RACE_COUNT, isSecretGp, adviceFor, better, finishLap, gpTrack, lapIsOver, medalFor, medalRules, raceCar, summarise, versus,
   type GrandPrix, type Medal, type RaceResult, type TrackResult,
 } from './race'
 import { logEvent, recordChallenge } from './playLog'
@@ -79,7 +79,7 @@ function loadGpIndex(): number {
 }
 
 // The big word on a result with no medal: weekly races have none (their trophies go by place on the week's board)
-const headline = (s: RaceResult, gp: GrandPrix) => (gp.week !== undefined ? s.finished + ' OF ' + RACE_COUNT : 'NO MEDAL')
+const headline = (s: RaceResult, gp: GrandPrix) => (isSecretGp(gp) ? s.finished + ' OF ' + RACE_COUNT : 'NO MEDAL')
 
 const time = (s: number | null) => (s === null ? '--.--' : s.toFixed(2))
 const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T
@@ -136,8 +136,10 @@ export function createRaceView(d: RaceDeps) {
   // Which Grand Prix is chosen: its name, rules and buttons (the race itself is chosen by gp())
   function renderGp() {
     $('gpTitle').textContent = gp().name
-    $('medalRules').textContent = gp().week !== undefined
-      ? 'These were last week\'s secret tracks. They are open now: race them as often as you like. This week\'s are still secret.'
+    $('medalRules').textContent = isSecretGp(gp())
+      ? gp().day !== undefined
+        ? 'These were a past day\'s secret tracks. They are open now: race them as often as you like. Today\'s are still secret.'
+        : 'These were last week\'s secret tracks. They are open now: race them as often as you like. This week\'s are still secret.'
       : medalRules(gp())
     $('gp2').hidden = !pastWeek
     if (pastWeek) $('gp2').innerHTML = '<i aria-hidden="true">📅</i><b></b><small>Open now</small>'
@@ -340,7 +342,7 @@ export function createRaceView(d: RaceDeps) {
       const medal = medalFor(s, live!.gp)
       const m = $('medal')
       m.textContent = medal ? medal.toUpperCase() : headline(s, live!.gp)
-      m.style.color = medal ? MEDAL_COLOUR[medal] : live!.gp.week !== undefined ? COL.text : COL.muted
+      m.style.color = medal ? MEDAL_COLOUR[medal] : isSecretGp(live!.gp) ? COL.text : COL.muted
       const gens = live!.car.generations
       const watched = live!.watching
       $('resultLine').textContent = (watched ? 'That was ' + live!.car.name + "'s car: " : '') + s.finished + ' of ' + RACE_COUNT + ' finished · ' + s.totalTime.toFixed(1) + ' s total' + (gens && !watched ? ' · trained for ' + gens + ' rounds' : '')
@@ -440,7 +442,7 @@ export function createRaceView(d: RaceDeps) {
       const medal = medalFor(r.summary, r.gp)
       ctx.fillStyle = 'rgba(7,9,12,0.72)'
       ctx.fillRect(0, 0, W, H)
-      hudText(medal ? medal.toUpperCase() : headline(r.summary, r.gp), W / 2, H / 2 - 16, 64, medal ? MEDAL_COLOUR[medal] : r.gp.week !== undefined ? COL.text : COL.muted, 'center')
+      hudText(medal ? medal.toUpperCase() : headline(r.summary, r.gp), W / 2, H / 2 - 16, 64, medal ? MEDAL_COLOUR[medal] : isSecretGp(r.gp) ? COL.text : COL.muted, 'center')
       hudText(r.summary.finished + ' / ' + RACE_COUNT + ' FINISHED  ·  ' + r.summary.totalTime.toFixed(1) + ' S', W / 2, H / 2 + 22, 22, COL.text, 'center')
       if (r.newBest) hudText('NEW PERSONAL BEST', W / 2, H / 2 + 54, 18, COL.accent, 'center')
       const ch = d.getChallenge()

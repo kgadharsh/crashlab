@@ -4,7 +4,7 @@ import { carFromJson, carToJson } from '../../src/carFile'
 import { buildProblem, cleanBuild, type Build } from '../../src/setup'
 import { PRACTICE_COUNT } from '../../src/track'
 import { sign, verify } from './auth'
-import { GRAND_PRIXES, medalFor, raceCar, weekOf, weekStart, weeklyGp, type GrandPrix } from '../../src/race'
+import { GRAND_PRIXES, dailyGp, dayOf, dayStart, medalFor, raceCar, weekOf, weekStart, weeklyGp, type GrandPrix } from '../../src/race'
 
 export interface Env {
   DB: D1Database
@@ -17,6 +17,8 @@ export interface Env {
 
 const WEEKLY_LIMIT = 3 // entries per player in each Weekly Grand Prix; their best counts
 const PAST_WEEKS = 6 // finished weeks listed with their winners
+const DAILY_CHALLENGE_LIMIT = 2 // entries per player in each Daily Challenge; their best counts
+const PAST_DAYS = 3 // finished days listed with their winners
 const DAILY_LIMIT = 3 // ranked entries per player per day. Training cannot be limited (it runs in the browser), so this is what makes retrying for a lucky car cost something
 const BOARD_SIZE = 50
 const MAX_BODY = 60000
@@ -133,6 +135,7 @@ async function ensureOfficial(env: Env) {
        name TEXT NOT NULL, build TEXT NOT NULL, day TEXT NOT NULL, status TEXT NOT NULL, created_at INTEGER NOT NULL,
        started_at INTEGER, done_at INTEGER, entry INTEGER, error TEXT)`,
   ).run()
+  await env.DB.prepare('CREATE TABLE IF NOT EXISTS days (day INTEGER PRIMARY KEY, seed INTEGER NOT NULL)').run()
   officialReady = true
 }
 // entries that count on a board: officially trained ones, plus anything on a weekly board from before official training
@@ -151,7 +154,8 @@ async function submit(req: Request, env: Env): Promise<Response> {
     return json(req, { error: 'That is not valid JSON.' }, 400)
   }
   const weekly = body.gp === 'weekly' // always this week's: past weeks are closed
-  const gp = weekly ? await weekGp(env, weekOf(Date.now())) : GRAND_PRIXES.find((g) => g.id === body.gp)
+  const daily = body.gp === 'daily' // always today's
+  const gp = weekly ? await weekGp(env, weekOf(Date.now())) : daily ? await dayGp(env, dayOf(Date.now())) : GRAND_PRIXES.find((g) => g.id === body.gp)
   if (!gp) return json(req, { error: 'Unknown Grand Prix.' }, 400)
   // the setup: sent on its own, or taken from a whole car (as older pages send it); the car's brain is not used
   let build: Build
@@ -176,12 +180,12 @@ async function submit(req: Request, env: Env): Promise<Response> {
     display = me.name
   }
   const day = new Date().toISOString().slice(0, 10)
-  const used = weekly
+  const used = weekly || daily
     ? await env.DB.prepare('SELECT COUNT(*) AS n FROM jobs WHERE player = ? AND gp = ?').bind(player.id, gp.id).first<{ n: number }>()
-    : await env.DB.prepare("SELECT COUNT(*) AS n FROM jobs WHERE player = ? AND day = ? AND gp NOT LIKE 'w:%'").bind(player.id, day).first<{ n: number }>()
-  const limit = weekly ? WEEKLY_LIMIT : DAILY_LIMIT
+    : await env.DB.prepare("SELECT COUNT(*) AS n FROM jobs WHERE player = ? AND day = ? AND gp NOT LIKE 'w:%' AND gp NOT LIKE 'd:%'").bind(player.id, day).first<{ n: number }>()
+  const limit = weekly ? WEEKLY_LIMIT : daily ? DAILY_CHALLENGE_LIMIT : DAILY_LIMIT
   if ((used?.n ?? 0) >= limit) {
-    return json(req, { error: weekly ? 'You have used all ' + WEEKLY_LIMIT + ' entries for this week. A new Grand Prix starts on Monday.' : 'You have used all ' + DAILY_LIMIT + ' board entries for today. Try again tomorrow.' }, 429)
+    return json(req, { error: daily ? 'You have used both entries for today\'s Daily Challenge. A new one starts at midnight UTC.' : weekly ? 'You have used all ' + WEEKLY_LIMIT + ' entries for this week. A new Grand Prix starts on Monday.' : 'You have used all ' + DAILY_LIMIT + ' board entries for today. Try again tomorrow.' }, 429)
   }
   const job = await env.DB.prepare('INSERT INTO jobs (player, display, gp, name, build, day, status, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?) RETURNING id')
     .bind(player.id, display, gp.id, name, JSON.stringify(build), day, 'queued', Date.now())
@@ -218,7 +222,7 @@ async function finishJob(req: Request, env: Env, id: number): Promise<Response> 
     await env.DB.prepare("UPDATE jobs SET status = 'failed', error = ?, done_at = ? WHERE id = ?").bind(car.error, Date.now(), id).run()
     return json(req, { error: car.error }, 400)
   }
-  const gp = job.gp.startsWith('w:') ? await weekGp(env, Number(job.gp.slice(2))) : GRAND_PRIXES.find((g) => g.id === job.gp)!
+  const gp = job.gp.startsWith('w:') ? await weekGp(env, Number(job.gp.slice(2))) : job.gp.startsWith('d:') ? await dayGp(env, Number(job.gp.slice(2))) : GRAND_PRIXES.find((g) => g.id === job.gp)!
   const result = raceCar(car, gp)
   const medal = medalFor(result, gp)
   const entry = await env.DB.prepare('INSERT INTO entries (player, display, gp, finished, total_time, medal, car, day, created_at, official) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1) RETURNING id')
@@ -272,6 +276,37 @@ async function weekGp(env: Env, week: number): Promise<GrandPrix> {
   return weeklyGp(week, row!.seed)
 }
 
+// ---------- THE DAILY CHALLENGE ----------
+// A day's Grand Prix, with its seed picked at random and saved the first time anyone asks for that day
+async function dayGp(env: Env, day: number): Promise<GrandPrix> {
+  await ensureOfficial(env)
+  const seed = crypto.getRandomValues(new Uint32Array(1))[0]
+  await env.DB.prepare('INSERT OR IGNORE INTO days (day, seed) VALUES (?, ?)').bind(day, seed).run()
+  const row = await env.DB.prepare('SELECT seed FROM days WHERE day = ?').bind(day).first<{ seed: number }>()
+  return dailyGp(day, row!.seed)
+}
+
+// Today (its name and twist, never its seed) and the last few finished days with their top 3. No trophies: a day is for a place.
+async function dailyInfo(req: Request, env: Env): Promise<Response> {
+  const now = dayOf(Date.now())
+  const gp = await dayGp(env, now)
+  const { results } = await env.DB.prepare('SELECT day, seed FROM days WHERE day < ? ORDER BY day DESC LIMIT ?').bind(now, PAST_DAYS).all<{ day: number; seed: number }>()
+  const past = []
+  for (const d of results) {
+    const { results: top } = await env.DB.prepare(
+      `SELECT id, display, finished, totalTime FROM (
+         SELECT b.id, COALESCE(p.name, b.display) AS display, b.finished, b.total_time AS totalTime,
+                ROW_NUMBER() OVER (ORDER BY b.finished DESC, b.total_time ASC, b.id ASC) AS place
+         FROM (SELECT *, ROW_NUMBER() OVER (PARTITION BY player ORDER BY finished DESC, total_time ASC, id ASC) AS r
+               FROM entries WHERE gp = ? AND ${COUNTS}) b
+         LEFT JOIN players p ON p.id = b.player WHERE b.r = 1 AND b.finished > 0
+       ) WHERE place <= 3 ORDER BY place`,
+    ).bind('d:' + d.day).all<{ id: number; display: string; finished: number; totalTime: number }>()
+    past.push({ day: d.day, seed: d.seed, podium: top.map((e, i) => ({ place: i + 1, ...e })) })
+  }
+  return json(req, { day: now, name: gp.name, wet: gp.wet, night: gp.night, ice: gp.ice, endsAt: dayStart(now + 1), limit: DAILY_CHALLENGE_LIMIT, past })
+}
+
 // The top 3 players of every finished week (finishing at least one track), best first within each week
 type Podium = { gp: string; place: number; id: number; display: string; finished: number; totalTime: number; player: string }
 async function podiums(env: Env): Promise<Podium[]> {
@@ -316,7 +351,7 @@ async function trophies(env: Env): Promise<Map<string, number[]>> {
 }
 
 // Which boards can be shown: the fixed Grand Prix, and any week up to this one
-const boardExists = (gpId: string) => GRAND_PRIXES.some((g) => g.id === gpId) || (/^w:\d+$/.test(gpId) && Number(gpId.slice(2)) <= weekOf(Date.now()))
+const boardExists = (gpId: string) => GRAND_PRIXES.some((g) => g.id === gpId) || (/^w:\d+$/.test(gpId) && Number(gpId.slice(2)) <= weekOf(Date.now())) || (/^d:\d+$/.test(gpId) && Number(gpId.slice(2)) <= dayOf(Date.now()))
 
 // Each player's best entry for a Grand Prix, best first
 async function board(req: Request, env: Env, gpId: string): Promise<Response> {
@@ -354,13 +389,16 @@ async function getMe(req: Request, env: Env): Promise<Response> {
   const week = 'w:' + weekOf(Date.now())
   const used = await env.DB.prepare('SELECT COUNT(*) AS n FROM jobs WHERE player = ? AND gp = ?').bind(player.id, week).first<{ n: number }>()
   const weekly = { rank: await rankOf(env, week, player.id), left: WEEKLY_LIMIT - (used?.n ?? 0) }
+  const today = 'd:' + dayOf(Date.now())
+  const usedToday = await env.DB.prepare('SELECT COUNT(*) AS n FROM jobs WHERE player = ? AND gp = ?').bind(player.id, today).first<{ n: number }>()
+  const daily = { rank: await rankOf(env, today, player.id), left: DAILY_CHALLENGE_LIMIT - (usedToday?.n ?? 0) }
   // the player's latest entries in official training: waiting (and how many are ahead), in training, done or failed
   const { results: mine } = await env.DB.prepare(
     `SELECT j.id, j.gp, j.name, j.status, e.finished, e.total_time AS totalTime, e.medal,
             (SELECT COUNT(*) FROM jobs q WHERE q.status IN ('queued', 'training') AND q.id < j.id) AS ahead
      FROM jobs j LEFT JOIN entries e ON e.id = j.entry WHERE j.player = ? ORDER BY j.id DESC LIMIT 5`,
   ).bind(player.id).all()
-  return json(req, { name: me?.name ?? null, ranks, weekly, jobs: mine })
+  return json(req, { name: me?.name ?? null, ranks, weekly, daily, jobs: mine })
 }
 
 const NAME_RULE = /^[\p{L}\p{N}][\p{L}\p{N} _.-]{1,18}[\p{L}\p{N}]$/u // 3 to 20 characters: letters, numbers, and inside the name spaces . _ -
@@ -445,6 +483,7 @@ export default {
     if (req.method === 'POST' && jm) return finishJob(req, env, Number(jm[1]))
     if (req.method === 'GET' && url.pathname === '/board') return board(req, env, url.searchParams.get('gp') ?? 'gp1')
     if (req.method === 'GET' && url.pathname === '/weekly') return weeklyInfo(req, env)
+    if (req.method === 'GET' && url.pathname === '/daily') return dailyInfo(req, env)
     if (url.pathname === '/me' && req.method === 'GET') return getMe(req, env)
     if (url.pathname === '/me' && req.method === 'PUT') return setMe(req, env)
     if (req.method === 'GET' && m) return entry(req, env, Number(m[1]))

@@ -29,6 +29,12 @@ CREATE TABLE IF NOT EXISTS weeks (
   seed INTEGER NOT NULL
 );
 
+-- The Daily Challenge: each day's track seed, picked at random the first time the day is asked for (the server also makes this table on first use)
+CREATE TABLE IF NOT EXISTS days (
+  day INTEGER PRIMARY KEY,     -- days since 1 Jan 1970 (UTC); entries for it have gp = 'd:' || day
+  seed INTEGER NOT NULL
+);
+
 -- Short challenge links: a shared car under a code made from its contents (the server also makes this table on first use)
 CREATE TABLE IF NOT EXISTS challenges (
   code TEXT PRIMARY KEY,       -- 10 characters from a hash of the car

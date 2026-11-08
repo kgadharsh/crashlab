@@ -3,7 +3,7 @@
 // With no server address (the live site until the server is deployed) the whole panel stays hidden.
 import { carFromJson, carToJson, type CarFile } from './carFile'
 import { reveal } from './fold'
-import { GRAND_PRIXES, weeklyGp, type GrandPrix } from './race'
+import { GRAND_PRIXES, dailyGp, weeklyGp, type GrandPrix } from './race'
 
 export const API = (import.meta.env.VITE_API_URL as string | undefined) ?? (import.meta.env.DEV ? 'http://localhost:8787' : '')
 const NAME_KEY = 'crashlab.devname'
@@ -22,6 +22,7 @@ type Row = { rank: number; id: number; display: string; finished: number; totalT
 const runsOf = (e: Row) => (e.runs ? ' · ' + e.runs + (e.runs === 1 ? ' run' : ' runs') : '')
 // This week's Grand Prix as the server describes it (never its seed), and finished weeks with their seeds and top 3
 type Podium = { place: number; id: number; display: string; finished: number; totalTime: number }
+type Daily = { day: number; name: string; wet: boolean; night?: boolean; ice?: boolean; endsAt: number; limit: number; past: { day: number; seed: number; podium: Podium[] }[] }
 type Weekly = { week: number; name: string; wet: boolean; night?: boolean; ice?: boolean; endsAt: number; limit: number; past: { week: number; seed: number; podium: Podium[] }[] }
 const TROPHY = ['🥇', '🥈', '🥉']
 // Weekly trophies after a name, e.g. 🥇2 🥉1
@@ -93,10 +94,13 @@ export function createLeaderboard({ getCar, getGpId, goRace, notify, raceAgainst
   panel.hidden = false
   $('resultBoard').hidden = false
   $('weeklyPanel').hidden = false
+  $('dailyPanel').hidden = false
   takeSignIn()
   let gpIndex = 0
   let weekly: Weekly | null = null
   let weeklyLeft: number | undefined // entries left this week, once the server has said
+  let daily: Daily | null = null
+  let dailyLeft: number | undefined // entries left today, once the server has said
 
   // the player's chosen board name: undefined while unknown, null when they have not chosen one yet
   let myName: string | null | undefined
@@ -107,7 +111,9 @@ export function createLeaderboard({ getCar, getGpId, goRace, notify, raceAgainst
     if (!signed) {
       myName = undefined
       weeklyLeft = undefined
+      dailyLeft = undefined
       renderWeekly()
+      renderDaily()
       $('onlineNameRow').hidden = true
       $('onlineWho').textContent = 'Sign in to enter the board.'
       $('resultBoardGo').textContent = 'Sign in with Google to enter'
@@ -120,11 +126,13 @@ export function createLeaderboard({ getCar, getGpId, goRace, notify, raceAgainst
           store.set(TOKEN_KEY, null) // the server no longer accepts this sign-in
           return renderWho()
         }
-        const me = (await res.json()) as { name: string | null; ranks?: Ranks; weekly?: { rank: number | null; left: number } }
+        const me = (await res.json()) as { name: string | null; ranks?: Ranks; weekly?: { rank: number | null; left: number }; daily?: { rank: number | null; left: number } }
         myName = me.name
         if (me.weekly) weeklyLeft = me.weekly.left
+        if (me.daily) dailyLeft = me.daily.left
         if (me.ranks) sinceLastVisit({ ...me.ranks, ...(weekly && me.weekly ? { ['w:' + weekly.week]: me.weekly.rank } : {}) })
         renderWeekly()
+        renderDaily()
       } catch {
         $('onlineWho').textContent = 'Signed in. The board is not reachable right now.'
         return
@@ -147,7 +155,7 @@ export function createLeaderboard({ getCar, getGpId, goRace, notify, raceAgainst
   }
   // ---------- ENTRIES IN OFFICIAL TRAINING ----------
   type Job = { id: number; gp: string; name: string; status: string; ahead: number; finished: number | null; totalTime: number | null; medal: string | null }
-  const gpName = (id: string) => (id.startsWith('w:') ? 'the Weekly Grand Prix' : GRAND_PRIXES.find((g) => g.id === id)?.name ?? id)
+  const gpName = (id: string) => (id.startsWith('w:') ? 'the Weekly Grand Prix' : id.startsWith('d:') ? 'the Daily Challenge' : GRAND_PRIXES.find((g) => g.id === id)?.name ?? id)
   let jobTimer: number | undefined
   let wasPending = false
   async function refreshJobs() {
@@ -297,11 +305,14 @@ export function createLeaderboard({ getCar, getGpId, goRace, notify, raceAgainst
   async function enter(gpId: string) {
     const car = getCar()
     const isWeekly = gpId === 'weekly'
+    const isDaily = gpId === 'daily'
     const i = GRAND_PRIXES.findIndex((g) => g.id === gpId)
-    if (i < 0 && !isWeekly) return
-    if (!isWeekly) gpIndex = i
+    if (i < 0 && !isWeekly && !isDaily) return
+    if (!isWeekly && !isDaily) gpIndex = i
     const tell = isWeekly
       ? (text: string, bad = false) => sayWeekly(text, bad)
+      : isDaily
+      ? (text: string, bad = false) => sayDaily(text, bad)
       : (text: string, bad = false) => {
           say(text, bad)
           $('resultBoardMsg').textContent = text
@@ -330,6 +341,13 @@ export function createLeaderboard({ getCar, getGpId, goRace, notify, raceAgainst
         onEntered?.()
         refreshJobs()
         return refreshWeekly()
+      }
+      if (isDaily) {
+        dailyLeft = data.left
+        tell('Entered: ' + car.name + "'s setup is queued for official training." + queue + " Its result shows on today's board within about 30 minutes.")
+        onEntered?.()
+        refreshJobs()
+        return refreshDaily()
       }
       tell('Entered: ' + car.name + "'s setup is queued for official training." + queue + ' Its result shows on the board within about 30 minutes. ' + data.left + (data.left === 1 ? ' entry' : ' entries') + ' left today.')
       onEntered?.()
@@ -362,7 +380,7 @@ export function createLeaderboard({ getCar, getGpId, goRace, notify, raceAgainst
     if (!nameIn(store.get(TOKEN_KEY))) return store.set(PENDING_KEY, null) // sign-in was abandoned
     await renderWho()
     goRace()
-    show(pending === 'weekly' && myName ? 'weeklyPanel' : 'boardOnline').scrollIntoView({ block: 'center' })
+    show(pending === 'weekly' && myName ? 'weeklyPanel' : pending === 'daily' && myName ? 'dailyPanel' : 'boardOnline').scrollIntoView({ block: 'center' })
     if (myName) {
       store.set(PENDING_KEY, null)
       return enter(pending)
@@ -387,8 +405,8 @@ export function createLeaderboard({ getCar, getGpId, goRace, notify, raceAgainst
       $('resultBoardPlace').textContent = ''
       return
     }
-    const past = gpId.startsWith('w:') // a finished week: no entering, only how it compares with that week's board
-    $('resultBoardAsk').textContent = past ? 'Against that week\'s board' : 'Put this setup on the leaderboard? The game trains it itself, the same way for everyone, so its official result can differ from this race.'
+    const past = gpId.startsWith('w:') || gpId.startsWith('d:') // a finished week or day: no entering, only how it compares with that board
+    $('resultBoardAsk').textContent = past ? 'Against that board' : 'Put this setup on the leaderboard? The game trains it itself, the same way for everyone, so its official result can differ from this race.'
     $('resultBoardGo').hidden = past
     const key = gpId + ':' + r.finished + ':' + r.totalTime
     if (key === shownFor) return // render runs often; work this out once per result
@@ -409,7 +427,7 @@ export function createLeaderboard({ getCar, getGpId, goRace, notify, raceAgainst
     const others = rows.filter((e) => e !== mine)
     const yours = mine && !beats(r, mine) ? mine : r // your board entry stays if this run is not better
     const ahead = others.filter((e) => beats(e, yours))
-    const where = past ? 'This would have placed #' + (ahead.length + 1) + ' that week.' : mine && yours === mine ? 'Your board entry is #' + (ahead.length + 1) + ' and stays there.' : 'This race would place #' + (ahead.length + 1) + (ahead.length >= rows.length && rows.length >= 50 ? ' or lower' : '') + '.'
+    const where = past ? 'This would have placed #' + (ahead.length + 1) + (gpId.startsWith('d:') ? ' that day.' : ' that week.') : mine && yours === mine ? 'Your board entry is #' + (ahead.length + 1) + ' and stays there.' : 'This race would place #' + (ahead.length + 1) + (ahead.length >= rows.length && rows.length >= 50 ? ' or lower' : '') + '.'
     const above = ahead[ahead.length - 1]
     if (!above) return (place.textContent = where + (rows.length ? ' That is the top of the board.' : ' The board is empty, so you would be first.'))
     const target =
@@ -418,6 +436,85 @@ export function createLeaderboard({ getCar, getGpId, goRace, notify, raceAgainst
         : (Math.floor((yours.totalTime - above.totalTime) * 10) / 10 + 0.1).toFixed(1) + ' s faster'
     place.textContent = where + ' ' + target + ' puts you above ' + above.display + ' (#' + above.rank + ').'
   }
+
+  // ---------- THE DAILY CHALLENGE ----------
+  const sayDaily = (text: string, bad = false) => {
+    $('dailyMsg').textContent = text
+    $('dailyMsg').classList.toggle('bad', bad)
+  }
+  const twistOf = (g: { wet: boolean; night?: boolean; ice?: boolean }) => (g.wet ? 'wet road' : g.night ? 'night' : 'icy road')
+  function renderDaily() {
+    if (!daily) return
+    const signed = !!nameIn(store.get(TOKEN_KEY))
+    $('dailyEnds').textContent = 'ends in ' + timeLeft(daily.endsAt - Date.now())
+    $('dailyLine').textContent =
+      daily.name + ': 8 tracks in one style, all ' + (daily.wet ? 'on a wet road' : daily.night ? 'at night' : 'on an icy road') + ', secret until the day is over. ' +
+      'Your best of ' + daily.limit + ' entries counts. No trophies: it is for today\'s place, and a new one starts at midnight UTC.' +
+      (signed && dailyLeft !== undefined ? ' You have ' + dailyLeft + (dailyLeft === 1 ? ' entry' : ' entries') + ' left today.' : '')
+    const go = $<HTMLButtonElement>('dailyGo')
+    go.textContent = !signed ? 'Sign in with Google to enter' : myName === null ? 'Choose a board name to enter' : 'Enter your car'
+    go.disabled = signed && dailyLeft === 0
+  }
+  async function refreshDaily() {
+    try {
+      const res = await fetch(API + '/daily')
+      if (!res.ok) throw new Error('bad reply')
+      daily = (await res.json()) as Daily
+      const board = (await (await fetch(API + '/board?gp=d:' + daily.day)).json()) as { entries?: Row[] }
+      const rows = board.entries ?? []
+      $('dailyRows').replaceChildren(
+        ...rows.map((e) => {
+          const li = document.createElement('li')
+          const cell = (cls: string, text: string) => Object.assign(document.createElement('span'), { className: cls, textContent: text })
+          li.append(cell('n', String(e.rank)), cell('who', e.display), cell('res', e.finished + ' of 8 · ' + e.totalTime.toFixed(1) + ' s' + runsOf(e)), document.createElement('span'))
+          return li
+        }),
+      )
+      $('dailyEmpty').hidden = rows.length > 0
+      $('dailyPast').replaceChildren(
+        ...daily.past.map((p) => {
+          const gp = dailyGp(p.day, p.seed)
+          const box = document.createElement('div')
+          const head = Object.assign(document.createElement('p'), { className: 'tip', textContent: gp.name + ' · ' + twistOf(gp) + (p.podium.length ? '' : ' · nobody entered') })
+          head.style.cssText = 'color:var(--text);font-weight:600;margin-top:12px'
+          const open = Object.assign(document.createElement('button'), { className: 'btn small', textContent: 'Race these tracks' })
+          open.addEventListener('click', () => openWeek(gp))
+          head.append(' ', open)
+          const list = Object.assign(document.createElement('ol'), { className: 'rank' })
+          list.append(
+            ...p.podium.map((e) => {
+              const li = document.createElement('li')
+              const cell = (cls: string, text: string) => Object.assign(document.createElement('span'), { className: cls, textContent: text })
+              const race = Object.assign(document.createElement('button'), { className: 'btn small', textContent: 'Race' })
+              race.setAttribute('aria-label', 'Race against ' + e.display + ' on ' + gp.name)
+              race.addEventListener('click', () => loadRival({ ...e, rank: e.place, medal: null }, gp))
+              li.append(cell('n', TROPHY[e.place - 1]), cell('who', e.display), cell('res', e.finished + ' of 8 · ' + e.totalTime.toFixed(1) + ' s'), race)
+              return li
+            }),
+          )
+          box.append(head, list)
+          return box
+        }),
+      )
+      renderDaily()
+    } catch {
+      sayDaily('The Daily Challenge is not reachable right now.', true)
+    }
+  }
+  $('dailyGo').addEventListener('click', () => {
+    if (!nameIn(store.get(TOKEN_KEY))) {
+      store.set(PENDING_KEY, 'daily')
+      return signIn()
+    }
+    if (myName === null) {
+      store.set(PENDING_KEY, 'daily')
+      $('onlineNameRow').hidden = false
+      show('onlineNameRow').scrollIntoView({ behavior: 'smooth', block: 'center' })
+      $('onlineName').focus()
+      return say('Choose the name the board will show, and your car goes into the Daily Challenge.')
+    }
+    enter('daily')
+  })
 
   // ---------- THE WEEKLY GRAND PRIX ----------
   const sayWeekly = (text: string, bad = false) => {
@@ -509,6 +606,7 @@ export function createLeaderboard({ getCar, getGpId, goRace, notify, raceAgainst
 
   refresh()
   refreshWeekly()
+  refreshDaily()
   refreshJobs()
   const identity = (): Identity => (!nameIn(store.get(TOKEN_KEY)) ? { kind: 'out' } : myName === undefined ? { kind: 'checking' } : myName === null ? { kind: 'noname' } : { kind: 'in', name: myName })
   const openBoard = () => {

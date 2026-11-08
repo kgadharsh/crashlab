@@ -51,6 +51,30 @@ export function weeklyGp(week: number, seed: number): GrandPrix {
   return { id: 'w:' + week, name: weekName(week), wet, goldTime: 0, week, tracks, ...(c < 0.3 ? { night: true } : c < 0.6 ? { ice: true } : {}) }
 }
 
+// ---------- THE DAILY CHALLENGE ----------
+// Built to feel unlike the weekly: every track in a day has the SAME style (a theme day: all hairpins, all blocks...),
+// and one twist is always on (wet, night or ice), where a week is a mix and often plain. It is raced for a place
+// on the day's board, not for trophies. Days run from 00:00 UTC, and the tracks are secret until the day is over.
+const DAY_MS = 86400000
+export const dayOf = (now: number) => Math.floor(now / DAY_MS)
+export const dayStart = (day: number) => day * DAY_MS
+const DAILY_THEMES = PRACTICE.flatMap((p) => (p.style ? [{ name: p.name, style: p.style }] : [])).concat({ name: 'Wild', style: styleFor(0.9) })
+export type DailyTwist = 'wet' | 'night' | 'ice'
+export const dailyName = (day: number, theme: string) => {
+  const d = new Date(dayStart(day))
+  return theme + ' day · ' + d.getUTCDate() + ' ' + MONTHS[d.getUTCMonth()]
+}
+export function dailyGp(day: number, seed: number): GrandPrix {
+  const rng = makeRng(seed)
+  const theme = DAILY_THEMES[Math.floor(rng() * DAILY_THEMES.length)]
+  const tracks = Array.from({ length: RACE_COUNT }, () => ({ seed: Math.floor(rng() * 1e6), style: theme.style }))
+  const t = rng()
+  const twist: DailyTwist = t < 1 / 3 ? 'wet' : t < 2 / 3 ? 'night' : 'ice'
+  return { id: 'd:' + day, name: dailyName(day, theme.name), wet: twist === 'wet', goldTime: 0, day, tracks, ...(twist === 'night' ? { night: true } : twist === 'ice' ? { ice: true } : {}) }
+}
+// A Grand Prix whose tracks are secret and whose result is a place on a board, not a medal (weekly or daily)
+export const isSecretGp = (gp: GrandPrix) => gp.week !== undefined || gp.day !== undefined
+
 // Track i of a Grand Prix: the fixed race tracks, or the ones a weekly seed makes (made once, then kept)
 const weeklyTracks = new Map<string, Track[]>()
 export function gpTrack(gp: GrandPrix, i: number): Track {
@@ -144,7 +168,7 @@ export const BRONZE_FINISHES = RACE_COUNT - 2
 
 // Each Grand Prix has its own medals and personal best (the first keeps its old save key)
 // A weekly Grand Prix also has its week number and the seed and style of each of its tracks
-export type GrandPrix = { id: string; name: string; wet: boolean; goldTime: number; week?: number; tracks?: { seed: number; style: TrackStyle }[]; night?: boolean; ice?: boolean }
+export type GrandPrix = { id: string; name: string; wet: boolean; goldTime: number; week?: number; day?: number; tracks?: { seed: number; style: TrackStyle }[]; night?: boolean; ice?: boolean }
 export const GRAND_PRIXES: GrandPrix[] = [
   { id: 'gp1', name: 'Grand Prix 1', wet: false, goldTime: GOLD_TIME },
   { id: 'gp2', name: 'Grand Prix 2 · wet', wet: true, goldTime: WET_GOLD_TIME },
@@ -152,7 +176,7 @@ export const GRAND_PRIXES: GrandPrix[] = [
 
 export type Medal = 'gold' | 'silver' | 'bronze' | null
 export function medalFor(r: { finished: number; totalTime: number }, gp: GrandPrix = GRAND_PRIXES[0]): Medal {
-  if (gp.week !== undefined) return null // weekly trophies go by place on the week's board, not by time
+  if (isSecretGp(gp)) return null // weekly trophies go by place on the week's board, not by time
   if (r.finished === RACE_COUNT) return r.totalTime <= gp.goldTime ? 'gold' : 'silver'
   return r.finished >= BRONZE_FINISHES ? 'bronze' : null
 }

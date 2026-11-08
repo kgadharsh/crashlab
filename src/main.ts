@@ -278,6 +278,16 @@ document.querySelector('#app')!.innerHTML = `
         <p class="tip" style="margin-top:8px">Your car drives 8 tracks it has never seen, once each. Most tracks finished wins, then the lowest total time. Grand Prix 2 is the same tracks on a wet road.</p>
         <p class="tip" id="medalRules"></p>
       </div>
+      <div class="panel" id="dailyPanel" hidden>
+        <h2>Daily Challenge<span class="aside" id="dailyEnds"></span></h2>
+        <p class="tip" id="dailyLine" style="margin-top:0"></p>
+        <div class="actions"><button class="btn primary" id="dailyGo">Enter your car</button></div>
+        <p class="msg" id="dailyMsg"></p>
+        <p class="tip" style="color:var(--text);font-weight:600">Today</p>
+        <ol class="rank" id="dailyRows"></ol>
+        <p class="tip" id="dailyEmpty" hidden>No entries today yet. Be the first.</p>
+        <div id="dailyPast"></div>
+      </div>
       <div class="panel" id="weeklyPanel" hidden>
         <h2>Weekly Grand Prix<span class="aside" id="weeklyEnds"></span></h2>
         <p class="tip" id="weeklyLine" style="margin-top:0"></p>
