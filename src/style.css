@@ -528,6 +528,10 @@ select {
 .badge .bi { display: block; font-size: 26px; line-height: 1.2; filter: grayscale(1); }
 .badge b { display: block; font: 700 13px var(--head); letter-spacing: 0.06em; text-transform: uppercase; margin-top: 2px; }
 .badge small { display: block; font-size: 11px; color: var(--muted); line-height: 1.25; margin-top: 2px; }
+.badge { position: relative; cursor: help; }
+.badge::after { content: attr(data-tip); position: absolute; left: 50%; bottom: calc(100% + 6px); transform: translateX(-50%); width: max-content; max-width: 180px; padding: 6px 8px; border-radius: 6px; background: #000; border: 1px solid var(--line); color: var(--text, #fff); font-size: 12px; line-height: 1.3; text-align: center; opacity: 0; pointer-events: none; transition: opacity 0.1s; z-index: 5; }
+.badge:hover::after, .badge:focus-visible::after { opacity: 1; }
+.badge:hover { opacity: 1; }
 .badge.got { opacity: 1; border-color: #5b4513; background: linear-gradient(160deg, #2a2108, var(--panel-2)); }
 .badge.got .bi { filter: none; }
 .badge.got small { color: var(--accent); }

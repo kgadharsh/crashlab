@@ -130,7 +130,8 @@ export function renderProfile(root: HTMLElement, d: ProfileData) {
   const grid = h('div', 'badges')
   for (const b of list) {
     const cell = h('div', 'badge' + (b.got ? ' got' : ''))
-    cell.title = b.hint
+    cell.dataset.tip = b.hint // shown at once on hover, focus or tap (a title tooltip is slow and never shows on a phone)
+    cell.tabIndex = 0
     cell.append(h('span', 'bi', b.got ? b.icon : '🔒'), h('b', '', b.name), h('small', '', b.got ? 'Earned' : b.hint))
     grid.append(cell)
   }

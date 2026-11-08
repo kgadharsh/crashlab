@@ -54,6 +54,19 @@ export function createSkillTree(d: TreeDeps) {
   d.svgBox.replaceChildren(svg)
   d.svgBox.style.position = 'relative'
 
+  // With a mouse the popover is a hover card: it closes shortly after the pointer leaves both the node and the card,
+  // and moving from a node onto the card (or onto another node) keeps it open.
+  let leaving: number | undefined
+  const stay = () => window.clearTimeout(leaving)
+  const leave = (e: PointerEvent) => {
+    if (e.pointerType !== 'mouse' || !wide.matches || !hoverable.matches) return
+    stay()
+    leaving = window.setTimeout(() => {
+      shown = false
+      render()
+    }, 200)
+  }
+
   // Each branch is a small tree: a node hangs from its parent, siblings fan out across the branch's slice of the circle, and
   // depth sets the distance from the car. Leaves get evenly spaced angles and a parent sits at the middle of its children.
   const pos = new Map<PartId, { x: number; y: number; branch: (typeof BRANCHES)[number] }>()
@@ -110,15 +123,20 @@ export function createSkillTree(d: TreeDeps) {
     const pips = el('text', { x: 16, y: -12.5, class: 'pts' }, g)
     pips.textContent = String(part.points)
     const pick = () => {
+      stay()
       selected = part.id
       shown = true
       render()
     }
     let intent: number | undefined
     g.addEventListener('pointerenter', (e) => {
+      stay()
       if (e.pointerType === 'mouse' && wide.matches && hoverable.matches) intent = window.setTimeout(pick, 110) // a short pause, so sweeping across the tree does not flicker
     })
-    g.addEventListener('pointerleave', () => window.clearTimeout(intent))
+    g.addEventListener('pointerleave', (e) => {
+      window.clearTimeout(intent)
+      leave(e)
+    })
     g.addEventListener('click', pick)
     g.addEventListener('keydown', (e) => {
       if (e.key === 'Enter' || e.key === ' ') {
@@ -155,6 +173,8 @@ export function createSkillTree(d: TreeDeps) {
   })
   head.append(card.title, card.btn, close)
   d.detail.replaceChildren(head, card.does, card.cost, card.lock)
+  d.detail.addEventListener('pointerenter', stay)
+  d.detail.addEventListener('pointerleave', leave)
   // wide: the card floats over the tree beside the node; narrow: it sits under the tree
   const dock = () => {
     const pop = wide.matches
