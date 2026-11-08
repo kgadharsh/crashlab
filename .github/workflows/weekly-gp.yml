@@ -1,0 +1,48 @@
+# Makes next week's Grand Prix: picks a random seed, tests it by racing the reference cars on its tracks (retrying with
+# a new seed if the week is not fit to race), and stores it in the board database before Monday 00:00 UTC.
+# The seed is secret until the week is over, so it is masked and never printed (this repository's logs are public).
+# Needs two repository secrets: CLOUDFLARE_API_TOKEN (permission: D1 Edit) and CLOUDFLARE_ACCOUNT_ID.
+# If this ever fails, nothing breaks: the server still picks an untested random seed the first time the week is asked for.
+name: Weekly Grand Prix
+
+on:
+  schedule:
+    - cron: '0 12 * * 0' # Sundays 12:00 UTC, twelve hours before the new week starts
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: weekly-gp
+
+jobs:
+  pick:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - name: Pick and test next week's seed
+        run: npx tsx scripts/weeklyPick.ts --out "$RUNNER_TEMP/week.json"
+      - name: Store it in the board database
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          WEEK=$(node -p "require('$RUNNER_TEMP/week.json').week")
+          SEED=$(node -p "require('$RUNNER_TEMP/week.json').seed")
+          echo "::add-mask::$SEED"
+          echo "INSERT OR IGNORE INTO weeks (week, seed) VALUES ($WEEK, $SEED);" > "$RUNNER_TEMP/store.sql"
+          npx wrangler d1 execute crashlab --remote --config server/wrangler.toml --file "$RUNNER_TEMP/store.sql" > /dev/null
+          # Did our seed end up stored? (Not if someone had already asked for that week: the server had picked its own.)
+          npx wrangler d1 execute crashlab --remote --config server/wrangler.toml --json \
+            --command "SELECT COUNT(*) AS n FROM weeks WHERE week = $WEEK AND seed = $SEED" > "$RUNNER_TEMP/check.json"
+          if [ "$(node -p "require('$RUNNER_TEMP/check.json')[0].results[0].n")" != "1" ]; then
+            echo "Week $WEEK already had a different seed, so the tested one was not stored."
+            exit 1
+          fi
+          echo "Week $WEEK stored."
