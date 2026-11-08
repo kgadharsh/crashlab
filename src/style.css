@@ -391,11 +391,13 @@ select {
 .part .ctl { display: flex; gap: 4px; align-items: start; }
 .check { display: inline-flex; gap: 6px; align-items: center; font-size: 13px; color: var(--text); cursor: pointer; }
 /* folding panels: a folded panel shows only its heading */
-.panel.fold > h2 { cursor: pointer; user-select: none; }
+.panel.fold > h2 { cursor: pointer; user-select: none; margin: -14px -16px 10px; padding: 14px 16px; }
+.panel.fold.folded { cursor: pointer; }
+.panel.fold.folded:hover { border-color: var(--accent); background: var(--panel-2); }
 .panel.fold > h2::before { content: '▾'; color: var(--muted); font-size: 11px; width: 10px; }
 .panel.fold.folded > h2::before { content: '▸'; }
 .panel.fold > h2:focus-visible { outline: 2px solid var(--accent); outline-offset: 4px; }
-.panel.fold.folded > h2 { margin-bottom: 0; }
+.panel.fold.folded > h2 { margin-bottom: -14px; }
 .panel.fold.folded > :not(h2) { display: none !important; }
 .actions.next { justify-content: flex-end; margin-top: 10px; }
 
@@ -609,33 +611,43 @@ body.full .layout { grid-template-columns: minmax(0, 720px); justify-content: ce
 #topChallenge { white-space: nowrap; flex: none; }
 
 /* ---------- FOOTER ---------- */
+/* a slim bar pinned to the bottom of the window, so the links are in view without scrolling */
+body { padding-bottom: 44px; }
 .made {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 6;
   display: flex;
   align-items: center;
   justify-content: center;
-  flex-wrap: wrap;
   gap: 8px 14px;
-  padding: 14px 16px 22px;
+  padding: 7px 16px;
+  border-top: 1px solid var(--line);
+  background: rgba(11, 14, 18, .94);
+  backdrop-filter: blur(6px);
   color: var(--muted);
   font-size: 13px;
+  white-space: nowrap;
 }
 .made b { color: var(--text); font-weight: 600; }
 .made .soc {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  padding: 5px 11px;
+  padding: 4px 11px;
   border: 1px solid var(--line);
   border-radius: 999px;
   background: var(--panel);
   color: var(--text);
   text-decoration: none;
-  transition: color .15s, border-color .15s, transform .15s, box-shadow .15s;
+  transition: color .15s, border-color .15s, box-shadow .15s;
 }
 .made .soc:hover, .made .soc:focus-visible {
   color: var(--accent);
   border-color: var(--accent);
   box-shadow: 0 0 12px rgba(255, 179, 26, .25);
-  transform: translateY(-1px);
   outline: none;
 }
+@media (max-width: 420px) { .made > span:first-child { display: none; } }

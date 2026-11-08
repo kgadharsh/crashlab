@@ -71,6 +71,12 @@ export function setupFolds(tabIds: string[], steps: string[] = []) {
         if ((e.target as HTMLElement).closest('button, input, select, a')) return // buttons in a heading do their own thing
         toggle()
       })
+      // a folded panel is only its heading, so the whole box opens it, not just the words
+      panel.addEventListener('click', (e) => {
+        if (!panel.classList.contains('folded') || e.target === h2 || h2.contains(e.target as Node)) return
+        if ((e.target as HTMLElement).closest('button, input, select, a')) return
+        toggle()
+      })
       h2.addEventListener('keydown', (e) => {
         if (e.target !== h2 || (e.key !== 'Enter' && e.key !== ' ')) return
         e.preventDefault()
