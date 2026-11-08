@@ -118,7 +118,15 @@ document.querySelector('#app')!.innerHTML = `
     <button class="tab profile" data-tab="profile" role="tab"><span class="pico" aria-hidden="true">☻</span>Profile</button>
   </nav>
   <button type="button" class="btn small primary hot" id="topChallenge" disabled title="Train a car first, then dare a friend to beat it">⚔ Challenge a friend</button>
-  <div class="chip" id="chip"></div>
+  <button type="button" class="chip" id="chip" aria-haspopup="dialog" aria-expanded="false" aria-controls="shelfPop"></button>
+  <div class="shelfpop" id="shelfPop" role="dialog" aria-label="Your cars" hidden>
+    <div class="spHead"><b>Your cars</b><span id="spCount"></span></div>
+    <div class="spNow" id="spNow"></div>
+    <div class="shelf" id="spShelf"></div>
+    <p class="tip" id="spEmpty" style="margin-top:0"></p>
+    <div class="actions"><button class="btn small primary" id="spShelve">Put your car on the shelf</button></div>
+    <p class="msg" id="spMsg"></p>
+  </div>
 </header>
 <main class="layout">
   <section class="view">
@@ -200,6 +208,7 @@ document.querySelector('#app')!.innerHTML = `
         <div class="actions">
           <button class="btn primary" id="train">Start training</button>
           <button class="btn" id="keep">Keep training</button>
+          <button class="btn" id="shelveQuick">Save to shelf</button>
           <button class="btn" id="skip" hidden>Skip to the end</button>
         </div>
         <p class="tip" id="keepHint" style="margin-top:8px"></p>
@@ -319,6 +328,7 @@ document.querySelector('#app')!.innerHTML = `
         <p class="tip" id="dailyLine" style="margin-top:0"></p>
         <div class="actions"><button class="btn primary" id="dailyGo">Enter your car</button></div>
         <p class="msg" id="dailyMsg"></p>
+        <div class="jobs" id="dailyJobs"></div>
         <p class="tip" style="color:var(--text);font-weight:600">Today</p>
         <ol class="rank" id="dailyRows"></ol>
         <p class="tip" id="dailyEmpty" hidden>No entries today yet. Be the first.</p>
@@ -329,6 +339,7 @@ document.querySelector('#app')!.innerHTML = `
         <p class="tip" id="weeklyLine" style="margin-top:0"></p>
         <div class="actions"><button class="btn primary" id="weeklyGo">Enter your car</button></div>
         <p class="msg" id="weeklyMsg"></p>
+        <div class="jobs" id="weeklyJobs"></div>
         <ol class="tower" id="weeklyTracks" hidden></ol>
         <p class="tip" id="weeklyBoardTitle" style="color:var(--text);font-weight:600">This week</p>
         <ol class="rank" id="weeklyRows"></ol>
@@ -342,7 +353,7 @@ document.querySelector('#app')!.innerHTML = `
         <p class="tip" id="onlineEmpty" hidden>No cars on this board yet. Be the first.</p>
         <p class="tip" style="margin-top:4px">Every car on these boards was trained by the game itself: one run, the same way for everyone. Only your setup counts, not how often you retrain. An entry shows up within about 30 minutes.</p>
         <p class="tip" id="onlineWho"></p>
-        <p class="tip" id="onlineJobs" style="color:var(--text)"></p>
+        <div class="jobs" id="onlineJobs"></div>
         <div class="actions" id="onlineNameRow" hidden><input id="onlineName" maxlength="20" placeholder="Choose a board name" aria-label="Board name" autocomplete="off" /><button class="btn small primary" id="onlineNameSave">Save name</button></div>
         <div class="actions"><button class="btn primary" id="onlineSignIn">Sign in with Google</button><button class="btn small" id="onlineSignOut" hidden>Sign out</button><button class="btn primary" id="onlineEnter">Enter your car</button></div>
         <p class="msg" id="onlineMsg"></p>
@@ -668,13 +679,15 @@ function changed() {
 function renderChip() {
   const chip = $('chip')
   chip.classList.toggle('stale', carIsStale())
+  const caret = Object.assign(document.createElement('span'), { className: 'caret', textContent: ' ▾' })
+  const shelfTag = Object.assign(document.createElement('span'), { className: 'shelftag', textContent: ' · SHELF ' + shelf.length + '/' + maxSlots() })
   if (!car) {
-    chip.textContent = 'No car yet: train one in Practice'
+    chip.replaceChildren('No car yet: train one in Practice', shelfTag, caret)
     return
   }
   const label = document.createElement('b')
   label.textContent = car.name
-  chip.replaceChildren('CAR ', label, carIsStale() ? ' · setup changed, retrain' : ' · ready')
+  chip.replaceChildren('CAR ', label, carIsStale() ? ' · setup changed, retrain' : ' · ready', shelfTag, caret)
 }
 
 // ---------- TRAINING ----------
@@ -1450,12 +1463,9 @@ fileInput.addEventListener('change', async () => {
 
 // ---------- CAR SHELF ----------
 const carLabel = (c: CarFile) => c.name + ' · ' + c.build.sensors.count + ' rays' + (c.generations ? ' · ' + c.generations + ' rounds' : '') + (c.build.weather === 'wet' ? ' · wet' : '')
-function renderShelf() {
-  const training = !!worker
-  $('shelfCount').textContent = shelf.length + ' of ' + maxSlots()
-  $<HTMLButtonElement>('shelve').disabled = !car || shelf.length >= maxSlots()
-  $('shelve').textContent = shelf.length >= maxSlots() ? 'Shelf is full' : 'Put your car on the shelf'
-  $('shelf').replaceChildren(
+// One row per shelf car, with Use and Remove, into a container (the Garage panel and the top bar's popover share it)
+function shelfRows(box: HTMLElement, training: boolean) {
+  box.replaceChildren(
     ...shelf.map((c, i) => {
       const row = document.createElement('div')
       row.className = 'slot'
@@ -1487,12 +1497,53 @@ function renderShelf() {
     }),
   )
 }
-$('shelve').addEventListener('click', () => {
+function renderShelf() {
+  const training = !!worker
+  const full = shelf.length >= maxSlots()
+  const text = full ? 'Shelf is full' : 'Put your car on the shelf'
+  $('shelfCount').textContent = shelf.length + ' of ' + maxSlots()
+  for (const id of ['shelve', 'spShelve', 'shelveQuick']) {
+    const btn = $<HTMLButtonElement>(id)
+    btn.disabled = !car || full
+    btn.textContent = id === 'shelveQuick' ? (full ? 'Shelf is full' : 'Save to shelf') : text
+  }
+  shelfRows($('shelf'), training)
+  shelfRows($('spShelf'), training)
+  $('spCount').textContent = shelf.length + ' of ' + maxSlots() + ' on the shelf'
+  $('spNow').textContent = car ? 'On the track now: ' + carLabel(car) : 'No car yet. Train one in Practice.'
+  $('spEmpty').textContent = shelf.length ? '' : 'Keep a trained car here, try a different setup, and switch back if the new one is worse.'
+  renderChip()
+}
+function shelveCar() {
   if (!car || shelf.length >= maxSlots()) return
   shelf.push(clone(car))
   saveShelf()
   renderShelf()
   carMsg('Put ' + car.name + ' on the shelf.')
+  $('spMsg').textContent = 'Put ' + car.name + ' on the shelf.'
+  $('trainMsg').textContent = 'Put ' + car.name + ' on the shelf. Find it under the CAR chip at the top, on any tab.'
+}
+$('shelve').addEventListener('click', shelveCar)
+$('spShelve').addEventListener('click', shelveCar)
+$('shelveQuick').addEventListener('click', shelveCar)
+// The CAR chip in the top bar opens the shelf from any tab
+function setShelfPop(open: boolean) {
+  $('shelfPop').hidden = !open
+  $('chip').setAttribute('aria-expanded', String(open))
+  if (open) $('spMsg').textContent = ''
+}
+$('chip').addEventListener('click', (e) => {
+  e.stopPropagation()
+  setShelfPop($('shelfPop').hidden === true)
+})
+document.addEventListener('click', (e) => {
+  if (!$('shelfPop').hidden && !(e.target as HTMLElement).closest('#shelfPop')) setShelfPop(false)
+})
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape' && !$('shelfPop').hidden) {
+    setShelfPop(false)
+    $('chip').focus()
+  }
 })
 
 // ---------- PRACTICE PANEL ----------

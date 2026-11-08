@@ -10,6 +10,7 @@ CREATE TABLE IF NOT EXISTS entries (
   car TEXT NOT NULL,           -- the car file, so a ghost can be replayed
   day TEXT NOT NULL,           -- UTC date, for the daily limit
   created_at INTEGER NOT NULL
+  -- (the server also adds: official INTEGER, and tracks TEXT: each track's result as JSON, so a player can see how an entry went)
 );
 CREATE INDEX IF NOT EXISTS entries_board ON entries (gp, finished DESC, total_time ASC);
 CREATE INDEX IF NOT EXISTS entries_player_day ON entries (player, day);

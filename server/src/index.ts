@@ -135,6 +135,11 @@ async function ensureOfficial(env: Env) {
        name TEXT NOT NULL, build TEXT NOT NULL, day TEXT NOT NULL, status TEXT NOT NULL, created_at INTEGER NOT NULL,
        started_at INTEGER, done_at INTEGER, entry INTEGER, error TEXT)`,
   ).run()
+  try {
+    await env.DB.prepare('ALTER TABLE entries ADD COLUMN tracks TEXT').run() // each track's result, so the player can see how it went
+  } catch {
+    /* the column is already there */
+  }
   await env.DB.prepare('CREATE TABLE IF NOT EXISTS days (day INTEGER PRIMARY KEY, seed INTEGER NOT NULL)').run()
   officialReady = true
 }
@@ -225,8 +230,8 @@ async function finishJob(req: Request, env: Env, id: number): Promise<Response> 
   const gp = job.gp.startsWith('w:') ? await weekGp(env, Number(job.gp.slice(2))) : job.gp.startsWith('d:') ? await dayGp(env, Number(job.gp.slice(2))) : GRAND_PRIXES.find((g) => g.id === job.gp)!
   const result = raceCar(car, gp)
   const medal = medalFor(result, gp)
-  const entry = await env.DB.prepare('INSERT INTO entries (player, display, gp, finished, total_time, medal, car, day, created_at, official) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1) RETURNING id')
-    .bind(job.player, job.display, job.gp, result.finished, result.totalTime, medal, JSON.stringify(car), job.day, Date.now())
+  const entry = await env.DB.prepare('INSERT INTO entries (player, display, gp, finished, total_time, medal, car, day, created_at, official, tracks) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?) RETURNING id')
+    .bind(job.player, job.display, job.gp, result.finished, result.totalTime, medal, JSON.stringify(car), job.day, Date.now(), JSON.stringify(result.tracks.map((t) => ({ time: t.time, progress: t.progress, cause: t.cause }))))
     .first<{ id: number }>()
   await env.DB.prepare("UPDATE jobs SET status = 'done', done_at = ?, entry = ? WHERE id = ?").bind(Date.now(), entry!.id, id).run()
   return json(req, { ok: true, entry: entry!.id, finished: result.finished, totalTime: result.totalTime, medal })
@@ -394,11 +399,23 @@ async function getMe(req: Request, env: Env): Promise<Response> {
   const daily = { rank: await rankOf(env, today, player.id), left: DAILY_CHALLENGE_LIMIT - (usedToday?.n ?? 0) }
   // the player's latest entries in official training: waiting (and how many are ahead), in training, done or failed
   const { results: mine } = await env.DB.prepare(
-    `SELECT j.id, j.gp, j.name, j.status, e.finished, e.total_time AS totalTime, e.medal,
+    `SELECT j.id, j.gp, j.name, j.status, j.entry, e.finished, e.total_time AS totalTime, e.medal, e.tracks,
             (SELECT COUNT(*) FROM jobs q WHERE q.status IN ('queued', 'training') AND q.id < j.id) AS ahead
-     FROM jobs j LEFT JOIN entries e ON e.id = j.entry WHERE j.player = ? ORDER BY j.id DESC LIMIT 5`,
-  ).bind(player.id).all()
-  return json(req, { name: me?.name ?? null, ranks, weekly, daily, jobs: mine })
+     FROM jobs j LEFT JOIN entries e ON e.id = j.entry WHERE j.player = ? ORDER BY j.id DESC LIMIT 12`,
+  ).bind(player.id).all<{ id: number; gp: string; name: string; status: string; entry: number | null; finished: number | null; totalTime: number | null; medal: string | null; tracks: string | null; ahead: number }>()
+  // While a day or week is running its tracks are secret, so an entry's per-track result says only finished or not (no cause,
+  // no time, no distance). Once the period is over, or for the fixed Grand Prix, it says all of it.
+  const jobs = mine.map(({ tracks, ...j }) => {
+    const over = j.gp.startsWith('d:') ? Number(j.gp.slice(2)) < dayOf(Date.now()) : j.gp.startsWith('w:') ? Number(j.gp.slice(2)) < weekOf(Date.now()) : true
+    let list: { time: number | null; progress: number; cause: string | null }[] | null = null
+    try {
+      list = tracks ? JSON.parse(tracks) : null
+    } catch {
+      /* not recorded */
+    }
+    return { ...j, over, tracks: list ? (over ? list : list.map((t) => ({ ok: t.time !== null }))) : null }
+  })
+  return json(req, { name: me?.name ?? null, ranks, weekly, daily, jobs })
 }
 
 const NAME_RULE = /^[\p{L}\p{N}][\p{L}\p{N} _.-]{1,18}[\p{L}\p{N}]$/u // 3 to 20 characters: letters, numbers, and inside the name spaces . _ -

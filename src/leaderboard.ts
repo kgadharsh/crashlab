@@ -3,7 +3,7 @@
 // With no server address (the live site until the server is deployed) the whole panel stays hidden.
 import { carFromJson, carToJson, type CarFile } from './carFile'
 import { reveal } from './fold'
-import { GRAND_PRIXES, dailyGp, dayLabel, weekName, weeklyGp, type GrandPrix } from './race'
+import { CAUSE_LABEL, GRAND_PRIXES, adviceFor, dailyGp, dayLabel, summarise, weekName, weeklyGp, type Cause, type GrandPrix, type TrackResult } from './race'
 
 export const API = (import.meta.env.VITE_API_URL as string | undefined) ?? (import.meta.env.DEV ? 'http://localhost:8787' : '')
 const NAME_KEY = 'crashlab.devname'
@@ -156,13 +156,69 @@ export function createLeaderboard({ getCar, getGpId, goRace, notify, raceAgainst
     }
   }
   // ---------- ENTRIES IN OFFICIAL TRAINING ----------
-  type Job = { id: number; gp: string; name: string; status: string; ahead: number; finished: number | null; totalTime: number | null; medal: string | null }
+  // how each track went: only finished or not while the day or week is running, everything once it is over
+  type TrackBrief = { ok: boolean } | { time: number | null; progress: number; cause: Cause | null }
+  type Job = { id: number; gp: string; name: string; status: string; ahead: number; entry: number | null; over: boolean; tracks: TrackBrief[] | null; finished: number | null; totalTime: number | null; medal: string | null }
   const gpName = (id: string) => (id.startsWith('w:') ? 'the Weekly Challenge (' + weekName(Number(id.slice(2))).toLowerCase() + ')' : id.startsWith('d:') ? 'the Daily Challenge (' + dayLabel(Number(id.slice(2))) + ')' : GRAND_PRIXES.find((g) => g.id === id)?.name ?? id)
   let jobTimer: number | undefined
+  let lastJobs: Job[] = []
+  // The finished day or week a job was entered in (its tracks are public now), if it is still in the lists the server sends
+  const pastGp = (id: string): GrandPrix | null => {
+    if (id.startsWith('d:')) return (daily?.past ?? []).filter((p) => 'd:' + p.day === id).map((p) => dailyGp(p.day, p.seed))[0] ?? null
+    if (id.startsWith('w:')) return (weekly?.past ?? []).filter((p) => 'w:' + p.week === id).map((p) => weeklyGp(p.week, p.seed))[0] ?? null
+    return GRAND_PRIXES.find((g) => g.id === id) ?? null
+  }
+  // One entry: where it is in training, or how it did, track by track, with advice and a way to watch it once the tracks are open
+  function jobView(j: Job): HTMLElement {
+    const box = Object.assign(document.createElement('div'), { className: 'job' })
+    const state =
+      j.status === 'queued' ? 'waiting' + (j.ahead ? ', ' + j.ahead + ' ahead' : ', next') : j.status === 'training' ? 'being trained now' : j.status === 'failed' ? 'could not be trained' : j.finished + ' of 8' + (j.finished === 8 && j.totalTime !== null ? ' in ' + j.totalTime.toFixed(1) + ' s' : '') + (j.medal ? ' (' + j.medal + ')' : '') + ', on the board'
+    box.append(Object.assign(document.createElement('div'), { className: 'jobline', textContent: j.name + ' for ' + gpName(j.gp) + ': ' + state }))
+    if (j.status !== 'done' || !j.tracks) return box
+    const strip = Object.assign(document.createElement('div'), { className: 'strip8' })
+    j.tracks.forEach((t, i) => {
+      const ok = 'ok' in t ? t.ok : t.time !== null
+      strip.append(Object.assign(document.createElement('span'), { className: ok ? 'ok' : 'bad', textContent: String(i + 1), title: 'Track ' + (i + 1) + (ok ? ' finished' : ' not finished') }))
+    })
+    box.append(strip)
+    const full = j.tracks.every((t) => 'cause' in t)
+    if (!full) {
+      if (j.tracks.some((t) => 'ok' in t && !t.ok)) box.append(Object.assign(document.createElement('div'), { className: 'jobnote', textContent: 'The tracks are secret until this ends. Then you can see what went wrong and watch the car race them.' }))
+      return box
+    }
+    const tracks = j.tracks as { time: number | null; progress: number; cause: Cause | null }[]
+    const gp = pastGp(j.gp)
+    const why = tracks.flatMap((t, i) => (t.cause ? ['track ' + (i + 1) + ' ' + CAUSE_LABEL[t.cause]] : []))
+    if (why.length) {
+      const result = summarise(tracks.map((t): TrackResult => ({ ...t, at: null })))
+      box.append(Object.assign(document.createElement('div'), { className: 'jobnote', textContent: why.join(' · ') + '. ' + adviceFor(result, gp ?? GRAND_PRIXES[0]) }))
+    }
+    if (j.over && j.entry && gp) {
+      const watch = Object.assign(document.createElement('button'), { className: 'btn small', textContent: 'Watch it race' })
+      watch.addEventListener('click', () => loadRival({ rank: 0, id: j.entry!, display: myName ?? 'You', finished: j.finished ?? 0, totalTime: j.totalTime ?? 0, medal: null }, gp.day !== undefined || gp.week !== undefined ? gp : gp.id))
+      box.append(watch)
+    }
+    return box
+  }
+  // Each section lists its own entries: the Daily and Weekly sections as well as the Leaderboard
+  function renderJobs() {
+    const kinds: [string, (j: Job) => boolean][] = [
+      ['onlineJobs', (j) => !j.gp.startsWith('d:') && !j.gp.startsWith('w:')],
+      ['dailyJobs', (j) => j.gp.startsWith('d:')],
+      ['weeklyJobs', (j) => j.gp.startsWith('w:')],
+    ]
+    for (const [id, keep] of kinds) {
+      const mine = lastJobs.filter(keep).slice(0, 3)
+      $(id).replaceChildren(...(mine.length ? [Object.assign(document.createElement('div'), { className: 'jobhead', textContent: 'Your entries' }), ...mine.map(jobView)] : []))
+    }
+  }
   let wasPending = false
   async function refreshJobs() {
     window.clearTimeout(jobTimer)
-    if (!nameIn(store.get(TOKEN_KEY))) return void ($('onlineJobs').textContent = '')
+    if (!nameIn(store.get(TOKEN_KEY))) {
+      lastJobs = []
+      return renderJobs()
+    }
     let jobs: Job[] = []
     try {
       const res = await fetch(API + '/me', { headers: headers() })
@@ -171,11 +227,8 @@ export function createLeaderboard({ getCar, getGpId, goRace, notify, raceAgainst
     } catch {
       return
     }
-    const line = (j: Job) =>
-      j.name + ' for ' + gpName(j.gp) + ': ' +
-      (j.status === 'queued' ? 'waiting' + (j.ahead ? ', ' + j.ahead + ' ahead' : ', next') : j.status === 'training' ? 'being trained now' : j.status === 'failed' ? 'could not be trained' : j.finished + ' of 8' + (j.finished === 8 && j.totalTime !== null ? ' in ' + j.totalTime.toFixed(1) + ' s' : '') + (j.medal ? ' (' + j.medal + ')' : '') + ', on the board')
-    const recent = jobs.slice(0, 3)
-    $('onlineJobs').textContent = recent.length ? 'Your entries: ' + recent.map(line).join(' · ') : ''
+    lastJobs = jobs
+    renderJobs()
     const pending = jobs.some((j) => j.status === 'queued' || j.status === 'training')
     if (wasPending && !pending) {
       refresh() // something just came off the trainer: show the board with it
@@ -503,6 +556,7 @@ export function createLeaderboard({ getCar, getGpId, goRace, notify, raceAgainst
         }),
       )
       renderDaily()
+      renderJobs()
     } catch {
       sayDaily('The Daily Challenge is not reachable right now.', true)
     }
@@ -566,6 +620,7 @@ export function createLeaderboard({ getCar, getGpId, goRace, notify, raceAgainst
       $('weeklyEmpty').hidden = rows.length > 0
       renderPast(weekly)
       renderWeekly()
+      renderJobs()
     } catch {
       sayWeekly('The Weekly Grand Prix is not reachable right now.', true)
     }
