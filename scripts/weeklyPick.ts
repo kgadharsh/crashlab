@@ -3,7 +3,7 @@
 // the file given with --out, for the workflow to store in the board database. The seed is secret until the week is
 // over, so it is never printed: the log only says how the week looks and how the reference car did.
 // Usage: npx tsx scripts/weeklyPick.ts --out <file> [--week <n>]     pick and test a seed for a week (default: next week)
-//        npx tsx scripts/weeklyPick.ts --survey <n>                   test n random seeds and print the pass rate (local calibration)
+//        npx tsx scripts/weeklyPick.ts --survey <n> [--week <w>]      test n random seeds and print the pass rate (local calibration; --week sets which week's rules)
 import { randomInt } from 'node:crypto'
 import { readFileSync, writeFileSync } from 'node:fs'
 import { GRAND_PRIXES, RACE_COUNT, gpTrack, raceCar, weekName, weekOf, weeklyGp, type GrandPrix } from '../src/race'
@@ -45,7 +45,7 @@ const survey = arg('--survey')
 if (survey) {
   const tally: Record<string, { n: number; pass: number; finished: number }> = {}
   for (let i = 0; i < Number(survey); i++) {
-    const gp = weeklyGp(3000 + i, randomSeed())
+    const gp = weeklyGp(arg('--week') ? Number(arg('--week')) : 3000 + i, randomSeed()) // --week 2966 surveys the old rules, 2967 or more the new
     const t = test(gp)
     const row = (tally[describe(gp)] ??= { n: 0, pass: 0, finished: 0 })
     row.n++

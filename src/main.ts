@@ -262,35 +262,34 @@ document.querySelector('#app')!.innerHTML = `
     </div>
     <div id="race" class="side" data-view="hub">
       <div class="panel hub" id="raceHub" data-fixed>
-        <p class="hubkicker">Choose your race</p>
         <button type="button" class="hubcard daily" id="hubDaily" hidden>
-          <span class="hubglow" aria-hidden="true"></span>
-          <span class="hubicon" aria-hidden="true">⚡</span>
-          <span class="hubbody">
-            <span class="hubtag"><i class="live" aria-hidden="true"></i>Today only<em id="hubDailyEnds"></em></span>
-            <b class="hubname">Daily Challenge</b>
-            <span class="hubpitch">One style. One twist. 8 tracks nobody has seen.</span>
-            <span class="hubnow" id="hubDailyNow">Loading today's challenge…</span>
+          <span class="hubtop"><span class="hubkind">Daily</span><em id="hubDailyEnds"></em></span>
+          <b class="hubname">Daily Challenge</b>
+          <span class="hubpitch">One track style, one twist, eight tracks nobody has seen. A new one every day.</span>
+          <span class="hubfacts">
+            <span><small>Tracks</small>8</span>
+            <span><small>Entries</small><i id="hubDailyLimit">2 a day</i></span>
+            <span><small>You win</small>A place</span>
           </span>
+          <span class="hubnow" id="hubDailyNow">Loading today's challenge…</span>
           <span class="hubgo" aria-hidden="true">→</span>
         </button>
         <button type="button" class="hubcard weekly" id="hubWeekly" hidden>
-          <span class="hubglow" aria-hidden="true"></span>
-          <span class="hubicon" aria-hidden="true">🏆</span>
-          <span class="hubbody">
-            <span class="hubtag"><i class="live" aria-hidden="true"></i>This week<em id="hubWeeklyEnds"></em></span>
-            <b class="hubname">Weekly Challenge</b>
-            <span class="hubpitch">The big one. Mixed styles, harder conditions, and a trophy for the top 3.</span>
-            <span class="hubnow" id="hubWeeklyNow">Loading this week's challenge…</span>
+          <span class="hubtop"><span class="hubkind">Weekly</span><em id="hubWeeklyEnds"></em></span>
+          <b class="hubname">Weekly Challenge</b>
+          <span class="hubpitch">The big one: mixed track styles and harder conditions, all week.</span>
+          <span class="hubfacts">
+            <span><small>Tracks</small>8</span>
+            <span><small>Entries</small><i id="hubWeeklyLimit">3 a week</i></span>
+            <span><small>You win</small>Trophies</span>
           </span>
+          <span class="hubnow" id="hubWeeklyNow">Loading this week's challenge…</span>
           <span class="hubgo" aria-hidden="true">→</span>
         </button>
         <button type="button" class="hubcard gp" id="hubGp">
-          <span class="hubicon" aria-hidden="true">🏁</span>
-          <span class="hubbody">
-            <b class="hubname">Grand Prix</b>
-            <span class="hubpitch">The fixed tracks, dry and wet. Race for gold, silver and bronze.</span>
-          </span>
+          <span class="hubtop"><span class="hubkind">Always open</span></span>
+          <b class="hubname">Grand Prix</b>
+          <span class="hubpitch">The fixed tracks, dry and wet. Race for gold, silver and bronze.</span>
           <span class="hubgo" aria-hidden="true">→</span>
         </button>
       </div>

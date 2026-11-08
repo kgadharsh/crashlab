@@ -454,6 +454,7 @@ export function createLeaderboard({ getCar, getGpId, goRace, notify, raceAgainst
       daily.name + ': 8 tracks in one style, all ' + (daily.wet ? 'on a wet road' : daily.night ? 'at night' : 'on an icy road') + ', secret until the day is over. ' +
       'Your best of ' + daily.limit + ' entries counts. No trophies: it is for today\'s place, and a new one starts at midnight UTC.' +
       (signed && dailyLeft !== undefined ? ' You have ' + dailyLeft + (dailyLeft === 1 ? ' entry' : ' entries') + ' left today.' : '')
+    $('hubDailyLimit').textContent = daily.limit + ' a day'
     $('hubDailyEnds').textContent = 'ends in ' + timeLeft(daily.endsAt - Date.now())
     $('hubDailyNow').textContent = daily.name + ' · ' + twistOf(daily) + (signed && dailyLeft !== undefined ? ' · ' + dailyLeft + (dailyLeft === 1 ? ' entry' : ' entries') + ' left' : '')
     const go = $<HTMLButtonElement>('dailyGo')
@@ -540,6 +541,7 @@ export function createLeaderboard({ getCar, getGpId, goRace, notify, raceAgainst
       weekly.name + ': 8 new tracks on a ' + (weekly.wet ? 'wet' : 'dry') + ' road' + (weekly.night ? ', at night' : '') + (weekly.ice ? ', with ice patches' : '') + ', that nobody sees until the week is over, so no car has practised on them. ' +
       'Your best of ' + weekly.limit + ' entries counts, and the top 3 win a trophy that stays next to their name.' +
       (signed && weeklyLeft !== undefined ? ' You have ' + weeklyLeft + (weeklyLeft === 1 ? ' entry' : ' entries') + ' left this week.' : '')
+    $('hubWeeklyLimit').textContent = weekly.limit + ' a week'
     $('hubWeeklyEnds').textContent = 'ends in ' + timeLeft(weekly.endsAt - Date.now())
     $('hubWeeklyNow').textContent = weekly.name + ' · ' + (weekly.wet ? 'wet' : 'dry') + (weekly.night && weekly.ice ? ', night + ice' : weekly.night ? ', night' : weekly.ice ? ', ice' : '') + (signed && weeklyLeft !== undefined ? ' · ' + weeklyLeft + (weeklyLeft === 1 ? ' entry' : ' entries') + ' left' : '')
     const go = $<HTMLButtonElement>('weeklyGo')
