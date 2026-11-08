@@ -28,6 +28,7 @@ export const raceTrack = (i: number, wet = false): Track => {
 // Weeks start on Monday at 00:00 UTC.
 const WEEK_MS = 7 * 86400000
 const CONDITIONS_FROM = 2966
+const HARDER_FROM = 2967 // from the week of 16 Nov 2026 no week is a plain road, and one in five is both night and ice
 const FIRST_MONDAY = Date.UTC(1970, 0, 5)
 export const weekOf = (now: number) => Math.floor((now - FIRST_MONDAY) / WEEK_MS)
 export const weekStart = (week: number) => FIRST_MONDAY + week * WEEK_MS
@@ -48,7 +49,9 @@ export function weeklyGp(week: number, seed: number): GrandPrix {
   // From the week of 9 Nov 2026 a week may also be raced at night or with ice patches (drawn after everything
   // above, so the week of 2 Nov, raced before conditions existed, keeps exactly its tracks)
   const c = week >= CONDITIONS_FROM ? rng() : 1
-  return { id: 'w:' + week, name: weekName(week), wet, goldTime: 0, week, tracks, ...(c < 0.3 ? { night: true } : c < 0.6 ? { ice: true } : {}) }
+  // the weekly is the hard one: from HARDER_FROM it always has a twist (the daily has one too), and sometimes two at once
+  const twist = week >= HARDER_FROM ? (c < 0.4 ? { night: true } : c < 0.8 ? { ice: true } : { night: true, ice: true }) : c < 0.3 ? { night: true } : c < 0.6 ? { ice: true } : {}
+  return { id: 'w:' + week, name: weekName(week), wet, goldTime: 0, week, tracks, ...twist }
 }
 
 // ---------- THE DAILY CHALLENGE ----------
@@ -60,6 +63,10 @@ export const dayOf = (now: number) => Math.floor(now / DAY_MS)
 export const dayStart = (day: number) => day * DAY_MS
 const DAILY_THEMES = PRACTICE.flatMap((p) => (p.style ? [{ name: p.name, style: p.style }] : [])).concat({ name: 'Wild', style: styleFor(0.9) })
 export type DailyTwist = 'wet' | 'night' | 'ice'
+export const dayLabel = (day: number) => {
+  const d = new Date(dayStart(day))
+  return d.getUTCDate() + ' ' + MONTHS[d.getUTCMonth()]
+}
 export const dailyName = (day: number, theme: string) => {
   const d = new Date(dayStart(day))
   return theme + ' day · ' + d.getUTCDate() + ' ' + MONTHS[d.getUTCMonth()]

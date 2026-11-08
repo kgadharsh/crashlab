@@ -3,7 +3,7 @@
 // With no server address (the live site until the server is deployed) the whole panel stays hidden.
 import { carFromJson, carToJson, type CarFile } from './carFile'
 import { reveal } from './fold'
-import { GRAND_PRIXES, dailyGp, weeklyGp, type GrandPrix } from './race'
+import { GRAND_PRIXES, dailyGp, dayLabel, weekName, weeklyGp, type GrandPrix } from './race'
 
 export const API = (import.meta.env.VITE_API_URL as string | undefined) ?? (import.meta.env.DEV ? 'http://localhost:8787' : '')
 const NAME_KEY = 'crashlab.devname'
@@ -74,7 +74,7 @@ export type BoardStats = { boards: BoardStat[]; trophies: number[] | null }
 type Deps = {
   getCar: () => CarFile | null
   getGpId: () => string // the Grand Prix the Race tab is on, so a result goes on the matching board
-  goRace: () => void
+  goRace: (section?: 'gp' | 'daily' | 'weekly') => void
   notify: (text: string) => void // a message in the bar at the bottom of the screen
   raceAgainst: (rival: CarFile, gp: string | GrandPrix) => void // make a board car the one to beat (a past week comes as its Grand Prix)
   openWeek: (gp: GrandPrix) => void // race a finished week's tracks
@@ -95,6 +95,8 @@ export function createLeaderboard({ getCar, getGpId, goRace, notify, raceAgainst
   $('resultBoard').hidden = false
   $('weeklyPanel').hidden = false
   $('dailyPanel').hidden = false
+  $('hubDaily').hidden = false
+  $('hubWeekly').hidden = false
   takeSignIn()
   let gpIndex = 0
   let weekly: Weekly | null = null
@@ -155,7 +157,7 @@ export function createLeaderboard({ getCar, getGpId, goRace, notify, raceAgainst
   }
   // ---------- ENTRIES IN OFFICIAL TRAINING ----------
   type Job = { id: number; gp: string; name: string; status: string; ahead: number; finished: number | null; totalTime: number | null; medal: string | null }
-  const gpName = (id: string) => (id.startsWith('w:') ? 'the Weekly Grand Prix' : id.startsWith('d:') ? 'the Daily Challenge' : GRAND_PRIXES.find((g) => g.id === id)?.name ?? id)
+  const gpName = (id: string) => (id.startsWith('w:') ? 'the Weekly Challenge (' + weekName(Number(id.slice(2))).toLowerCase() + ')' : id.startsWith('d:') ? 'the Daily Challenge (' + dayLabel(Number(id.slice(2))) + ')' : GRAND_PRIXES.find((g) => g.id === id)?.name ?? id)
   let jobTimer: number | undefined
   let wasPending = false
   async function refreshJobs() {
@@ -178,6 +180,7 @@ export function createLeaderboard({ getCar, getGpId, goRace, notify, raceAgainst
     if (wasPending && !pending) {
       refresh() // something just came off the trainer: show the board with it
       refreshWeekly()
+      refreshDaily()
     }
     wasPending = pending
     if (pending) jobTimer = window.setTimeout(refreshJobs, 60000)
@@ -379,7 +382,7 @@ export function createLeaderboard({ getCar, getGpId, goRace, notify, raceAgainst
     if (!pending) return
     if (!nameIn(store.get(TOKEN_KEY))) return store.set(PENDING_KEY, null) // sign-in was abandoned
     await renderWho()
-    goRace()
+    goRace(pending === 'weekly' ? 'weekly' : pending === 'daily' ? 'daily' : 'gp')
     show(pending === 'weekly' && myName ? 'weeklyPanel' : pending === 'daily' && myName ? 'dailyPanel' : 'boardOnline').scrollIntoView({ block: 'center' })
     if (myName) {
       store.set(PENDING_KEY, null)
@@ -451,6 +454,8 @@ export function createLeaderboard({ getCar, getGpId, goRace, notify, raceAgainst
       daily.name + ': 8 tracks in one style, all ' + (daily.wet ? 'on a wet road' : daily.night ? 'at night' : 'on an icy road') + ', secret until the day is over. ' +
       'Your best of ' + daily.limit + ' entries counts. No trophies: it is for today\'s place, and a new one starts at midnight UTC.' +
       (signed && dailyLeft !== undefined ? ' You have ' + dailyLeft + (dailyLeft === 1 ? ' entry' : ' entries') + ' left today.' : '')
+    $('hubDailyEnds').textContent = 'ends in ' + timeLeft(daily.endsAt - Date.now())
+    $('hubDailyNow').textContent = daily.name + ' · ' + twistOf(daily) + (signed && dailyLeft !== undefined ? ' · ' + dailyLeft + (dailyLeft === 1 ? ' entry' : ' entries') + ' left' : '')
     const go = $<HTMLButtonElement>('dailyGo')
     go.textContent = !signed ? 'Sign in with Google to enter' : myName === null ? 'Choose a board name to enter' : 'Enter your car'
     go.disabled = signed && dailyLeft === 0
@@ -535,6 +540,8 @@ export function createLeaderboard({ getCar, getGpId, goRace, notify, raceAgainst
       weekly.name + ': 8 new tracks on a ' + (weekly.wet ? 'wet' : 'dry') + ' road' + (weekly.night ? ', at night' : '') + (weekly.ice ? ', with ice patches' : '') + ', that nobody sees until the week is over, so no car has practised on them. ' +
       'Your best of ' + weekly.limit + ' entries counts, and the top 3 win a trophy that stays next to their name.' +
       (signed && weeklyLeft !== undefined ? ' You have ' + weeklyLeft + (weeklyLeft === 1 ? ' entry' : ' entries') + ' left this week.' : '')
+    $('hubWeeklyEnds').textContent = 'ends in ' + timeLeft(weekly.endsAt - Date.now())
+    $('hubWeeklyNow').textContent = weekly.name + ' · ' + (weekly.wet ? 'wet' : 'dry') + (weekly.night && weekly.ice ? ', night + ice' : weekly.night ? ', night' : weekly.ice ? ', ice' : '') + (signed && weeklyLeft !== undefined ? ' · ' + weeklyLeft + (weeklyLeft === 1 ? ' entry' : ' entries') + ' left' : '')
     const go = $<HTMLButtonElement>('weeklyGo')
     go.textContent = !signed ? 'Sign in with Google to enter' : myName === null ? 'Choose a board name to enter' : 'Enter your car'
     go.disabled = signed && weeklyLeft === 0
@@ -610,7 +617,7 @@ export function createLeaderboard({ getCar, getGpId, goRace, notify, raceAgainst
   refreshJobs()
   const identity = (): Identity => (!nameIn(store.get(TOKEN_KEY)) ? { kind: 'out' } : myName === undefined ? { kind: 'checking' } : myName === null ? { kind: 'noname' } : { kind: 'in', name: myName })
   const openBoard = () => {
-    goRace()
+    goRace('gp')
     show('boardOnline').scrollIntoView({ behavior: 'smooth', block: 'center' })
   }
   // Your place on each board (the fixed Grand Prix and this week's), how you did there, and who leads it

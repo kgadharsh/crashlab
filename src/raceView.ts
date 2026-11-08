@@ -142,7 +142,7 @@ export function createRaceView(d: RaceDeps) {
         : 'These were last week\'s secret tracks. They are open now: race them as often as you like. This week\'s are still secret.'
       : medalRules(gp())
     $('gp2').hidden = !pastWeek
-    if (pastWeek) $('gp2').innerHTML = '<i aria-hidden="true">📅</i><b></b><small>Open now</small>'
+    if (pastWeek) $('gp2').innerHTML = pastWeek.day !== undefined ? '<i aria-hidden="true">⚡</i><b></b><small>Past day · open now</small>' : '<i aria-hidden="true">📅</i><b></b><small>Past week · open now</small>'
     if (pastWeek) $('gp2').querySelector('b')!.textContent = pastWeek.name
     choices().forEach((_, i) => {
       const b = $('gp' + i)
@@ -410,6 +410,12 @@ export function createRaceView(d: RaceDeps) {
     const { ctx, cam, hudText } = d
     clear(ctx)
     const r = live
+    if (!r && idle) {
+      hudText(idle.title, W / 2, H / 2 - 20, 56, COL.text, 'center')
+      hudText(idle.sub, W / 2, H / 2 + 20, 18, COL.muted, 'center')
+      d.setStrip([['Tracks', String(RACE_COUNT)], ['Finished', '–'], ['Total time', '–'], ['Personal best', '–']])
+      return
+    }
     if (!r) {
       hudText(gp().name.toUpperCase(), W / 2, H / 2 - 20, 56, COL.text, 'center')
       hudText(RACE_COUNT + ' TRACKS YOUR CAR HAS NEVER SEEN', W / 2, H / 2 + 14, 18, COL.muted, 'center')
@@ -480,6 +486,23 @@ export function createRaceView(d: RaceDeps) {
     render()
   })
 
+  // Close the finished week or day that was opened, back to the fixed Grand Prix (not while a race is running)
+  function clearPast() {
+    if (!pastWeek || (live && !live.summary)) return
+    pastWeek = null
+    if (gpIndex >= GRAND_PRIXES.length) {
+      gpIndex = 0
+      live = null
+      best = loadBest(gp())
+    }
+    renderGp()
+    render()
+  }
+  // What the big screen says while no race is on, when a challenge is chosen but no track set is open yet
+  let idle: { title: string; sub: string } | null = null
+  const setIdle = (i: { title: string; sub: string } | null) => {
+    idle = i
+  }
   const selectGpId = (id: string) => selectGp(Math.max(0, choices().findIndex((g) => g.id === id)))
   // Open a finished week's tracks as a third choice and switch to it
   function showPastWeek(g: GrandPrix) {
@@ -498,5 +521,5 @@ export function createRaceView(d: RaceDeps) {
     if (ch && !('error' in ch)) return duelText(live.car.name, ch.car.name, live.gp, s, rivalResult(ch, live.gp), link)
     return cardText(live.car.name, live.gp, s, link)
   }
-  return { tick, draw, render, gpId: () => gp().id, selectGpId, showPastWeek, shareText }
+  return { tick, draw, render, gpId: () => gp().id, selectGpId, showPastWeek, clearPast, setIdle, shareText }
 }

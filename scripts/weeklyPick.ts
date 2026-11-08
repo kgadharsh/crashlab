@@ -17,7 +17,7 @@ const MAX_TRIES = 40
 const refs: Record<string, CarFile> = JSON.parse(readFileSync(new URL('./weekly-refs.json', import.meta.url), 'utf8'))
 // A week counts as raceable if the best of the reference cars can finish enough of it (training luck varies, so no single car is the yardstick)
 const bestFinish = (gp: GrandPrix) => Math.max(...Object.values(refs).map((car) => raceCar(car, gp).finished))
-const describe = (gp: GrandPrix) => [gp.wet ? 'wet' : 'dry', gp.night ? 'night' : gp.ice ? 'ice' : 'normal'].join(' ')
+const describe = (gp: GrandPrix) => [gp.wet ? 'wet' : 'dry', gp.night && gp.ice ? 'night+ice' : gp.night ? 'night' : gp.ice ? 'ice' : 'normal'].join(' ')
 
 // Why a week is not fit to race, or null if it is: broken tracks, or a reference car that cannot finish enough of them
 function test(gp: GrandPrix): { problem: string | null; finished: number } {
