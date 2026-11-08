@@ -247,7 +247,7 @@ export function createSkillTree(d: TreeDeps) {
     card.title.textContent = part.name + ' · ' + part.points + (part.points === 1 ? ' point' : ' points')
     card.title.style.color = br.colour
     card.does.textContent = part.does
-    card.cost.textContent = 'Cost: ' + part.cost
+    card.cost.textContent = 'Trade-off: ' + part.cost
     card.lock.textContent = unlocked ? '' : 'Locked · ' + part.unlock
     card.btn.hidden = false
     // one of an exclusive pair: fitting it takes the other off, which also frees that one's points
@@ -257,7 +257,7 @@ export function createSkillTree(d: TreeDeps) {
     const fits = used - freed + part.points <= POINT_BUDGET
     const rivalName = rival ? PARTS.find((p) => p.id === rival)!.name : ''
     card.btn.disabled = !unlocked && level === 0 ? true : level === 0 && !fits
-    card.btn.textContent = !unlocked && level === 0 ? 'Locked' : level >= part.max ? 'Take off' : level ? '+1 level' : !fits ? 'Not enough points' : rivalOn ? 'Swap for ' + rivalName : 'Fit it'
+    card.btn.textContent = !unlocked && level === 0 ? 'Locked' : level >= part.max ? 'Take off' : level ? 'Add a level' : !fits ? 'Not enough points' : rivalOn ? 'Swap for ' + rivalName : 'Fit it'
     if (rival) card.lock.textContent = (card.lock.textContent ? card.lock.textContent + ' · ' : '') + 'Only one of this and ' + rivalName + ' can be fitted.'
     card.btn.classList.toggle('primary', level < part.max)
     // on a wide screen the card is a popover beside the chosen node (hidden until a node is chosen)

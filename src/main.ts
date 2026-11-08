@@ -193,7 +193,8 @@ document.querySelector('#app')!.innerHTML = `
     <div id="skills" class="side">
       <div class="panel" data-fixed>
         <h2>Skill tree<span class="aside" id="partCount"></span></h2>
-        <p class="tip" style="margin-top:0">Every car has ${POINT_BUDGET} points to spend. Point at a node (or tap it) to read it, then fit it. Each node changes what the car can do and costs something on the road, so spend the points on what this week's tracks need. Racing, stars, the Weekly Grand Prix and driving by hand unlock more. The lines only group related nodes: there is no order, so fit any unlocked node at any time.</p>
+        <p class="tip" style="margin-top:0">Every car has ${POINT_BUDGET} points to spend. Point at a node (or tap it) to read what it gives and what it costs you on the road, then fit it. Spend the points on what the tracks need. Racing, stars, the Weekly Challenge and driving by hand unlock more nodes. The lines between nodes only group related ones: there is no order, so fit any unlocked node at any time.</p>
+        <p class="tip legend" style="margin-top:6px">The number on a circle is the points it costs · a glowing circle is fitted · a padlock means you have not unlocked it yet.</p>
         <div id="treeSvg"></div>
         <div class="ncard" id="treeDetail"></div>
         <div class="actions"><button class="btn" id="resetTree">Reset skill tree</button><button class="btn primary" id="toPractice" style="flex:1">Go to practice →</button></div>

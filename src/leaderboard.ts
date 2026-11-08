@@ -592,7 +592,7 @@ export function createLeaderboard({ getCar, getGpId, goRace, notify, raceAgainst
   function whoCell(e: { display: string; trophies?: number[] }) {
     const who = Object.assign(document.createElement('span'), { className: 'who', textContent: e.display })
     const t = trophyText(e.trophies)
-    if (t) who.append(Object.assign(document.createElement('span'), { className: 'troph', textContent: ' ' + t, title: 'Weekly Grand Prix trophies' }))
+    if (t) who.append(Object.assign(document.createElement('span'), { className: 'troph', textContent: ' ' + t, title: 'Weekly Challenge trophies' }))
     return who
   }
   function renderWeekly() {
@@ -630,7 +630,7 @@ export function createLeaderboard({ getCar, getGpId, goRace, notify, raceAgainst
       renderWeekly()
       renderJobs()
     } catch {
-      sayWeekly('The Weekly Grand Prix is not reachable right now.', true)
+      sayWeekly('The Weekly Challenge is not reachable right now.', true)
     }
   }
   // Finished weeks: their top 3, whose cars anyone can now race on that week's tracks
@@ -671,7 +671,7 @@ export function createLeaderboard({ getCar, getGpId, goRace, notify, raceAgainst
       $('onlineNameRow').hidden = false
       show('onlineNameRow').scrollIntoView({ behavior: 'smooth', block: 'center' })
       $('onlineName').focus()
-      return say('Choose the name the board will show, and your car goes into the Weekly Grand Prix.')
+      return say('Choose the name the board will show, and your car goes into the Weekly Challenge.')
     }
     enter('weekly')
   })

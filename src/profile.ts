@@ -43,7 +43,7 @@ function badges(d: ProfileData, medals: Medals): Badge[] {
     { icon: '🏆', name: 'Podium', hint: 'Win a Grand Prix medal', got: gps.some((m) => m !== null) },
     { icon: '👑', name: 'Grand Prix gold', hint: 'Win gold in a Grand Prix', got: gps.includes('gold') },
     { icon: '🌧️', name: 'Rain driver', hint: 'Finish the wet Grand Prix', got: (loadBest(GRAND_PRIXES[1])?.finished ?? 0) > 0 },
-    { icon: '📅', name: 'Weekender', hint: 'Race a Weekly Grand Prix', got: d.progress.racedWeekly },
+    { icon: '📅', name: 'Weekender', hint: "Enter this week's Weekly Challenge (needs a Google sign-in)", got: d.progress.racedWeekly },
     { icon: '🧑‍🔧', name: 'Hands on', hint: 'Drive 3 practice tracks yourself', got: d.progress.licence >= 3 },
     { icon: '🎓', name: 'Licensed', hint: 'Drive 8 practice tracks yourself', got: d.progress.licence >= 8 },
     { icon: '🌳', name: 'Fully grown', hint: 'Unlock every node in the skill tree', got: PARTS.every((p) => p.open(d.progress)) },
