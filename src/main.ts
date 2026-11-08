@@ -322,6 +322,7 @@ document.querySelector('#app')!.innerHTML = `
           <button class="btn primary wide" id="raceGo">Race your car</button>
           <button class="btn" id="raceSpeed">Speed 4×</button>
           <button class="btn" id="raceSkip">Skip to results</button>
+          <button class="btn" id="raceCars" title="Race a different saved car">Change car</button>
         </div>
         <p class="msg" id="raceMsg"></p>
         <p class="tip" style="margin-top:8px">Your car drives 8 tracks it has never seen, once each. Most tracks finished wins, then the lowest total time. Grand Prix 2 is the same tracks on a wet road.</p>
@@ -450,7 +451,18 @@ $('nudgeClose').addEventListener('click', hideNudge)
 
 // ---------- TABS ----------
 type Tab = 'garage' | 'skills' | 'practice' | 'race' | 'profile'
-let tab: Tab = 'garage'
+// Using a shelf car reloads the page to refresh every control, so the tab it was used from is remembered for that one reload
+const TABS: Tab[] = ['garage', 'skills', 'practice', 'race', 'profile']
+const cameFrom = (() => {
+  try {
+    const t = sessionStorage.getItem('crashlab.tab') as Tab | null
+    sessionStorage.removeItem('crashlab.tab')
+    return t && TABS.includes(t) ? t : null
+  } catch {
+    return null
+  }
+})()
+let tab: Tab = cameFrom ?? 'garage'
 function setTab(t: Tab) {
   tab = t
   if (t === 'race') hideNudge()
@@ -1504,6 +1516,12 @@ function shelfRows(box: HTMLElement, training: boolean) {
         save(KEYS.car, carToJson(c))
         // the garage takes on the shelf car's setup, as when loading a file
         save(KEYS.draft, { name: c.name, build: c.build })
+        try {
+          sessionStorage.setItem('crashlab.tab', tab) // come back to this tab, not the Garage
+          sessionStorage.setItem('crashlab.section', raceSection) // and to the same part of the Race tab
+        } catch {
+          /* storage blocked: the page opens on the Garage */
+        }
         location.reload()
       })
       const drop = document.createElement('button')
@@ -1569,6 +1587,11 @@ function setShelfPop(open: boolean) {
   $('shelfBtn').setAttribute('aria-expanded', String(open))
   if (open) $('spMsg').textContent = ''
 }
+$('raceCars').addEventListener('click', (e) => {
+  e.stopPropagation()
+  setShelfPop(true) // the list of saved cars, from the race screen
+  window.scrollTo({ top: 0, behavior: 'smooth' })
+})
 $('shelfBtn').addEventListener('click', (e) => {
   e.stopPropagation()
   setShelfPop($('shelfPop').hidden === true)
@@ -2163,7 +2186,17 @@ $('challengeClear').addEventListener('click', () => {
 window.addEventListener('hashchange', () => {
   if (location.hash.startsWith('#challenge=') || location.hash.startsWith(SHORT_PREFIX)) takeChallenge()
 })
-setRaceSection(API ? 'hub' : 'gp') // the Race tab starts on its menu (with no board server there is only the Grand Prix)
+const cameSection = (() => {
+  try {
+    const v = sessionStorage.getItem('crashlab.section') as RaceSection | null
+    sessionStorage.removeItem('crashlab.section')
+    return v === 'hub' || v === 'gp' || v === 'daily' || v === 'weekly' ? v : null
+  } catch {
+    return null
+  }
+})()
+// the Race tab starts on its menu (with no board server there is only the Grand Prix); after Use reloads the page it returns to where it was
+setRaceSection(API ? (cameSection === 'daily' || cameSection === 'weekly' ? 'hub' : cameSection ?? 'hub') : 'gp')
 takeChallenge()
 const today = visit()
 refreshHot()
