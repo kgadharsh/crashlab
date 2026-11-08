@@ -117,6 +117,7 @@ document.querySelector('#app')!.innerHTML = `
     <button class="tab" data-tab="race" role="tab"><span class="tnum">4</span>Race</button>
     <button class="tab profile" data-tab="profile" role="tab"><span class="pico" aria-hidden="true">☻</span>Profile</button>
   </nav>
+  <button type="button" class="btn small primary hot" id="topChallenge" disabled title="Train a car first, then dare a friend to beat it">⚔ Challenge a friend</button>
   <div class="chip" id="chip"></div>
 </header>
 <main class="layout">
@@ -1461,6 +1462,8 @@ function renderPractice() {
   $('testDrive').textContent = test ? 'Stop watching' : 'Watch it drive'
   $<HTMLButtonElement>('saveCar').disabled = !car
   $<HTMLButtonElement>('shareCar').disabled = !car
+  $<HTMLButtonElement>('topChallenge').disabled = !car
+  $('topChallenge').title = car ? 'Copy a link that lets a friend race ' + car.name + ' and try to beat it' : 'Train a car first, then dare a friend to beat it'
   $('handGo').textContent = hand ? 'Stop driving' : 'Take the wheel'
   renderHandBoard()
   renderShelf()
@@ -1813,16 +1816,19 @@ raceView = createRaceView({ onResult: (gpId, r) => {
 const ASKS = 'crashlab.dareAsks'
 const asked = () => Number(localStorage.getItem(ASKS)) || 0
 const dareDialog = $<HTMLDialogElement>('dareDialog')
-function showDare(kind: 'trained' | 'entered') {
-  if (!car || counts().shares > 0 || asked() >= 3 || dareDialog.open) return
-  try {
+function showDare(kind: 'trained' | 'entered' | 'asked') {
+  if (!car || dareDialog.open) return
+  if (kind !== 'asked' && (counts().shares > 0 || asked() >= 3)) return
+  if (kind !== 'asked') try {
     localStorage.setItem(ASKS, String(asked() + 1))
   } catch {
     /* storage blocked: it may ask again */
   }
-  $('dareTitle').textContent = kind === 'trained' ? car.name + ' is trained' : car.name + ' is entered'
+  $('dareTitle').textContent = kind === 'asked' ? 'Challenge a friend' : kind === 'trained' ? car.name + ' is trained' : car.name + ' is entered'
   $('dareText').textContent =
-    kind === 'trained'
+    kind === 'asked'
+      ? 'They open your link, race ' + car.name + ' on the same secret tracks, and try to beat it. Nobody has to sign in.'
+      : kind === 'trained'
       ? 'Before you race it, dare a friend. They open your link, race your car on the same secret tracks, and try to beat it. Nobody has to sign in.'
       : 'While the game trains your setup for the board, dare a friend to beat your car. The link comes with your result card, ready to paste into a chat. Nobody has to sign in.'
   $('dareMsg').textContent = ''
@@ -1831,6 +1837,7 @@ function showDare(kind: 'trained' | 'entered') {
   dareDialog.showModal()
 }
 $('dareNo').addEventListener('click', () => dareDialog.close())
+$('topChallenge').addEventListener('click', () => showDare('asked')) // always in the top bar, so the option is never hidden
 $('dareGo').addEventListener('click', async () => {
   await shareCar((text) => ($('dareMsg').textContent = text), $<HTMLInputElement>('dareLink'), true)
   if (!$('dareLink').hidden) return // it could not copy: the link is shown to copy by hand

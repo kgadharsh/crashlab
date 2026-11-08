@@ -605,3 +605,5 @@ body.full .layout { grid-template-columns: minmax(0, 720px); justify-content: ce
 .lbrow .pl b { display: block; font: 700 13px var(--head); letter-spacing: 0.08em; text-transform: uppercase; }
 .lbrow .pl small { display: block; color: var(--muted); font-size: 12px; }
 .lbrow .pv { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 46%; }
+
+#topChallenge { white-space: nowrap; flex: none; }
