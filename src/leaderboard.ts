@@ -17,7 +17,9 @@ type Ranks = Record<string, number | null>
 type Score = { finished: number; totalTime: number }
 const beats = (a: Score, b: Score) => a.finished !== b.finished ? a.finished > b.finished : a.totalTime < b.totalTime
 
-type Row = { rank: number; id: number; display: string; finished: number; totalTime: number; medal: string | null; trophies?: number[] }
+type Row = { rank: number; id: number; display: string; finished: number; totalTime: number; medal: string | null; trophies?: number[]; runs?: number | null }
+// how many training runs went into a board car, so grinding Keep training shows (blank for cars from before it was counted)
+const runsOf = (e: Row) => (e.runs ? ' · ' + e.runs + (e.runs === 1 ? ' run' : ' runs') : '')
 // This week's Grand Prix as the server describes it (never its seed), and finished weeks with their seeds and top 3
 type Podium = { place: number; id: number; display: string; finished: number; totalTime: number }
 type Weekly = { week: number; name: string; wet: boolean; night?: boolean; ice?: boolean; endsAt: number; limit: number; past: { week: number; seed: number; podium: Podium[] }[] }
@@ -228,7 +230,7 @@ export function createLeaderboard({ getCar, getGpId, goRace, notify, raceAgainst
         ...data.entries.map((e) => {
           const li = document.createElement('li')
           const cell = (cls: string, text: string) => Object.assign(document.createElement('span'), { className: cls, textContent: text })
-          li.append(cell('n', String(e.rank)), whoCell(e), cell('res', e.finished + ' of 8 · ' + e.totalTime.toFixed(1) + ' s' + (e.medal ? ' · ' + e.medal : '')))
+          li.append(cell('n', String(e.rank)), whoCell(e), cell('res', e.finished + ' of 8 · ' + e.totalTime.toFixed(1) + ' s' + (e.medal ? ' · ' + e.medal : '') + runsOf(e)))
           if (e.display !== myName) {
             const race = document.createElement('button')
             race.className = 'btn small'
@@ -443,7 +445,7 @@ export function createLeaderboard({ getCar, getGpId, goRace, notify, raceAgainst
         ...rows.map((e) => {
           const li = document.createElement('li')
           const cell = (cls: string, text: string) => Object.assign(document.createElement('span'), { className: cls, textContent: text })
-          li.append(cell('n', String(e.rank)), whoCell(e), cell('res', e.finished + ' of 8 · ' + e.totalTime.toFixed(1) + ' s'), document.createElement('span'))
+          li.append(cell('n', String(e.rank)), whoCell(e), cell('res', e.finished + ' of 8 · ' + e.totalTime.toFixed(1) + ' s' + runsOf(e)), document.createElement('span'))
           return li
         }),
       )

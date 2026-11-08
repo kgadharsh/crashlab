@@ -219,10 +219,10 @@ const boardExists = (gpId: string) => GRAND_PRIXES.some((g) => g.id === gpId) ||
 async function board(req: Request, env: Env, gpId: string): Promise<Response> {
   if (!boardExists(gpId)) return json(req, { error: 'Unknown Grand Prix.' }, 400)
   const { results } = await env.DB.prepare(
-    `SELECT e.id, e.player, COALESCE(p.name, e.display) AS display, e.finished, e.total_time AS totalTime, e.medal FROM (
+    `SELECT e.id, e.player, COALESCE(p.name, e.display) AS display, e.finished, e.total_time AS totalTime, e.medal, json_extract(e.car, '$.runs') AS runs FROM (
        SELECT *, ROW_NUMBER() OVER (PARTITION BY player ORDER BY finished DESC, total_time ASC, id ASC) AS r FROM entries WHERE gp = ?
      ) e LEFT JOIN players p ON p.id = e.player WHERE e.r = 1 ORDER BY e.finished DESC, e.total_time ASC, e.id ASC LIMIT ?`,
-  ).bind(gpId, BOARD_SIZE).all<{ id: number; player: string; display: string; finished: number; totalTime: number; medal: string | null }>()
+  ).bind(gpId, BOARD_SIZE).all<{ id: number; player: string; display: string; finished: number; totalTime: number; medal: string | null; runs: number | null }>()
   const won = await trophies(env)
   // the player's sign-in id stays on the server
   return json(req, { gp: gpId, entries: results.map(({ player, ...e }, i) => ({ rank: i + 1, ...e, trophies: won.get(player) })) })

@@ -293,6 +293,7 @@ document.querySelector('#app')!.innerHTML = `
         <div class="roads slim" role="group" aria-label="Which leaderboard"><button type="button" class="road on" id="onlineDry" aria-pressed="true"><i aria-hidden="true">☀</i><b>Dry road</b></button><button type="button" class="road wetroad" id="onlineWet" aria-pressed="false"><i aria-hidden="true">🌧</i><b>Wet road</b></button></div>
         <ol class="rank" id="onlineRows"></ol>
         <p class="tip" id="onlineEmpty" hidden>No cars on this board yet. Be the first.</p>
+        <p class="tip" style="margin-top:4px">Runs: how many training runs went into a car. Keep training adds one each time.</p>
         <p class="tip" id="onlineWho"></p>
         <div class="actions" id="onlineNameRow" hidden><input id="onlineName" maxlength="20" placeholder="Choose a board name" aria-label="Board name" autocomplete="off" /><button class="btn small primary" id="onlineNameSave">Save name</button></div>
         <div class="actions"><button class="btn primary" id="onlineSignIn">Sign in with Google</button><button class="btn small" id="onlineSignOut" hidden>Sign out</button><button class="btn primary" id="onlineEnter">Enter your car</button></div>
@@ -659,7 +660,9 @@ function finishTraining(f: Finish) {
   if (car) rememberPrevious(car) // the car this run replaces, in case the new one is worse
   // the generations the brain has had in all: carrying on adds to the car's count (unknown if the old car's was)
   const total = r.keep ? (car?.generations !== undefined ? car.generations + f.generations : undefined) : f.generations
-  car = { name: r.name, build: r.build, genome: f.genome, ...(total !== undefined ? { generations: total } : {}) }
+  // training runs in all: a fresh run is 1, and Keep training adds one to the car it carried on from (unknown stays unknown)
+  const runs = r.keep ? (car?.runs !== undefined ? car.runs + 1 : undefined) : 1
+  car = { name: r.name, build: r.build, genome: f.genome, ...(total !== undefined ? { generations: total } : {}), ...(runs !== undefined ? { runs } : {}) }
   carBrain = genomeToBrain(f.genome, brainShape(r.build))
   save(KEYS.car, carToJson(car))
   drawGraph(r.history)
@@ -1448,7 +1451,7 @@ function renderPractice() {
     ? 'No car yet. Training builds one from the setup above.'
     : carIsStale()
       ? car.name + ' was trained with a different setup. Train again to use the new one.'
-      : car.name + ' is trained and ready.'
+      : car.name + ' is trained and ready' + (car.runs ? ', from ' + car.runs + (car.runs === 1 ? ' training run.' : ' training runs (Keep training adds one each time).') : '.')
   $<HTMLButtonElement>('testDrive').disabled = !car || training
   $('testDrive').textContent = test ? 'Stop watching' : 'Watch it drive'
   $<HTMLButtonElement>('saveCar').disabled = !car
