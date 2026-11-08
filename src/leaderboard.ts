@@ -210,8 +210,10 @@ export function createLeaderboard({ getCar, getGpId, goRace, notify, raceAgainst
 
   async function refresh() {
     const gp = GRAND_PRIXES[gpIndex]
-    $('onlineDry').className = gpIndex === 0 ? 'btn small primary' : 'btn small'
-    $('onlineWet').className = gpIndex === 1 ? 'btn small primary' : 'btn small'
+    for (const [id, i] of [['onlineDry', 0], ['onlineWet', 1]] as const) {
+      $(id).classList.toggle('on', gpIndex === i)
+      $(id).setAttribute('aria-pressed', String(gpIndex === i))
+    }
     try {
       const res = await fetch(API + '/board?gp=' + gp.id)
       const data = (await res.json()) as { entries?: Row[]; error?: string }

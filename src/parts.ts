@@ -7,7 +7,7 @@ import type { Medal } from './race'
 import { NODES, type NodeId } from './setup'
 
 export type PartId = NodeId
-export type Progress = { stars: number; gpMedals: Medal[]; racedWet: boolean; racedWeekly: boolean }
+export type Progress = { stars: number; gpMedals: Medal[]; racedWet: boolean; racedWeekly: boolean; licence: number } // licence: practice tracks driven round by hand
 export type Branch = 'Eyes' | 'Engine' | 'Tyres' | 'Brain' | 'Practice'
 export type Part = { id: PartId; branch: Branch; name: string; does: string; cost: string; unlock: string; open: (p: Progress) => boolean; max: number; points: number }
 
@@ -39,6 +39,14 @@ export const PARTS: Part[] = [
     unlock: 'Race a Weekly Grand Prix (this week or a past one)',
     open: (p) => p.racedWeekly,
   }),
+  node('lens', {
+    branch: 'Eyes',
+    name: 'Extra eyes',
+    does: 'Two more rays, up to 11 in all, so the car sees more of the road at once.',
+    cost: 'More rays means a bigger brain to train in the same practice budget.',
+    unlock: '★ 6',
+    open: (p) => p.stars >= 6,
+  }),
   node('launch', {
     branch: 'Engine',
     name: 'Launch control',
@@ -55,6 +63,14 @@ export const PARTS: Part[] = [
     unlock: '★ 20',
     open: (p) => p.stars >= 20,
   }),
+  node('feather', {
+    branch: 'Engine',
+    name: 'Featherweight chassis',
+    does: 'Half the weight: 20% quicker off the line and the car turns 15% faster.',
+    cost: 'It is light, so the tyres let go 7% sooner in bends.',
+    unlock: 'Drive 5 practice tracks yourself (Practice → Drive it yourself)',
+    open: (p) => p.licence >= 5,
+  }),
   node('wing', {
     branch: 'Engine',
     name: 'Downforce wing',
@@ -70,6 +86,14 @@ export const PARTS: Part[] = [
     cost: 'Top speed is 8% lower on a dry road.',
     unlock: 'Race the wet Grand Prix once',
     open: (p) => p.racedWet,
+  }),
+  node('steady', {
+    branch: 'Tyres',
+    name: 'Steady steering',
+    does: 'The tyres hold on to an 8% higher speed in bends.',
+    cost: 'The car turns 10% more slowly.',
+    unlock: 'Drive 2 practice tracks yourself (Practice → Drive it yourself)',
+    open: (p) => p.licence >= 2,
   }),
   node('studs', {
     branch: 'Tyres',

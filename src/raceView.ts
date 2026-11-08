@@ -10,7 +10,8 @@ import {
 } from './race'
 import { logEvent } from './playLog'
 import { loadFewest, recordFewest } from './board'
-import { COL, H, W, clear, drawCar, drawCrash, drawMinimap, drawRays, drawTrack, follow, withCamera, type Camera } from './draw'
+import { drawMine } from './perks'
+import { COL, H, W, clear, drawCrash, drawMinimap, drawRays, drawTrack, follow, withCamera, type Camera } from './draw'
 
 // A friend's car to beat (with its result in each Grand Prix on this device), or why their link could not be used
 export type Challenge = { car: CarFile; results: RaceResult[] } | { error: string }
@@ -106,10 +107,11 @@ export function createRaceView(d: RaceDeps) {
       ? 'These were last week\'s secret tracks. They are open now: race them as often as you like. This week\'s are still secret.'
       : medalRules(gp())
     $('gp2').hidden = !pastWeek
-    if (pastWeek) $('gp2').textContent = pastWeek.name
+    if (pastWeek) $('gp2').innerHTML = '<i aria-hidden="true">📅</i><b></b><small>Open now</small>'
+    if (pastWeek) $('gp2').querySelector('b')!.textContent = pastWeek.name
     choices().forEach((_, i) => {
       const b = $('gp' + i)
-      b.className = i === gpIndex ? 'btn small primary' : 'btn small'
+      b.classList.toggle('on', i === gpIndex)
       b.setAttribute('aria-pressed', String(i === gpIndex))
     })
   }
@@ -269,7 +271,16 @@ export function createRaceView(d: RaceDeps) {
       $('resultLine').textContent = s.finished + ' of ' + RACE_COUNT + ' finished · ' + s.totalTime.toFixed(1) + ' s total' + (gens ? ' · trained for ' + gens + ' rounds' : '')
       $('advice').textContent = adviceFor(s, live!.gp, live!.car.build.weather === 'wet')
       d.onResult?.(live!.gp.id, s)
+      // the share card: one coloured square a track, green for a quick lap, amber for a slow one, dark for a crash
+      const quick = live!.gp.goldTime / RACE_COUNT
+      $('scGrid').replaceChildren(...s.tracks.map((t) => Object.assign(document.createElement('i'), { className: 'sq ' + (t.time === null ? 'bad' : t.time <= quick ? 'fast' : 'ok') })))
+      $('scGp').textContent = live!.gp.name.toUpperCase()
+      $('scName').textContent = live!.car.name
+      $('scMedal').textContent = medal ? medal.toUpperCase() : s.finished + ' OF ' + RACE_COUNT
+      $('scMedal').style.color = medal ? MEDAL_COLOUR[medal] : COL.text
+      $('scLine').textContent = s.finished === RACE_COUNT ? s.totalTime.toFixed(1) + ' s over ' + RACE_COUNT + ' secret tracks' : s.finished + ' of ' + RACE_COUNT + ' secret tracks finished'
     }
+    $('shareCard').hidden = !s
     // a friend's challenge, and how your latest race compares with it
     const ch = d.getChallenge()
     $('challengePanel').hidden = !ch
@@ -312,7 +323,7 @@ export function createRaceView(d: RaceDeps) {
       if (result?.at) drawCrash(ctx, result.at.x, result.at.y)
       if (!lap.dead) {
         if (!result) drawRays(ctx, lap)
-        drawCar(ctx, lap, 34, 18, COL.accent, d.getLook())
+        drawMine(ctx, lap, 34, 18, d.getLook())
       }
     })
     drawMinimap(ctx, lap.track, cam, lap)
@@ -364,5 +375,15 @@ export function createRaceView(d: RaceDeps) {
     }
     selectGp(GRAND_PRIXES.length)
   }
-  return { tick, draw, render, gpId: () => gp().id, selectGpId, showPastWeek }
+  // The words that go with the share card, for a message or a post: no spoilers, only the pattern and a dare
+  function shareText(link: string): string | null {
+    const s = live?.summary
+    if (!s || !live) return null
+    const quick = live.gp.goldTime / RACE_COUNT
+    const squares = s.tracks.map((t) => (t.time === null ? '⬛' : t.time <= quick ? '🟩' : '🟨')).join('')
+    const medal = medalFor(s, live.gp)
+    const badge = medal ? { gold: '🥇', silver: '🥈', bronze: '🥉' }[medal] + ' ' + medal.toUpperCase() : s.finished + '/' + RACE_COUNT
+    return ['CRASHLAB · ' + live.gp.name, '"' + live.car.name + '" · ' + badge + (s.finished === RACE_COUNT ? ' · ' + s.totalTime.toFixed(1) + ' s' : ''), squares, '🟩 quick  🟨 slow  ⬛ crashed', 'My car drives tracks it has never seen. Can yours beat it?', link].join('\n')
+  }
+  return { tick, draw, render, gpId: () => gp().id, selectGpId, showPastWeek, shareText }
 }

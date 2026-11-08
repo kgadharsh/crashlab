@@ -58,3 +58,13 @@ export function playtestNotes(build: Build | null, carName: string | null, now =
   if (build) lines.push('Car "' + (carName ?? '?') + '": ' + JSON.stringify(build))
   return lines.join('\n')
 }
+
+// How much this browser has done, for the profile
+export function counts() {
+  const log = read()
+  return {
+    trainings: log.filter((e) => e.k === 'train').length,
+    races: log.filter((e) => e.k === 'race').length,
+    shares: log.filter((e) => e.k === 'share').length,
+  }
+}

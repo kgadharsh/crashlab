@@ -1,16 +1,20 @@
 import './style.css'
 import { GOLD_TIME, GRAND_PRIXES, RACE_COUNT, medalFor, raceCar } from './race'
 import { carFromChallenge, challengeCode } from './challenge'
-import { DEFAULT_BUILD, KEEP_TRAINING_SHARE, LIMITS, POPULATION, REPLAY_EVERY, TRAINING_BUDGET, buildProblem, cleanBuild, genomeLength, brainShape, specOf, levelOf, maxPractice, pointsUsed, POINT_BUDGET, type Build, type Parts } from './setup'
-import { CHECKPOINTS, STALL_STEPS, createCar, drive, getInputs, type Brain, type Car } from './sim'
+import { DEFAULT_BUILD, KEEP_TRAINING_SHARE, LIMITS, POPULATION, REPLAY_EVERY, TRAINING_BUDGET, buildProblem, cleanBuild, genomeLength, brainShape, specOf, levelOf, maxPractice, maxRays, pointsUsed, POINT_BUDGET, type Build, type Parts } from './setup'
+import { CHECKPOINTS, NITRO_STEPS, STALL_STEPS, createCar, drive, getInputs, step, type Brain, type Car } from './sim'
 import { think } from './brain'
 import { PRACTICE, PRACTICE_COUNT, practiceOnRoad, practiceTrack, trackFeatures, trackStats, type Track } from './track'
 import { genomeToBrain } from './genome'
 import { carFromJson, carToJson, type CarFile } from './carFile'
 import { createLeaderboard } from './leaderboard'
 import { reveal, setupFolds } from './fold'
+import { PERKS, PAINTS, drawMine, hasPerk, loadPaint, paintColour, nextPerk, savePaint, shelfSize, streak, visit } from './perks'
+import { renderProfile } from './profile'
+import { createSkillTree } from './skilltree'
+import { createControls, handBest, handMedal, licence, recordHand } from './driver'
 import { createRaceView, loadBest, type Challenge } from './raceView'
-import { bestOn, driveLap, loadMedals, parFor, recordLaps, totalStars, type Lap } from './board'
+import { bestOn, driveLap, lapMedal, loadMedals, parFor, recordLaps, totalStars, type Lap } from './board'
 import { PARTS, newlyUnlocked, type PartId, type Progress } from './parts'
 import { LOOKS, isUnlocked, loadLook, nextLook, saveLook } from './looks'
 import { hasRaced, logEvent, playtestNotes } from './playLog'
@@ -49,13 +53,13 @@ let carBrain: Brain | null = car ? genomeToBrain(car.genome, brainShape(car.buil
 const savedPrevious = load<string>(KEYS.previous)
 const parsedPrevious = savedPrevious ? carFromJson(savedPrevious) : null
 let previousCar: CarFile | null = parsedPrevious && !('error' in parsedPrevious) ? parsedPrevious : null
-// The shelf: up to MAX_SLOTS cars kept side by side, so a player can train twice and keep the better car
-const MAX_SLOTS = 5
+// The shelf: up to maxSlots() cars kept side by side, so a player can train twice and keep the better car
+const maxSlots = () => shelfSize(5) // a streak perk adds two places (perks.ts)
 const savedShelf = load<unknown>(KEYS.shelf)
 let shelf: CarFile[] = (Array.isArray(savedShelf) ? savedShelf : []).flatMap((t) => {
   const c = typeof t === 'string' ? carFromJson(t) : null
   return c && !('error' in c) ? [c] : []
-}).slice(0, MAX_SLOTS)
+}).slice(0, maxSlots())
 const saveShelf = () => save(KEYS.shelf, shelf.map(carToJson))
 // The car design the player chose (they only change how the car looks)
 let look = loadLook()
@@ -108,8 +112,10 @@ document.querySelector('#app')!.innerHTML = `
   <div class="brand">CRASH<span>LAB</span></div>
   <nav class="tabs" role="tablist">
     <button class="tab" data-tab="garage" role="tab"><span class="tnum">1</span>Garage</button>
-    <button class="tab" data-tab="practice" role="tab"><span class="tnum">2</span>Practice</button>
-    <button class="tab" data-tab="race" role="tab"><span class="tnum">3</span>Race</button>
+    <button class="tab" data-tab="skills" role="tab"><span class="tnum">2</span>Skill tree</button>
+    <button class="tab" data-tab="practice" role="tab"><span class="tnum">3</span>Practice</button>
+    <button class="tab" data-tab="race" role="tab"><span class="tnum">4</span>Race</button>
+    <button class="tab profile" data-tab="profile" role="tab"><span class="pico" aria-hidden="true">☻</span>Profile</button>
   </nav>
   <div class="chip" id="chip"></div>
 </header>
@@ -126,16 +132,18 @@ document.querySelector('#app')!.innerHTML = `
       <div class="panel">
         <h2>Your job</h2>
         <p class="tip" style="margin-top:0">Build a car, train its brain on practice tracks, then race it on ${RACE_COUNT} tracks it has never seen. Gold: all ${RACE_COUNT} in under ${GOLD_TIME} s.</p>
-        <p class="tip">Not sure where to start? The setup below finished all ${RACE_COUNT} dry-road race tracks in all 7 of our test trainings. Train with it, then change one thing at a time to see what it does.</p>
-        <div class="actions"><button class="btn small primary" id="toPracticeTop">Train with this setup →</button></div>
+        <p class="tip">Not sure where to start? The setup below finished all ${RACE_COUNT} dry-road race tracks in all 7 of our test trainings. Use it as your starting point, then change one thing at a time in the next steps to see what it does. A car you have not touched is a car anyone can build.</p>
       </div>
       <div class="panel name">
-        <input id="name" maxlength="24" aria-label="Car name" spellcheck="false" />
+        <label for="name" class="namelabel">Your car's name <span>tap the name to change it</span></label>
+        <div class="namebox"><input id="name" maxlength="24" aria-label="Car name (you can change it)" placeholder="Name your car" spellcheck="false" /><span class="pencil" aria-hidden="true">✎</span></div>
       </div>
       <div class="panel">
         <h2>Car design<span class="aside" id="starCount"></span></h2>
         <div class="looks" id="looks"></div>
         <p class="tip" id="lookTip"></p>
+        <div class="paints" id="paints"></div>
+        <p class="tip" id="streakLine"></p>
       </div>
       <div class="panel">
         <h2><span class="n">01</span>Sensors<span class="aside" id="weights"></span></h2>
@@ -153,11 +161,6 @@ document.querySelector('#app')!.innerHTML = `
         <p class="tip">Grip takes bends harder; speed is quicker on the straights. A fast car has to brake earlier, because the tyres let go sooner. In our tests a very fast car crashed too often to finish all ${RACE_COUNT} race tracks.</p>
       </div>
       <div class="panel">
-        <h2>Skill tree<span class="aside" id="partCount"></span></h2>
-        <p class="tip" style="margin-top:0">Every car has ${POINT_BUDGET} points to spend. Each node changes what the car can do and costs something on the road, so spend them on what this week's tracks need. Racing, stars and the Weekly Grand Prix unlock more nodes.</p>
-        <div class="parts" id="parts"></div>
-      </div>
-      <div class="panel">
         <h2><span class="n">03</span>What to reward</h2>
         <label class="row"><span>Reward speed</span><input type="range" id="pace" min="0" max="100" step="5" /><output id="paceOut"></output></label>
         <label class="row"><span>Punish crashes</span><input type="range" id="safety" min="0" max="100" step="5" /><output id="safetyOut"></output></label>
@@ -166,13 +169,23 @@ document.querySelector('#app')!.innerHTML = `
       </div>
       <div class="panel">
         <h2><span class="n">04</span>Practice tracks<span class="aside" id="pickCount"></span></h2>
-        <label class="row" style="grid-template-columns:auto 1fr"><span>Road</span><select id="weather" aria-label="Road the practice tracks are driven on"><option value="dry">Dry</option><option value="wet">Wet</option></select></label>
+        <div class="roads" role="group" aria-label="Road the practice tracks are driven on"><button type="button" class="road" data-road="dry" aria-pressed="true"><i aria-hidden="true">☀</i><b>Dry road</b><small>Grand Prix 1</small></button><button type="button" class="road wetroad" data-road="wet" aria-pressed="false"><i aria-hidden="true">🌧</i><b>Wet road</b><small>Grand Prix 2: tyres lose grip sooner</small></button></div>
+        <select id="weather" aria-label="Road the practice tracks are driven on" hidden><option value="dry">Dry</option><option value="wet">Wet</option></select>
         <div class="actions" style="margin-top:2px"><label class="check"><input type="checkbox" id="condNight" /> Night</label><label class="check"><input type="checkbox" id="condIce" /> Ice patches</label></div>
         <p class="tip" style="margin-top:2px">Grand Prix 2 is raced on a wet road. A car practised only on dry roads loses most of its grip there, so practise on wet roads to prepare for it.</p>
         <div class="tracks" id="tracks"></div>
         <p class="tip">Race day uses tracks you have never seen. More practice tracks prepare the car better, but each round uses more of the run's practice budget, so you get fewer rounds.</p>
       </div>
-      <button class="btn primary wide" id="toPractice">Go to practice →</button>
+      <button class="btn primary wide" id="toSkills">Next: Skill tree →</button>
+    </div>
+    <div id="skills" class="side">
+      <div class="panel" data-fixed>
+        <h2>Skill tree<span class="aside" id="partCount"></span></h2>
+        <p class="tip" style="margin-top:0">Every car has ${POINT_BUDGET} points to spend. Tap a node to read it, then fit it. Each node changes what the car can do and costs something on the road, so spend the points on what this week's tracks need. Racing, stars, the Weekly Grand Prix and driving by hand unlock more.</p>
+        <div id="treeSvg"></div>
+        <div class="ncard" id="treeDetail"></div>
+        <div class="actions"><button class="btn primary wide" id="toPractice">Go to practice →</button></div>
+      </div>
     </div>
     <div id="practice" class="side">
       <div class="panel" data-fixed>
@@ -199,6 +212,18 @@ document.querySelector('#app')!.innerHTML = `
         <p class="tip" id="boardNext"></p>
         <p class="tip" id="boardStars"></p>
       </div>
+      <div class="panel" id="handPanel">
+        <h2>Drive it yourself<span class="aside" id="handCount"></span></h2>
+        <p class="tip" style="margin-top:0">Take the wheel and be the brain. Same car, same track: steering is gentle at first and snaps to full lock if you hold a key, so tap in bends and floor it on straights. Arrow keys or W A S D (Space for the boost, if you have earned it). Your own car runs beside you if you have trained one. Finish a lap on 2 tracks to open Steady steering and on 5 to open the Featherweight chassis in the skill tree.</p>
+        <div class="actions"><select id="handTrack" aria-label="Track to drive yourself"></select><button class="btn primary" id="handGo">Take the wheel</button></div>
+        <div class="pad" id="pad" hidden>
+          <button type="button" data-k="l" aria-label="Steer left">◀</button><button type="button" data-k="r" aria-label="Steer right">▶</button>
+          <button type="button" data-k="d" aria-label="Brake">▼</button><button type="button" data-k="u" aria-label="Gas">▲</button>
+          <button type="button" data-k="b" id="padBoost" aria-label="Boost" hidden>⚡</button>
+        </div>
+        <p class="msg" id="handMsg"></p>
+        <div class="board" id="handBoard"></div>
+      </div>
       <div class="panel">
         <h2>Setup<span class="aside"><button class="btn small" id="toGarage">Edit</button></span></h2>
         <dl class="spec" id="spec"></dl>
@@ -224,7 +249,7 @@ document.querySelector('#app')!.innerHTML = `
       </div>
       <div class="panel">
         <h2>Car shelf<span class="aside" id="shelfCount"></span></h2>
-        <p class="tip" style="margin-top:0">Keep up to ${MAX_SLOTS} cars here, such as two trainings of the same setup, and use whichever races best. Using a shelf car puts your current car back under Switch to previous car.</p>
+        <p class="tip" style="margin-top:0">Keep up to ${maxSlots()} cars here, such as two trainings of the same setup, and use whichever races best. Using a shelf car puts your current car back under Switch to previous car.</p>
         <div class="shelf" id="shelf"></div>
         <div class="actions"><button class="btn" id="shelve">Put your car on the shelf</button></div>
       </div>
@@ -237,7 +262,7 @@ document.querySelector('#app')!.innerHTML = `
       </div>
       <div class="panel" data-fixed>
         <h2><span id="gpTitle">Grand Prix 1</span><span class="aside">8 secret tracks</span></h2>
-        <div class="actions"><button class="btn small primary" id="gp0" aria-pressed="true">Dry road</button><button class="btn small" id="gp1" aria-pressed="false">Wet road</button><button class="btn small" id="gp2" aria-pressed="false" hidden>Past week</button></div>
+        <div class="roads" id="gpRoads" role="group" aria-label="Which Grand Prix to race"><button type="button" class="road" id="gp0" aria-pressed="true"><i aria-hidden="true">☀</i><b>Dry road</b><small>Grand Prix 1</small></button><button type="button" class="road wetroad" id="gp1" aria-pressed="false"><i aria-hidden="true">🌧</i><b>Wet road</b><small>Grand Prix 2</small></button><button type="button" class="road" id="gp2" aria-pressed="false" hidden>Past week</button></div>
         <div class="actions">
           <button class="btn primary wide" id="raceGo">Race your car</button>
           <button class="btn" id="raceSpeed">Speed 4×</button>
@@ -259,7 +284,8 @@ document.querySelector('#app')!.innerHTML = `
         <div id="weeklyPast"></div>
       </div>
       <div class="panel" id="boardOnline" hidden>
-        <h2>Leaderboard<span class="aside"><button class="btn small primary" id="onlineDry">Dry</button> <button class="btn small" id="onlineWet">Wet</button></span></h2>
+        <h2>Leaderboard</h2>
+        <div class="roads slim" role="group" aria-label="Which leaderboard"><button type="button" class="road on" id="onlineDry" aria-pressed="true"><i aria-hidden="true">☀</i><b>Dry road</b></button><button type="button" class="road wetroad" id="onlineWet" aria-pressed="false"><i aria-hidden="true">🌧</i><b>Wet road</b></button></div>
         <ol class="rank" id="onlineRows"></ol>
         <p class="tip" id="onlineEmpty" hidden>No cars on this board yet. Be the first.</p>
         <p class="tip" id="onlineWho"></p>
@@ -274,9 +300,17 @@ document.querySelector('#app')!.innerHTML = `
       <div class="panel" id="resultPanel" data-fixed hidden>
         <h2>Result</h2>
         <div class="medal" id="medal"></div>
+        <div class="sharecard" id="shareCard" hidden>
+          <div class="sc-top"><b>CRASH<span>LAB</span></b><span id="scGp"></span></div>
+          <div class="sc-name" id="scName"></div>
+          <div class="sc-medal" id="scMedal"></div>
+          <div class="sc-grid" id="scGrid" aria-hidden="true"></div>
+          <div class="sc-line" id="scLine"></div>
+          <div class="sc-cta">Drives tracks it has never seen. Can yours beat it?</div>
+        </div>
         <p class="tip" id="resultLine" style="margin-top:4px"></p>
         <p class="tip warn" id="advice"></p>
-        <div class="actions"><button class="btn small primary" id="resultGarage">Edit setup in Garage →</button><button class="btn small" id="resultPractice">Go to Practice →</button><button class="btn small" id="resultShare">Challenge a friend</button></div>
+        <div class="actions"><button class="btn small primary" id="resultGarage">Edit setup in Garage →</button><button class="btn small" id="resultPractice">Go to Practice →</button><button class="btn small primary" id="resultShare">Share this result</button></div>
         <input id="resultLink" readonly hidden aria-label="Challenge link" style="width:100%;margin-top:6px" />
         <div id="resultBoard" hidden>
           <p class="tip" id="resultBoardAsk" style="margin-top:12px;color:var(--text);font-weight:600">Put this on the leaderboard?</p>
@@ -287,6 +321,9 @@ document.querySelector('#app')!.innerHTML = `
         <p class="msg" id="resultMsg"></p>
       </div>
       <p class="tip" id="pb"></p>
+    </div>
+    <div id="profile" class="side">
+      <div class="panel" data-fixed id="profileBox"></div>
     </div>
   </aside>
 </main>
@@ -330,27 +367,34 @@ $('nudgeGo').addEventListener('click', () => setTab('race'))
 $('nudgeClose').addEventListener('click', hideNudge)
 
 // ---------- TABS ----------
-type Tab = 'garage' | 'practice' | 'race'
+type Tab = 'garage' | 'skills' | 'practice' | 'race' | 'profile'
 let tab: Tab = 'garage'
 function setTab(t: Tab) {
   tab = t
   if (t === 'race') hideNudge()
   if (t === 'garage') renderLooks()
+  if (t === 'skills') renderParts()
+  if (t === 'profile') showProfile()
   document.querySelectorAll<HTMLButtonElement>('.tab[data-tab]').forEach((btn) => {
     btn.classList.toggle('on', btn.dataset.tab === t)
     btn.setAttribute('aria-selected', String(btn.dataset.tab === t))
   })
   $('garage').hidden = t !== 'garage'
+  $('skills').hidden = t !== 'skills'
+  $('profile').hidden = t !== 'profile'
   $('practice').hidden = t !== 'practice'
   $('race').hidden = t !== 'race'
   $('graphBox').hidden = t !== 'practice'
-  if (t !== 'practice') stopTestDrive()
+  if (t !== 'practice') {
+    stopTestDrive()
+    stopHand()
+  }
   renderPractice()
   raceView?.render()
 }
 document.querySelectorAll<HTMLButtonElement>('.tab[data-tab]').forEach((btn) => btn.addEventListener('click', () => setTab(btn.dataset.tab as Tab)))
 $('toPractice').addEventListener('click', () => setTab('practice'))
-$('toPracticeTop').addEventListener('click', () => setTab('practice'))
+$('toSkills').addEventListener('click', () => setTab('skills'))
 $('toGarage').addEventListener('click', () => setTab('garage'))
 
 // ---------- RACE DAY (raceView.ts) ----------
@@ -399,6 +443,12 @@ for (const [id, key] of [['condNight', 'night'], ['condIce', 'ice']] as const) {
     changed()
   })
 }
+document.querySelectorAll<HTMLButtonElement>('.road[data-road]').forEach((btn) =>
+  btn.addEventListener('click', () => {
+    weatherSel.value = btn.dataset.road!
+    weatherSel.dispatchEvent(new Event('change'))
+  }),
+)
 weatherSel.addEventListener('change', () => {
   if (weatherSel.value === 'wet') b.weather = 'wet'
   else delete b.weather // dry is the same as nothing
@@ -461,6 +511,8 @@ const estGenerations = (build: Build) => Math.round(TRAINING_BUDGET / (POPULATIO
 function renderGarage() {
   const spec = specOf(b)
   $('weights').textContent = genomeLength(brainShape(b)) + ' connections'
+  input('count').max = String(maxRays(b.parts))
+  input('count').value = String(b.sensors.count)
   $('countOut').textContent = String(b.sensors.count)
   $('spreadOut').textContent = b.sensors.spread + '°'
   $('speedOut').textContent = spec.maxSpeed.toFixed(1)
@@ -474,6 +526,10 @@ function renderGarage() {
   input('condNight').checked = !!b.cond?.night
   input('condIce').checked = !!b.cond?.ice
   weatherSel.value = b.weather === 'wet' ? 'wet' : 'dry'
+  document.querySelectorAll<HTMLButtonElement>('.road[data-road]').forEach((btn) => {
+    btn.classList.toggle('on', btn.dataset.road === weatherSel.value)
+    btn.setAttribute('aria-pressed', String(btn.dataset.road === weatherSel.value))
+  })
   renderParts()
   trackGrid.querySelectorAll<HTMLButtonElement>('.track').forEach((btn) => {
     const id = Number(btn.dataset.id)
@@ -818,6 +874,118 @@ function tickTestDrive() {
   }
 }
 
+// ---------- DRIVE IT YOURSELF ----------
+// The player is the brain. The same car and track as a test drive, with the Garage's setup and skill tree. If a car has been
+// trained it drives beside you, so you can see whether you can beat your own creation. Laps are kept for the licence (driver.ts).
+type Hand = { id: number; wet: boolean; track: Track; car: Car; ghost: Car | null; ghostTime: number | null; ghostDone: boolean; hold: number; crashAt: { x: number; y: number } | null; tries: number; lastLap: number | null; bestLap: number | null }
+let hand: Hand | null = null
+const controls = createControls()
+const handSelect = $<HTMLSelectElement>('handTrack')
+TRACK_NAMES.forEach((n, i) => handSelect.add(new Option(n, String(i))))
+const handSpec = () => ({ ...specOf(b), nitro: hasPerk('nitro') }) // the nitro perk is only for driving yourself
+const handMsg = (text: string, good = false) => {
+  $('handMsg').textContent = text
+  $('handMsg').classList.toggle('good', good)
+}
+function resetHand(h: Hand) {
+  h.car = createCar(h.track, handSpec())
+  h.ghost = car && carBrain ? createCar(h.track, specOf(car.build)) : null
+  h.ghostTime = null
+  h.ghostDone = !h.ghost
+  h.hold = 0
+  h.crashAt = null
+  follow(cam, h.car, true)
+}
+function startHand() {
+  stopTestDrive()
+  const id = Number(handSelect.value)
+  const wet = b.weather === 'wet'
+  const track = practiceOn(id, b)
+  hand = { id, wet, track, car: createCar(track, handSpec()), ghost: null, ghostTime: null, ghostDone: true, hold: 0, crashAt: null, tries: 0, lastLap: null, bestLap: null }
+  resetHand(hand)
+  controls.enable(true)
+  $('pad').hidden = false
+  $('padBoost').hidden = !hasPerk('nitro')
+  handMsg('Go! ← → steer, ↑ gas, ↓ brake' + (hasPerk('nitro') ? ', Space for the boost.' : '.'))
+  renderPractice()
+}
+function stopHand() {
+  if (!hand) return
+  hand = null
+  controls.enable(false)
+  $('pad').hidden = true
+  handMsg('')
+  renderPractice()
+}
+$('handGo').addEventListener('click', () => (hand ? stopHand() : startHand()))
+handSelect.addEventListener('change', () => {
+  if (hand) startHand()
+})
+$('pad').querySelectorAll<HTMLButtonElement>('button').forEach((btn) => {
+  const set = (v: boolean) => controls.press(btn.dataset.k!, v)
+  btn.addEventListener('pointerdown', (e) => {
+    e.preventDefault()
+    btn.setPointerCapture(e.pointerId)
+    set(true)
+  })
+  for (const ev of ['pointerup', 'pointercancel', 'lostpointercapture'] as const) btn.addEventListener(ev, () => set(false))
+})
+function tickHand() {
+  const h = hand
+  if (!h) return
+  if (h.hold > 0) {
+    if (--h.hold === 0) resetHand(h)
+    return
+  }
+  if (h.ghost && !h.ghostDone && carBrain) {
+    drive(h.ghost, carBrain)
+    if (h.ghost.passed >= CHECKPOINTS) {
+      h.ghostTime = h.ghost.steps / 60
+      h.ghostDone = true
+    } else if (h.ghost.dead || h.ghost.sinceProgress >= STALL_STEPS) h.ghostDone = true // it crashed: no time to beat
+  }
+  step(h.car, controls.read())
+  if (h.car.passed >= CHECKPOINTS) {
+    const secs = h.car.steps / 60
+    h.lastLap = secs
+    h.bestLap = h.bestLap === null ? secs : Math.min(h.bestLap, secs)
+    const fresh = recordHand(h.id, h.wet, secs)
+    const medal = lapMedal(h.id, secs, h.wet)
+    const rival = !h.ghost ? '' : h.ghostTime === null ? ' ' + (car?.name ?? 'Your car') + ' crashed on this track, so you beat it.' : secs < h.ghostTime ? ' You beat ' + (car?.name ?? 'your car') + ' (' + h.ghostTime.toFixed(1) + ' s).' : ' ' + (car?.name ?? 'Your car') + ' was quicker (' + h.ghostTime.toFixed(1) + ' s).'
+    handMsg(secs.toFixed(1) + ' s' + (medal ? ' · ' + medal : '') + (fresh ? ' · new best' : '') + '.' + rival, true)
+    h.hold = 120
+    announceParts()
+    renderHandBoard()
+  } else if (h.car.dead || h.car.sinceProgress >= STALL_STEPS) {
+    h.tries++
+    h.crashAt = { x: h.car.x, y: h.car.y }
+    h.hold = 60
+    handMsg(h.car.dead ? 'Crashed. Attempt ' + h.tries + ': lift off before the bends.' : 'Stuck. Attempt ' + h.tries + '.')
+  }
+}
+function renderHandBoard() {
+  const wet = b.weather === 'wet'
+  $('handCount').textContent = licence() + ' of ' + PRACTICE_COUNT + ' driven'
+  $('handBoard').replaceChildren(
+    ...TRACK_NAMES.map((name, id) => {
+      const row = document.createElement('div')
+      row.className = 'brow static'
+      const best = handBest(id, wet)
+      const t = document.createElement('span')
+      t.className = 'bt'
+      t.textContent = best !== null ? best.toFixed(1) + ' s' : '–'
+      const mine = document.createElement('span')
+      mine.className = 'bm'
+      mine.append(dot(handMedal(id, wet)), t)
+      const label = document.createElement('span')
+      label.className = 'bn'
+      label.textContent = name
+      row.append(label, mine)
+      return row
+    }),
+  )
+}
+
 // ---------- STARS, CAR DESIGNS AND THE TRACK BOARD ----------
 // Medals earn stars. Stars unlock car designs. The track board shows how the current car drives every practice
 // track, which is also how a player sees whether it can win on all of them.
@@ -837,7 +1005,7 @@ const racedWeekly = () => {
     return false
   }
 }
-const progress = (): Progress => ({ stars: starCount(), gpMedals: gpMedals(), racedWet: loadBest(GRAND_PRIXES[1]) !== null, racedWeekly: racedWeekly() })
+const progress = (): Progress => ({ stars: starCount(), gpMedals: gpMedals(), racedWet: loadBest(GRAND_PRIXES[1]) !== null, racedWeekly: racedWeekly(), licence: licence() })
 // Fit a node at a level (0 takes it off). A car with nothing fitted is written exactly as before the tree existed.
 function setLevel(id: PartId, level: number) {
   const parts: Parts = { ...(b.parts ?? {}) }
@@ -848,47 +1016,20 @@ function setLevel(id: PartId, level: number) {
   else delete b.parts
   // the extra practice track goes when the slot does
   if (b.practice.length > maxPractice(b)) b.practice.length = maxPractice(b)
+  // so does the extra eyes node
+  if (b.sensors.count > maxRays(b.parts)) b.sensors.count = maxRays(b.parts)
   changed()
 }
-const nodeRows = new Map<PartId, HTMLElement>()
-$('parts').replaceChildren(
-  ...(['Eyes', 'Engine', 'Tyres', 'Brain', 'Practice'] as const).flatMap((branch) => [
-    Object.assign(document.createElement('div'), { className: 'branch', textContent: branch }),
-    ...PARTS.filter((p) => p.branch === branch).map((part) => {
-      const row = document.createElement('div')
-      row.className = 'part'
-      row.innerHTML = '<span class="lv"></span><span><b></b><small class="does"></small><small class="cost"></small><small class="lock"></small></span><span class="ctl"><button class="btn small less" type="button">−</button><button class="btn small more" type="button"></button></span>'
-      row.querySelector('b')!.textContent = part.name + ' · ' + part.points + (part.points === 1 ? ' point' : ' points') + (part.max > 1 ? ' a level' : '')
-      row.querySelector('.does')!.textContent = part.does
-      row.querySelector('.cost')!.textContent = 'Cost: ' + part.cost
-      row.querySelector<HTMLButtonElement>('.less')!.setAttribute('aria-label', 'Take off a level of ' + part.name)
-      row.querySelector<HTMLButtonElement>('.less')!.addEventListener('click', () => setLevel(part.id, levelOf(b.parts, part.id) - 1))
-      row.querySelector<HTMLButtonElement>('.more')!.addEventListener('click', () => setLevel(part.id, levelOf(b.parts, part.id) + 1))
-      nodeRows.set(part.id, row)
-      return row
-    }),
-  ]),
-)
+const tree = createSkillTree({
+  svgBox: $('treeSvg'),
+  detail: $('treeDetail'),
+  getBuild: () => b,
+  getProgress: progress,
+  getName: () => draft.name,
+  setLevel,
+})
 function renderParts() {
-  const p = progress()
-  const used = pointsUsed(b.parts)
-  let open = 0
-  for (const part of PARTS) {
-    const row = nodeRows.get(part.id)!
-    const unlocked = part.open(p)
-    if (unlocked) open++
-    const level = levelOf(b.parts, part.id)
-    const more = row.querySelector<HTMLButtonElement>('.more')!
-    const less = row.querySelector<HTMLButtonElement>('.less')!
-    more.disabled = !unlocked || level >= part.max || used + part.points > POINT_BUDGET
-    more.textContent = level >= part.max ? (part.max > 1 ? 'Max' : 'Fitted') : level ? '+1 level' : 'Fit'
-    more.setAttribute('aria-label', (level ? 'Add a level of ' : 'Fit ') + part.name)
-    less.hidden = level === 0 // a node already on (say, from a loaded car) can always be taken off
-    row.querySelector('.lv')!.textContent = part.max > 1 ? '●'.repeat(level) + '○'.repeat(part.max - level) : level ? '●' : '○'
-    row.classList.toggle('on', level > 0)
-    row.classList.toggle('locked', !unlocked)
-    row.querySelector('.lock')!.textContent = !unlocked ? 'Locked · ' + part.unlock : ''
-  }
+  const { used, open } = tree.render()
   $('partCount').textContent = used + ' of ' + POINT_BUDGET + ' points · ' + open + ' of ' + PARTS.length + ' unlocked'
 }
 // Tell the player when racing or medals have unlocked a part
@@ -896,7 +1037,7 @@ function announceParts() {
   const fresh = newlyUnlocked(progress())
   if (!fresh.length) return
   renderParts()
-  showNotice('New in your skill tree: ' + fresh.map((f) => f.name).join(', ') + '. Fit ' + (fresh.length === 1 ? 'it' : 'them') + ' in the Garage.')
+  showNotice('New in your skill tree: ' + fresh.map((f) => f.name).join(', ') + '. Fit ' + (fresh.length === 1 ? 'it' : 'them') + ' in the Skill tree.')
 }
 
 const lookGrid = $('looks')
@@ -921,6 +1062,7 @@ const lookButtons: HTMLButtonElement[] = LOOKS.map((l, i) => {
   return btn
 })
 function renderLooks() {
+  renderPaints()
   const stars = starCount()
   $('starCount').textContent = '★ ' + stars
   lookButtons.forEach((btn, i) => {
@@ -932,7 +1074,7 @@ function renderLooks() {
     const g = cv.getContext('2d')!
     g.clearRect(0, 0, cv.width, cv.height)
     g.globalAlpha = open ? 1 : 0.3
-    drawCar(g, { x: 60, y: 32, angle: 0 }, 78, 42, COL.accent, i)
+    drawCar(g, { x: 60, y: 32, angle: 0 }, 78, 42, paintColour(), i)
     g.globalAlpha = 1
     btn.querySelector('span')!.textContent = open ? LOOKS[i].name : LOOKS[i].name + '\n★ ' + LOOKS[i].stars
   })
@@ -940,6 +1082,38 @@ function renderLooks() {
   $('lookTip').textContent = next
     ? 'Next design: ' + next.name + ', ' + next.need + ' more stars. A medal on a track is worth 1, 2 or 3 stars (bronze, silver, gold), and a Grand Prix medal 3, 6 or 10.'
     : 'Every design is unlocked.'
+}
+
+
+// ---------- PAINT, STREAK AND PERKS (perks.ts) ----------
+function renderPaints() {
+  const open = hasPerk('paint')
+  const mine = loadPaint()
+  $('paints').replaceChildren(
+    ...PAINTS.map((p, i) => {
+      const btn = document.createElement('button')
+      btn.type = 'button'
+      btn.className = 'swatch' + (open && i === mine ? ' on' : '') + (open ? '' : ' locked')
+      btn.style.setProperty('--c', p.colour)
+      btn.title = open ? p.name : 'Paint shop: play on 2 days in a row'
+      btn.setAttribute('aria-label', btn.title)
+      btn.addEventListener('click', () => {
+        if (!open) return
+        savePaint(i)
+        renderPaints()
+        renderLooks()
+      })
+      return btn
+    }),
+  )
+  const s = streak()
+  const next = nextPerk()
+  $('streakLine').textContent =
+    '🔥 ' + s.days + (s.days === 1 ? ' day' : ' days') + ' in a row. ' +
+    (next ? 'Next perk: ' + next.name + ' at ' + next.days + ' days (' + Math.max(1, next.days - Math.max(s.days, 0)) + ' to go). ' + (s.today ? 'Come back tomorrow to keep it.' : 'Play today to keep it going.') : 'Every perk is yours: ' + PERKS.map((p) => p.name).join(', ') + '.')
+}
+function showProfile() {
+  renderProfile($('profileBox'), { carName: car?.name ?? draft.name, stars: starCount(), progress: progress(), trackNames: TRACK_NAMES, look })
 }
 
 type Board = { car: CarFile; brain: Brain; laps: (Lap | null)[]; next: number }
@@ -1089,9 +1263,9 @@ fileInput.addEventListener('change', async () => {
 const carLabel = (c: CarFile) => c.name + ' · ' + c.build.sensors.count + ' rays' + (c.generations ? ' · ' + c.generations + ' rounds' : '') + (c.build.weather === 'wet' ? ' · wet' : '')
 function renderShelf() {
   const training = !!worker
-  $('shelfCount').textContent = shelf.length + ' of ' + MAX_SLOTS
-  $<HTMLButtonElement>('shelve').disabled = !car || shelf.length >= MAX_SLOTS
-  $('shelve').textContent = shelf.length >= MAX_SLOTS ? 'Shelf is full' : 'Put your car on the shelf'
+  $('shelfCount').textContent = shelf.length + ' of ' + maxSlots()
+  $<HTMLButtonElement>('shelve').disabled = !car || shelf.length >= maxSlots()
+  $('shelve').textContent = shelf.length >= maxSlots() ? 'Shelf is full' : 'Put your car on the shelf'
   $('shelf').replaceChildren(
     ...shelf.map((c, i) => {
       const row = document.createElement('div')
@@ -1125,7 +1299,7 @@ function renderShelf() {
   )
 }
 $('shelve').addEventListener('click', () => {
-  if (!car || shelf.length >= MAX_SLOTS) return
+  if (!car || shelf.length >= maxSlots()) return
   shelf.push(clone(car))
   saveShelf()
   renderShelf()
@@ -1186,6 +1360,8 @@ function renderPractice() {
   $('testDrive').textContent = test ? 'Stop driving' : 'Test drive'
   $<HTMLButtonElement>('saveCar').disabled = !car
   $<HTMLButtonElement>('shareCar').disabled = !car
+  $('handGo').textContent = hand ? 'Stop driving' : 'Take the wheel'
+  renderHandBoard()
   renderShelf()
   ensureBoard()
   renderBoard()
@@ -1230,6 +1406,7 @@ function drawGraph(history: History) {
 // ---------- THE BIG SCREEN ----------
 // The car the camera follows: the test-drive car or the lead car of the generation (none in the garage)
 function focusCar(): Car | null {
+  if (hand) return hand.car
   if (test) return test.car
   if (swarm && tab === 'practice') return swarm.cars[swarm.lead] // the Garage keeps its own view while a run goes on
   return null
@@ -1349,7 +1526,7 @@ function draw() {
       sw.cars.forEach((c) => c.dead && drawCrash(ctx, c.x, c.y))
       sw.cars.forEach((c, i) => !c.dead && i !== sw.lead && drawCar(ctx, c, 26, 14, COL.swarm))
       const lead = sw.cars[sw.lead]
-      if (!lead.dead) drawCar(ctx, lead, 34, 18, COL.accent, look) // the followed car on top
+      if (!lead.dead) drawMine(ctx, lead, 34, 18, look) // the followed car on top
     })
     drawMinimap(ctx, sw.track, cam, sw.cars[sw.lead], sw.cars.filter((_, i) => !sw.done[i] && i !== sw.lead))
     const alive = sw.done.filter((d) => !d).length
@@ -1374,6 +1551,44 @@ function draw() {
     ])
     return
   }
+  if (hand) {
+    const hd = hand
+    withCamera(ctx, cam, () => {
+      drawTrack(ctx, hd.track)
+      if (hd.ghost && !hd.ghost.dead) {
+        ctx.globalAlpha = 0.45
+        drawCar(ctx, hd.ghost, 34, 18, COL.tele, look)
+        ctx.globalAlpha = 1
+      }
+      if (hd.hold > 0 && hd.crashAt && hd.car.dead) drawCrash(ctx, hd.crashAt.x, hd.crashAt.y)
+      else drawMine(ctx, hd.car, 34, 18, look)
+    })
+    drawMinimap(ctx, hd.track, cam, hd.car)
+    hudText(time(hd.car.steps / 60), 16, 50, 46)
+    hudText('LAST ' + time(hd.lastLap) + '    BEST ' + time(hd.bestLap) + (hd.ghost ? '    ' + (car?.name ?? 'CAR').toUpperCase() + ' ' + (hd.ghostDone ? (hd.ghostTime === null ? 'CRASHED' : time(hd.ghostTime)) : 'DRIVING') : ''), 16, 74, 16, COL.muted)
+    const sp = Math.max(0, hd.car.speed) / hd.car.spec.maxSpeed
+    ctx.fillStyle = COL.road
+    ctx.fillRect(W - 216, H - 28, 200, 10)
+    ctx.fillStyle = sp > 0.85 ? COL.bad : COL.tele
+    ctx.fillRect(W - 216, H - 28, 200 * sp, 10)
+    hudText('SPEED', W - 216, H - 36, 13, COL.muted)
+    if (hd.car.spec.nitro) {
+      ctx.fillStyle = COL.road
+      ctx.fillRect(W - 216, H - 56, 200, 8)
+      ctx.fillStyle = COL.accent
+      ctx.fillRect(W - 216, H - 56, 200 * (hd.car.boost / NITRO_STEPS), 8)
+      hudText('NITRO', W - 216, H - 62, 13, COL.muted)
+    }
+    if (hd.hold > 0 && hd.car.dead) hudText('CRASHED', W / 2, H / 2, 40, COL.bad, 'center')
+    else if (hd.hold > 0) hudText('LAP ' + time(hd.lastLap), W / 2, H / 2, 40, COL.good, 'center')
+    setStrip([
+      ['You', 'DRIVING'],
+      ['Attempts', String(hd.tries + 1)],
+      ['Lap progress', Math.round((100 * hd.car.passed) / CHECKPOINTS) + '<small>%</small>'],
+      ['Speed', (Math.max(0, hd.car.speed) * 40).toFixed(0) + '<small> km/h</small>'],
+    ])
+    return
+  }
   if (test) {
     const t = test
     withCamera(ctx, cam, () => {
@@ -1381,7 +1596,7 @@ function draw() {
       if (t.crashFrames > 0 && t.crashAt) drawCrash(ctx, t.crashAt.x, t.crashAt.y)
       else {
         drawRays(ctx, t.car)
-        drawCar(ctx, t.car, 34, 18, COL.accent, look)
+        drawMine(ctx, t.car, 34, 18, look)
       }
     })
     drawMinimap(ctx, t.track, cam, t.car)
@@ -1418,7 +1633,7 @@ function draw() {
     drawTrack(ctx, p.track)
     if (zoomedIn) drawSensorFan(ctx, p, cam.zoom)
     drawRays(ctx, p)
-    drawCar(ctx, p, 34, 18, COL.accent, look)
+    drawMine(ctx, p, 34, 18, look)
   })
   if (zoomedIn) {
     hudText(b.sensors.count + ' RAYS', 16, 38, 26)
@@ -1450,6 +1665,7 @@ function loop(now: number) {
   lastTime = now
   while (owed >= STEP) {
     tickTestDrive()
+    tickHand()
     if (tab === 'race') raceView?.tick()
     owed -= STEP
   }
@@ -1461,7 +1677,7 @@ function loop(now: number) {
 }
 
 // fold the side panels: one open at a time in each tab
-setupFolds(['garage', 'practice', 'race'], ['garage'])
+setupFolds(['garage', 'skills', 'practice', 'race', 'profile'], ['garage'])
 $('raceGo').addEventListener('click', () => reveal($('tower'))) // a race fills the timing tower, so show it
 
 const leaderboard = createLeaderboard({
@@ -1491,23 +1707,25 @@ raceView = createRaceView({ onResult: (gpId, r) => {
 // ---------- CHALLENGE LINKS ----------
 // Share: the car goes into a link, so a friend can race it with no server.
 // It is offered under Your car in Practice, and under the result of a race, where the wish to show it off is greatest.
-async function shareCar(say: (text: string) => void, box: HTMLInputElement) {
+async function shareCar(say: (text: string) => void, box: HTMLInputElement, withCard = false) {
   if (!car) return
   const link = location.origin + location.pathname + challengeCode(car)
+  // after a race the link comes with the result card as text, so the message makes a friend curious before they open it
+  const text = (withCard ? raceView?.shareText(link) : null) ?? link
   try {
-    await navigator.clipboard.writeText(link)
+    await navigator.clipboard.writeText(text)
     logEvent({ k: 'share' })
     box.hidden = true
-    say('Challenge link copied. Anyone who opens it can race ' + car.name + ' on the Grand Prix and try to beat it.')
+    say((withCard ? 'Result card and challenge link copied. Paste it into a chat.' : 'Challenge link copied.') + ' Anyone who opens it can race ' + car.name + ' on the Grand Prix and try to beat it.')
   } catch {
-    box.value = link // the browser would not copy for us: show the link to copy by hand
+    box.value = text.replace(/\n/g, ' | ') // the browser would not copy for us: show the text to copy by hand
     box.hidden = false
     box.select()
-    say('Copy this link and send it. Anyone who opens it can race your car.')
+    say('Copy this and send it. Anyone who opens the link can race your car.')
   }
 }
 $('shareCar').addEventListener('click', () => shareCar(carMsg, $<HTMLInputElement>('shareLink')))
-$('resultShare').addEventListener('click', () => shareCar((text) => ($('resultMsg').textContent = text), $<HTMLInputElement>('resultLink')))
+$('resultShare').addEventListener('click', () => shareCar((text) => ($('resultMsg').textContent = text), $<HTMLInputElement>('resultLink'), true))
 // Playtest notes: what happened in this browser, copied to paste into the feedback form. Nothing is sent anywhere.
 $('notes').addEventListener('click', async () => {
   const text = playtestNotes(car?.build ?? null, car?.name ?? null)
@@ -1548,11 +1766,13 @@ window.addEventListener('hashchange', () => {
   if (location.hash.startsWith('#challenge=')) takeChallenge()
 })
 takeChallenge()
+const today = visit()
 raceView.render()
 renderGarage()
 renderLooks()
 renderChip()
 drawGraph([])
 
+if (today.fresh.length) showNotice('New perk' + (today.fresh.length > 1 ? 's' : '') + ' for coming back: ' + today.fresh.map((p) => p.name).join(', ') + '. ' + today.fresh[0].does)
 setTab(tab) // the Garage, unless a challenge link has already sent the player to the Race tab
 requestAnimationFrame(loop)
