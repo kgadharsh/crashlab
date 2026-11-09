@@ -577,7 +577,7 @@ export function createLeaderboard({ getCar, getShelf, getGpId, goRace, notify, r
     $('hubDailyNow').textContent = daily.name + ' · ' + twistOf(daily) + (signed && dailyLeft !== undefined ? ' · ' + dailyLeft + (dailyLeft === 1 ? ' entry' : ' entries') + ' left' : '')
     const go = $<HTMLButtonElement>('dailyGo')
     $('dailyCar').closest('label')!.hidden = !signed || !myName
-    go.textContent = !signed ? 'Sign in with Google to enter' : myName === null ? 'Choose a username to enter' : 'Enter selected car'
+    go.textContent = !signed ? 'Sign in with Google to enter' : myName === null ? 'Choose a username to enter' : 'Submit selected setup'
     go.disabled = signed && dailyLeft === 0
   }
   async function refreshDaily() {
@@ -670,7 +670,7 @@ export function createLeaderboard({ getCar, getShelf, getGpId, goRace, notify, r
     $('hubWeeklyNow').textContent = weekly.name + ' · ' + (weekly.wet ? 'wet' : 'dry') + (weekly.night && weekly.ice ? ', night + ice' : weekly.night ? ', night' : weekly.ice ? ', ice' : '') + (signed && weeklyLeft !== undefined ? ' · ' + weeklyLeft + (weeklyLeft === 1 ? ' entry' : ' entries') + ' left' : '')
     const go = $<HTMLButtonElement>('weeklyGo')
     $('weeklyCar').closest('label')!.hidden = !signed || !myName
-    go.textContent = !signed ? 'Sign in with Google to enter' : myName === null ? 'Choose a username to enter' : 'Enter selected car'
+    go.textContent = !signed ? 'Sign in with Google to enter' : myName === null ? 'Choose a username to enter' : 'Submit selected setup'
     go.disabled = signed && weeklyLeft === 0
   }
   async function refreshWeekly() {
