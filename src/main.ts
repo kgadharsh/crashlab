@@ -331,7 +331,7 @@ document.querySelector('#app')!.innerHTML = `
       <div class="panel" id="dailyPanel" data-fixed hidden>
         <h2>Daily Challenge<span class="aside" id="dailyEnds"></span></h2>
         <p class="tip" id="dailyLine" style="margin-top:0"></p>
-        <div class="actions"><button class="btn primary" id="dailyGo">Enter your car</button></div>
+        <div class="actions"><label class="entry-car" for="dailyCar">Car to enter <select id="dailyCar" aria-label="Car to enter in the Daily Challenge"></select></label><button class="btn primary" id="dailyGo">Enter selected car</button></div>
         <p class="msg" id="dailyMsg"></p>
         <div class="jobs" id="dailyJobs"></div>
         <p class="tip" style="color:var(--text);font-weight:600">Today</p>
@@ -342,7 +342,7 @@ document.querySelector('#app')!.innerHTML = `
       <div class="panel" id="weeklyPanel" data-fixed hidden>
         <h2>Weekly Challenge<span class="aside" id="weeklyEnds"></span></h2>
         <p class="tip" id="weeklyLine" style="margin-top:0"></p>
-        <div class="actions"><button class="btn primary" id="weeklyGo">Enter your car</button></div>
+        <div class="actions"><label class="entry-car" for="weeklyCar">Car to enter <select id="weeklyCar" aria-label="Car to enter in the Weekly Challenge"></select></label><button class="btn primary" id="weeklyGo">Enter selected car</button></div>
         <p class="msg" id="weeklyMsg"></p>
         <div class="jobs" id="weeklyJobs"></div>
         <ol class="tower" id="weeklyTracks" hidden></ol>
@@ -2019,6 +2019,7 @@ $('raceGo').addEventListener('click', () => reveal($('tower'))) // a race fills 
 
 const leaderboard = createLeaderboard({
   getCar: () => car,
+  getShelf: () => shelf,
   getGpId: () => raceView!.gpId(),
   goRace: (section) => {
     setTab('race')

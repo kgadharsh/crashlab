@@ -258,6 +258,7 @@ input[type='range']:focus-visible { outline: 2px solid var(--tele); outline-offs
 .btn.wide { width: 100%; padding: 13px 14px; font-size: 16px; }
 .btn:focus-visible { outline: 2px solid var(--tele); outline-offset: 2px; }
 .actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
+.entry-car { display: flex; align-items: center; gap: 8px; color: var(--muted); font-size: 13px; }
 
 /* the bar that says a trained car is ready to race */
 .nudge {
