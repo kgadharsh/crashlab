@@ -301,6 +301,15 @@ export function createLeaderboard({ getCar, getGpId, goRace, notify, raceAgainst
     $('onlineMsg').textContent = text
     $('onlineMsg').classList.toggle('bad', bad)
   }
+  function showNameForm(panelId: 'dailyPanel' | 'weeklyPanel' | 'boardOnline') {
+    const row = $('onlineNameRow')
+    const panel = $(panelId)
+    const anchor = panelId === 'dailyPanel' ? $('dailyGo') : panelId === 'weeklyPanel' ? $('weeklyGo') : $('onlineWho')
+    row.hidden = false
+    if (row.parentElement !== panel) panel.insertBefore(row, anchor.nextSibling)
+    show('onlineNameRow').scrollIntoView({ behavior: 'smooth', block: 'center' })
+    $('onlineName').focus()
+  }
 
   const rowsFor: Record<string, Row[]> = {} // the last board fetched for each Grand Prix
 
@@ -385,8 +394,8 @@ export function createLeaderboard({ getCar, getGpId, goRace, notify, raceAgainst
         myName = null
         store.set(PENDING_KEY, gpId)
         await renderWho()
-        show('onlineNameRow').scrollIntoView({ behavior: 'smooth', block: 'center' })
-        $('onlineName').focus()
+        showNameForm(isWeekly ? 'weeklyPanel' : isDaily ? 'dailyPanel' : 'boardOnline')
+        tell('Choose the name the board will show, and your car goes on the board.')
       }
       if (!res.ok) return tell(data.error ?? 'The board could not take that car.', true)
       const queue = data.ahead ? ' ' + data.ahead + (data.ahead === 1 ? ' setup is' : ' setups are') + ' ahead of it.' : ''
@@ -422,9 +431,7 @@ export function createLeaderboard({ getCar, getGpId, goRace, notify, raceAgainst
     }
     if (myName === null) {
       store.set(PENDING_KEY, gpId)
-      $('onlineNameRow').hidden = false
-      show('boardOnline').scrollIntoView({ behavior: 'smooth', block: 'center' })
-      $('onlineName').focus()
+      showNameForm('boardOnline')
       return say('Choose the name the board will show, and your car goes on the board.')
     }
     enter(gpId)
@@ -436,14 +443,17 @@ export function createLeaderboard({ getCar, getGpId, goRace, notify, raceAgainst
     if (!nameIn(store.get(TOKEN_KEY))) return store.set(PENDING_KEY, null) // sign-in was abandoned
     await renderWho()
     goRace(pending === 'weekly' ? 'weekly' : pending === 'daily' ? 'daily' : 'gp')
-    show(pending === 'weekly' && myName ? 'weeklyPanel' : pending === 'daily' && myName ? 'dailyPanel' : 'boardOnline').scrollIntoView({ block: 'center' })
+    show(pending === 'weekly' ? 'weeklyPanel' : pending === 'daily' ? 'dailyPanel' : 'boardOnline').scrollIntoView({ block: 'center' })
     if (myName) {
       store.set(PENDING_KEY, null)
       return enter(pending)
     }
     if (myName === null) {
-      $('onlineName').focus()
-      say('Signed in. Choose the name the board will show, and your car goes on the board.')
+      showNameForm(pending === 'weekly' ? 'weeklyPanel' : pending === 'daily' ? 'dailyPanel' : 'boardOnline')
+      const message = pending === 'weekly' ? 'Signed in. Choose the name the board will show, and your car goes on the Weekly Challenge.' : pending === 'daily' ? 'Signed in. Choose the name the board will show, and your car goes on the Daily Challenge.' : 'Signed in. Choose the name the board will show, and your car goes on the board.'
+      const messageId = pending === 'weekly' ? 'weeklyMsg' : pending === 'daily' ? 'dailyMsg' : 'onlineMsg'
+      $(messageId).textContent = message
+      $(messageId).classList.remove('bad')
     }
   })()
   // Under a race result: where it would place, and what it takes to pass the car just above
@@ -571,10 +581,8 @@ export function createLeaderboard({ getCar, getGpId, goRace, notify, raceAgainst
     }
     if (myName === null) {
       store.set(PENDING_KEY, 'daily')
-      $('onlineNameRow').hidden = false
-      show('onlineNameRow').scrollIntoView({ behavior: 'smooth', block: 'center' })
-      $('onlineName').focus()
-      return say('Choose the name the board will show, and your car goes into the Daily Challenge.')
+      showNameForm('dailyPanel')
+      return sayDaily('Choose the name the board will show, and your car goes into the Daily Challenge.')
     }
     enter('daily')
   })
@@ -635,7 +643,7 @@ export function createLeaderboard({ getCar, getGpId, goRace, notify, raceAgainst
         const box = document.createElement('div')
         const head = Object.assign(document.createElement('p'), { className: 'tip', textContent: gp.name + (gp.wet ? ' · wet' : ' · dry') + (gp.night ? ' · night' : '') + (gp.ice ? ' · ice' : '') + (p.podium.length ? '' : ' · nobody entered') })
         head.style.cssText = 'color:var(--text);font-weight:600;margin-top:12px'
-        const open = Object.assign(document.createElement('button'), { className: 'btn small', textContent: 'Race these tracks' })
+        const open = Object.assign(document.createElement('button'), { className: 'btn small', textContent: 'Open past week' })
         open.addEventListener('click', () => openWeek(gp))
         head.append(' ', open)
         const list = Object.assign(document.createElement('ol'), { className: 'rank' })
@@ -662,10 +670,8 @@ export function createLeaderboard({ getCar, getGpId, goRace, notify, raceAgainst
     }
     if (myName === null) {
       store.set(PENDING_KEY, 'weekly')
-      $('onlineNameRow').hidden = false
-      show('onlineNameRow').scrollIntoView({ behavior: 'smooth', block: 'center' })
-      $('onlineName').focus()
-      return say('Choose the name the board will show, and your car goes into the Weekly Challenge.')
+      showNameForm('weeklyPanel')
+      return sayWeekly('Choose the name the board will show, and your car goes into the Weekly Challenge.')
     }
     enter('weekly')
   })

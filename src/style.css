@@ -298,6 +298,7 @@ body.has-nudge { padding-bottom: 76px; }
 .spec dd { margin: 0; font: 500 13px var(--mono); text-align: right; }
 
 .msg { font: 500 13px var(--mono); color: var(--muted); min-height: 1.4em; }
+.msg:empty { display: none; }
 .msg.bad { color: var(--bad); }
 .warn { border-left: 3px solid var(--bad); padding-left: 10px; }
 
