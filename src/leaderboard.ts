@@ -3,19 +3,21 @@
 // With no server address (the live site until the server is deployed) the whole panel stays hidden.
 import { carFromJson, carToJson, type CarFile } from './carFile'
 import { fetchBoardEntries } from './boardData'
+import { entryCarForSelection, isCurrentDailyBoard } from './challengeEntry'
 import { reveal } from './fold'
-import { CAUSE_LABEL, GRAND_PRIXES, adviceFor, dailyGp, dayLabel, summarise, weekName, weeklyGp, type Cause, type GrandPrix, type TrackResult } from './race'
+import { CAUSE_LABEL, GRAND_PRIXES, adviceFor, dailyGp, dayLabel, dayOf, summarise, weekName, weeklyGp, type Cause, type GrandPrix, type TrackResult } from './race'
 
 export const API = (import.meta.env.VITE_API_URL as string | undefined) ?? (import.meta.env.DEV ? 'http://localhost:8787' : '')
 const NAME_KEY = 'crashlab.devname'
 const TOKEN_KEY = 'crashlab.token'
 const NONCE_KEY = 'crashlab.nonce'
-// The Grand Prix a player asked to enter from a race result before going off to sign in, so the entry can finish when they come back
+// The challenge the player came from before signing in; this only restores context and never submits an entry
 const PENDING_KEY = 'crashlab.pendingEntry'
 // The player's place on each board when they last looked, so a return visit can say who passed them
 const RANKS_KEY = 'crashlab.ranks'
 type Ranks = Record<string, number | null>
 type Score = { finished: number; totalTime: number }
+
 const beats = (a: Score, b: Score) => a.finished !== b.finished ? a.finished > b.finished : a.totalTime < b.totalTime
 
 type Row = { rank: number; id: number; display: string; finished: number; totalTime: number; medal: string | null; trophies?: number[]; runs?: number | null }
@@ -74,6 +76,7 @@ export type BoardStats = { boards: BoardStat[]; trophies: number[] | null }
 
 type Deps = {
   getCar: () => CarFile | null
+  getShelf: () => CarFile[]
   getGpId: () => string // the Grand Prix the Race tab is on, so a result goes on the matching board
   goRace: (section?: 'gp' | 'daily' | 'weekly') => void
   notify: (text: string) => void // a message in the bar at the bottom of the screen
@@ -82,7 +85,7 @@ type Deps = {
   onEntered?: () => void // a car has just been taken onto a board
 }
 
-export function createLeaderboard({ getCar, getGpId, goRace, notify, raceAgainst, openWeek, onEntered }: Deps) {
+export function createLeaderboard({ getCar, getShelf, getGpId, goRace, notify, raceAgainst, openWeek, onEntered }: Deps) {
   const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T
   // an element the player must see now: its panel opens if it is folded
   const show = (id: string) => {
@@ -134,13 +137,13 @@ export function createLeaderboard({ getCar, getGpId, goRace, notify, raceAgainst
         if (me.weekly) weeklyLeft = me.weekly.left
         if (me.daily) dailyLeft = me.daily.left
         if (me.ranks) sinceLastVisit({ ...me.ranks, ...(weekly && me.weekly ? { ['w:' + weekly.week]: me.weekly.rank } : {}) })
-        renderWeekly()
-        renderDaily()
       } catch {
         $('onlineWho').textContent = 'Signed in. The board is not reachable right now.'
         return
       }
     }
+    renderWeekly()
+    renderDaily()
     $('onlineNameRow').hidden = myName !== null
     $('resultBoardGo').textContent = myName ? 'Enter it on the leaderboard' : 'Choose a username to enter'
     $('onlineWho').textContent = myName ? 'Playing as ' + myName + '. ' : 'Signed in. Choose your unique public username.'
@@ -173,7 +176,7 @@ export function createLeaderboard({ getCar, getGpId, goRace, notify, raceAgainst
   function jobView(j: Job): HTMLElement {
     const box = Object.assign(document.createElement('div'), { className: 'job' })
     const state =
-      j.status === 'queued' ? 'waiting' + (j.ahead ? ', ' + j.ahead + ' ahead' : ', next') : j.status === 'training' ? 'being trained now' : j.status === 'failed' ? 'could not be trained' : j.finished + ' of 8' + (j.finished === 8 && j.totalTime !== null ? ' in ' + j.totalTime.toFixed(1) + ' s' : '') + (j.medal ? ' (' + j.medal + ')' : '') + ', on the board'
+      j.status === 'queued' ? 'queued for official training' + (j.ahead ? ', ' + j.ahead + ' ahead' : ', next') : j.status === 'training' ? 'in official training now' : j.status === 'failed' ? 'could not be trained' : j.finished + ' of 8' + (j.finished === 8 && j.totalTime !== null ? ' in ' + j.totalTime.toFixed(1) + ' s' : '') + (j.medal ? ' (' + j.medal + ')' : '') + ', on the board'
     box.append(Object.assign(document.createElement('div'), { className: 'jobline', textContent: j.name + ' for ' + gpName(j.gp) + ': ' + state }))
     if (j.status !== 'done' || !j.tracks) return box
     const strip = Object.assign(document.createElement('div'), { className: 'strip8' })
@@ -210,7 +213,7 @@ export function createLeaderboard({ getCar, getGpId, goRace, notify, raceAgainst
     ]
     for (const [id, keep] of kinds) {
       const mine = lastJobs.filter(keep).slice(0, 3)
-      $(id).replaceChildren(...(mine.length ? [Object.assign(document.createElement('div'), { className: 'jobhead', textContent: 'Your entries' }), ...mine.map(jobView)] : []))
+      $(id).replaceChildren(...(mine.length ? [Object.assign(document.createElement('div'), { className: 'jobhead', textContent: 'Your official training entries' }), ...mine.map(jobView)] : []))
     }
   }
   let wasPending = false
@@ -259,13 +262,21 @@ export function createLeaderboard({ getCar, getGpId, goRace, notify, raceAgainst
       const pending = store.get(PENDING_KEY)
       if (pending) {
         store.set(PENDING_KEY, null)
-        return enter(pending)
+        const message = 'Username saved. Choose a car, then enter it when you are ready.'
+        if (pending === 'weekly') sayWeekly(message)
+        else if (pending === 'daily') sayDaily(message)
+        else say(message)
+        refreshJobs()
+        return
       }
       refresh()
       refreshWeekly()
       refreshDaily()
     } catch {
-      say('The board is not reachable right now.', true)
+      const pending = store.get(PENDING_KEY)
+      const messageId = pending === 'weekly' ? 'weeklyMsg' : pending === 'daily' ? 'dailyMsg' : 'onlineMsg'
+      $(messageId).textContent = 'The board is not reachable right now.'
+      $(messageId).classList.add('bad')
     }
   })
   // Players who passed you while you were away: compare each board place with the one remembered from last time
@@ -317,6 +328,23 @@ export function createLeaderboard({ getCar, getGpId, goRace, notify, raceAgainst
     if (row.parentElement !== panel) panel.insertBefore(row, before)
     show('onlineNameRow').scrollIntoView({ behavior: 'smooth', block: 'center' })
     $('onlineName').focus()
+  }
+  function renderCarChoices(id: 'dailyCar' | 'weeklyCar') {
+    const select = $<HTMLSelectElement>(id)
+    const selected = select.value
+    const current = getCar()
+    const shelf = getShelf()
+    const choices = [
+      ...(current ? [{ value: 'current', label: 'Current car · ' + current.name }] : []),
+      ...shelf.map((c) => ({ value: 'shelf:' + carToJson(c), label: 'Shelf · ' + c.name })),
+    ]
+    select.replaceChildren(...choices.map((c) => Object.assign(document.createElement('option'), { value: c.value, textContent: c.label })))
+    select.disabled = choices.length === 0
+    select.value = choices.some((c) => c.value === selected) ? selected : choices[0]?.value ?? ''
+  }
+  function selectedCar(id: 'dailyCar' | 'weeklyCar'): CarFile | null {
+    const value = $<HTMLSelectElement>(id).value
+    return entryCarForSelection(value, getCar(), getShelf())
   }
 
   const rowsFor: Record<string, Row[]> = {} // the last board fetched for each Grand Prix
@@ -375,8 +403,8 @@ export function createLeaderboard({ getCar, getGpId, goRace, notify, raceAgainst
   $('onlineDry').addEventListener('click', () => ((gpIndex = 0), refresh()))
   $('onlineWet').addEventListener('click', () => ((gpIndex = 1), refresh()))
   // Enter the current car on a Grand Prix's board. The server races it and says where it placed.
-  async function enter(gpId: string) {
-    const car = getCar()
+  async function enter(gpId: string, selected?: CarFile | null) {
+    const car = selected === undefined ? getCar() : selected
     const isWeekly = gpId === 'weekly'
     const isDaily = gpId === 'daily'
     const i = GRAND_PRIXES.findIndex((g) => g.id === gpId)
@@ -391,7 +419,7 @@ export function createLeaderboard({ getCar, getGpId, goRace, notify, raceAgainst
           $('resultBoardMsg').textContent = text
           $('resultBoardMsg').classList.toggle('bad', bad)
         }
-    if (!car) return tell('Train a car first.', true)
+    if (!car) return tell('Choose an available car first. Train one or save it to your shelf if the list is empty.', true)
     tell('Entering your setup…')
     try {
       // the setup goes in, not the trained car: the game trains every setup itself, the same way for everyone
@@ -403,26 +431,27 @@ export function createLeaderboard({ getCar, getGpId, goRace, notify, raceAgainst
         store.set(PENDING_KEY, gpId)
         await renderWho()
         showNameForm(isWeekly ? 'weeklyPanel' : isDaily ? 'dailyPanel' : 'boardOnline')
-        tell('Choose your unique username, and your car goes on the board.')
+        tell('Choose your unique username first. Your car will not be entered until you choose it and press Enter.')
+        return
       }
       if (!res.ok) return tell(data.error ?? 'The board could not take that car.', true)
       const queue = data.ahead ? ' ' + data.ahead + (data.ahead === 1 ? ' setup is' : ' setups are') + ' ahead of it.' : ''
       if (isWeekly) {
         weeklyLeft = data.left
         store.set('crashlab.enteredWeekly', '1') // it unlocks headlights in the skill tree
-        tell('Entered: ' + car.name + "'s setup is queued for official training." + queue + " Its result shows on this week's board within about 30 minutes.")
+        tell('Submitted ' + car.name + "'s setup for official training." + queue + ' This separate server run will place it on this week\'s board within about 30 minutes; your race above is local.')
         onEntered?.()
         refreshJobs()
         return refreshWeekly()
       }
       if (isDaily) {
         dailyLeft = data.left
-        tell('Entered: ' + car.name + "'s setup is queued for official training." + queue + " Its result shows on today's board within about 30 minutes.")
+        tell('Submitted ' + car.name + "'s setup for official training." + queue + ' This separate server run will place it on today\'s board within about 30 minutes; your race above is local.')
         onEntered?.()
         refreshJobs()
         return refreshDaily()
       }
-      tell('Entered: ' + car.name + "'s setup is queued for official training." + queue + ' Its result shows on the board within about 30 minutes. ' + data.left + (data.left === 1 ? ' entry' : ' entries') + ' left today.')
+      tell('Submitted ' + car.name + "'s setup for official training." + queue + ' This separate server run will place it on the board within about 30 minutes. ' + data.left + (data.left === 1 ? ' entry' : ' entries') + ' left today.')
       onEntered?.()
       refreshJobs()
     } catch {
@@ -444,7 +473,7 @@ export function createLeaderboard({ getCar, getGpId, goRace, notify, raceAgainst
     }
     enter(gpId)
   })
-  // Back from signing in with an entry waiting: finish it, or ask for a profile username first
+  // Restore the challenge context after sign-in, but require a deliberate enter action afterward.
   void (async () => {
     const pending = store.get(PENDING_KEY)
     if (!pending) return
@@ -454,7 +483,12 @@ export function createLeaderboard({ getCar, getGpId, goRace, notify, raceAgainst
     show(pending === 'weekly' ? 'weeklyPanel' : pending === 'daily' ? 'dailyPanel' : 'boardOnline').scrollIntoView({ block: 'center' })
     if (myName) {
       store.set(PENDING_KEY, null)
-      return enter(pending)
+      const message = 'Signed in. Choose a car, then press Enter when you are ready.'
+      const messageId = pending === 'weekly' ? 'weeklyMsg' : pending === 'daily' ? 'dailyMsg' : 'onlineMsg'
+      $(messageId).textContent = message
+      $(messageId).classList.remove('bad')
+      refreshJobs()
+      return
     }
     if (myName === null) {
       showNameForm(pending === 'weekly' ? 'weeklyPanel' : pending === 'daily' ? 'dailyPanel' : 'boardOnline')
@@ -476,18 +510,28 @@ export function createLeaderboard({ getCar, getGpId, goRace, notify, raceAgainst
     if (!r) {
       shownFor = ''
       lastShown = null
+      $('resultBoard').hidden = false
       $('resultBoardPlace').textContent = ''
       return
     }
-    const past = gpId.startsWith('w:') || gpId.startsWith('d:') // a finished week or day: no entering, only how it compares with that board
+    const sameDayDaily = isCurrentDailyBoard(gpId, dayOf(Date.now()))
+    const past = gpId.startsWith('w:') || (gpId.startsWith('d:') && !sameDayDaily) // finished weeks and days can be compared with their boards
+    const key = gpId + ':' + r.finished + ':' + r.totalTime
+    const isNewResult = key !== shownFor
+    if (isNewResult) {
+      lastShown = { gpId, r }
+      shownFor = key
+      void refreshDaily()
+      void refreshWeekly()
+    }
+    $('resultBoard').hidden = sameDayDaily
+    if (sameDayDaily) {
+      $('resultBoardPlace').textContent = ''
+      return
+    }
     $('resultBoardAsk').textContent = past ? 'Against that board' : 'Put this setup on the leaderboard? The game trains it itself, the same way for everyone, so its official result can differ from this race.'
     $('resultBoardGo').hidden = past
-    const key = gpId + ':' + r.finished + ':' + r.totalTime
-    if (key === shownFor) return // render runs often; work this out once per result
-    lastShown = { gpId, r }
-    shownFor = key
-    void refreshDaily()
-    void refreshWeekly()
+    if (!isNewResult) return // render runs often; work this out once per result
     const place = $('resultBoardPlace')
     place.textContent = ''
     // compare with the board as it is now, not as it was when the page opened
@@ -521,6 +565,7 @@ export function createLeaderboard({ getCar, getGpId, goRace, notify, raceAgainst
   const twistOf = (g: { wet: boolean; night?: boolean; ice?: boolean }) => (g.wet ? 'wet road' : g.night ? 'night' : 'icy road')
   function renderDaily() {
     if (!daily) return
+    renderCarChoices('dailyCar')
     const signed = !!nameIn(store.get(TOKEN_KEY))
     $('dailyEnds').textContent = 'ends in ' + timeLeft(daily.endsAt - Date.now())
     $('dailyLine').textContent =
@@ -531,7 +576,8 @@ export function createLeaderboard({ getCar, getGpId, goRace, notify, raceAgainst
     $('hubDailyEnds').textContent = 'ends in ' + timeLeft(daily.endsAt - Date.now())
     $('hubDailyNow').textContent = daily.name + ' · ' + twistOf(daily) + (signed && dailyLeft !== undefined ? ' · ' + dailyLeft + (dailyLeft === 1 ? ' entry' : ' entries') + ' left' : '')
     const go = $<HTMLButtonElement>('dailyGo')
-    go.textContent = !signed ? 'Sign in with Google to enter' : myName === null ? 'Choose a username to enter' : 'Enter your car'
+    $('dailyCar').closest('label')!.hidden = !signed || !myName
+    go.textContent = !signed ? 'Sign in with Google to enter' : myName === null ? 'Choose a username to enter' : 'Enter selected car'
     go.disabled = signed && dailyLeft === 0
   }
   async function refreshDaily() {
@@ -582,17 +628,21 @@ export function createLeaderboard({ getCar, getGpId, goRace, notify, raceAgainst
   }
   // today's tracks as a Grand Prix, once the server has sent them (they are open to everyone)
   const dailyToday = (): GrandPrix | null => (daily && typeof daily.seed === 'number' ? dailyGp(daily.day, daily.seed) : null) // an older server sends no seed
-  $('dailyGo').addEventListener('click', () => {
+  $('dailyGo').addEventListener('click', async () => {
     if (!nameIn(store.get(TOKEN_KEY))) {
       store.set(PENDING_KEY, 'daily')
       return signIn()
     }
+    if (myName === undefined) {
+      await renderWho()
+      if (myName === undefined) return sayDaily('Could not verify your username. The board may be unreachable; please try again.', true)
+    }
     if (myName === null) {
       store.set(PENDING_KEY, 'daily')
       showNameForm('dailyPanel')
-      return sayDaily('Choose your unique username, and your car goes into the Daily Challenge.')
+      return sayDaily('Choose your unique username first. Then choose a car and enter it separately.')
     }
-    enter('daily')
+    enter('daily', selectedCar('dailyCar'))
   })
 
   // ---------- THE WEEKLY GRAND PRIX ----------
@@ -608,6 +658,7 @@ export function createLeaderboard({ getCar, getGpId, goRace, notify, raceAgainst
   }
   function renderWeekly() {
     if (!weekly) return
+    renderCarChoices('weeklyCar')
     const signed = !!nameIn(store.get(TOKEN_KEY))
     $('weeklyEnds').textContent = 'ends in ' + timeLeft(weekly.endsAt - Date.now())
     $('weeklyLine').textContent =
@@ -618,7 +669,8 @@ export function createLeaderboard({ getCar, getGpId, goRace, notify, raceAgainst
     $('hubWeeklyEnds').textContent = 'ends in ' + timeLeft(weekly.endsAt - Date.now())
     $('hubWeeklyNow').textContent = weekly.name + ' · ' + (weekly.wet ? 'wet' : 'dry') + (weekly.night && weekly.ice ? ', night + ice' : weekly.night ? ', night' : weekly.ice ? ', ice' : '') + (signed && weeklyLeft !== undefined ? ' · ' + weeklyLeft + (weeklyLeft === 1 ? ' entry' : ' entries') + ' left' : '')
     const go = $<HTMLButtonElement>('weeklyGo')
-    go.textContent = !signed ? 'Sign in with Google to enter' : myName === null ? 'Choose a username to enter' : 'Enter your car'
+    $('weeklyCar').closest('label')!.hidden = !signed || !myName
+    go.textContent = !signed ? 'Sign in with Google to enter' : myName === null ? 'Choose a username to enter' : 'Enter selected car'
     go.disabled = signed && weeklyLeft === 0
   }
   async function refreshWeekly() {
@@ -671,17 +723,21 @@ export function createLeaderboard({ getCar, getGpId, goRace, notify, raceAgainst
       }),
     )
   }
-  $('weeklyGo').addEventListener('click', () => {
+  $('weeklyGo').addEventListener('click', async () => {
     if (!nameIn(store.get(TOKEN_KEY))) {
       store.set(PENDING_KEY, 'weekly')
       return signIn()
     }
+    if (myName === undefined) {
+      await renderWho()
+      if (myName === undefined) return sayWeekly('Could not verify your username. The board may be unreachable; please try again.', true)
+    }
     if (myName === null) {
       store.set(PENDING_KEY, 'weekly')
       showNameForm('weeklyPanel')
-      return sayWeekly('Choose your unique username, and your car goes into the Weekly Challenge.')
+      return sayWeekly('Choose your unique username first. Then choose a car and enter it separately.')
     }
-    enter('weekly')
+    enter('weekly', selectedCar('weeklyCar'))
   })
 
   refresh()

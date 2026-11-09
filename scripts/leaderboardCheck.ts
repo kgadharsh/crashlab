@@ -1,6 +1,26 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
 import { fetchBoardEntries } from '../src/boardData'
+import { carToJson, type CarFile } from '../src/carFile'
+import { entryCarForSelection, isCurrentDailyBoard } from '../src/challengeEntry'
+import { DEFAULT_BUILD } from '../src/setup'
+
+const current: CarFile = { name: 'Current', build: DEFAULT_BUILD, genome: [] }
+const shelfCar: CarFile = { name: 'Shelf car', build: DEFAULT_BUILD, genome: [1] }
+
+test('identifies only the current daily board for result comparison', () => {
+  assert.equal(isCurrentDailyBoard('d:42', 42), true)
+  assert.equal(isCurrentDailyBoard('d:41', 42), false)
+  assert.equal(isCurrentDailyBoard('w:42', 42), false)
+  assert.equal(isCurrentDailyBoard('d:today', 42), false)
+})
+
+test('resolves a selected current or shelf car and rejects stale selections', () => {
+  assert.equal(entryCarForSelection('current', current, [shelfCar]), current)
+  assert.equal(entryCarForSelection('shelf:' + carToJson(shelfCar), current, [shelfCar]), shelfCar)
+  assert.equal(entryCarForSelection('shelf:missing', current, [shelfCar]), null)
+  assert.equal(entryCarForSelection('', current, [shelfCar]), null)
+})
 
 test('reads daily and weekly leaderboard rows from successful board responses', async () => {
   const rows = [{ rank: 1, display: 'Racer' }]
