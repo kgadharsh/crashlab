@@ -331,7 +331,7 @@ document.querySelector('#app')!.innerHTML = `
       <div class="panel" id="dailyPanel" data-fixed hidden>
         <h2>Daily Challenge<span class="aside" id="dailyEnds"></span></h2>
         <p class="tip" id="dailyLine" style="margin-top:0"></p>
-        <div class="actions"><button class="btn primary" id="dailyGo">Enter your car</button><button class="btn" id="dailyRace" hidden>Race today's tracks</button></div>
+        <div class="actions"><button class="btn primary" id="dailyGo">Enter your car</button></div>
         <p class="msg" id="dailyMsg"></p>
         <div class="jobs" id="dailyJobs"></div>
         <p class="tip" style="color:var(--text);font-weight:600">Today</p>

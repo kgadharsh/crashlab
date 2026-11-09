@@ -2,6 +2,7 @@
 // their car. The server re-runs the car itself, so the result shown here is the server's, not ours.
 // With no server address (the live site until the server is deployed) the whole panel stays hidden.
 import { carFromJson, carToJson, type CarFile } from './carFile'
+import { fetchBoardEntries } from './boardData'
 import { reveal } from './fold'
 import { CAUSE_LABEL, GRAND_PRIXES, adviceFor, dailyGp, dayLabel, summarise, weekName, weeklyGp, type Cause, type GrandPrix, type TrackResult } from './race'
 
@@ -310,13 +311,11 @@ export function createLeaderboard({ getCar, getGpId, goRace, notify, raceAgainst
       $(id).setAttribute('aria-pressed', String(gpIndex === i))
     }
     try {
-      const res = await fetch(API + '/board?gp=' + gp.id)
-      const data = (await res.json()) as { entries?: Row[]; error?: string }
-      if (!res.ok || !data.entries) throw new Error(data.error ?? 'bad reply')
-      rowsFor[gp.id] = data.entries
+      const entries = await fetchBoardEntries<Row>(API + '/board?gp=' + gp.id)
+      rowsFor[gp.id] = entries
       if (lastShown?.gpId === gp.id) reshow()
       $('onlineRows').replaceChildren(
-        ...data.entries.map((e) => {
+        ...entries.map((e) => {
           const li = document.createElement('li')
           const cell = (cls: string, text: string) => Object.assign(document.createElement('span'), { className: cls, textContent: text })
           li.append(cell('n', String(e.rank)), whoCell(e), cell('res', e.finished + ' of 8 · ' + e.totalTime.toFixed(1) + ' s' + (e.medal ? ' · ' + e.medal : '') + runsOf(e)))
@@ -331,7 +330,7 @@ export function createLeaderboard({ getCar, getGpId, goRace, notify, raceAgainst
           return li
         }),
       )
-      $('onlineEmpty').hidden = data.entries.length > 0
+      $('onlineEmpty').hidden = entries.length > 0
     } catch {
       $('onlineRows').replaceChildren()
       $('onlineEmpty').hidden = true
@@ -469,6 +468,8 @@ export function createLeaderboard({ getCar, getGpId, goRace, notify, raceAgainst
     if (key === shownFor) return // render runs often; work this out once per result
     lastShown = { gpId, r }
     shownFor = key
+    void refreshDaily()
+    void refreshWeekly()
     const place = $('resultBoardPlace')
     place.textContent = ''
     // compare with the board as it is now, not as it was when the page opened
@@ -520,8 +521,7 @@ export function createLeaderboard({ getCar, getGpId, goRace, notify, raceAgainst
       const res = await fetch(API + '/daily')
       if (!res.ok) throw new Error('bad reply')
       daily = (await res.json()) as Daily
-      const board = (await (await fetch(API + '/board?gp=d:' + daily.day)).json()) as { entries?: Row[] }
-      const rows = board.entries ?? []
+      const rows = await fetchBoardEntries<Row>(API + '/board?gp=d:' + daily.day)
       $('dailyRows').replaceChildren(
         ...rows.map((e) => {
           const li = document.createElement('li')
@@ -531,7 +531,6 @@ export function createLeaderboard({ getCar, getGpId, goRace, notify, raceAgainst
         }),
       )
       $('dailyEmpty').hidden = rows.length > 0
-      $('dailyRace').hidden = typeof daily.seed !== 'number'
       $('dailyPast').replaceChildren(
         ...daily.past.map((p) => {
           const gp = dailyGp(p.day, p.seed)
@@ -565,10 +564,6 @@ export function createLeaderboard({ getCar, getGpId, goRace, notify, raceAgainst
   }
   // today's tracks as a Grand Prix, once the server has sent them (they are open to everyone)
   const dailyToday = (): GrandPrix | null => (daily && typeof daily.seed === 'number' ? dailyGp(daily.day, daily.seed) : null) // an older server sends no seed
-  $('dailyRace').addEventListener('click', () => {
-    const g = dailyToday()
-    if (g) openWeek(g)
-  })
   $('dailyGo').addEventListener('click', () => {
     if (!nameIn(store.get(TOKEN_KEY))) {
       store.set(PENDING_KEY, 'daily')
@@ -615,8 +610,7 @@ export function createLeaderboard({ getCar, getGpId, goRace, notify, raceAgainst
       const res = await fetch(API + '/weekly')
       if (!res.ok) throw new Error('bad reply')
       weekly = (await res.json()) as Weekly
-      const board = (await (await fetch(API + '/board?gp=w:' + weekly.week)).json()) as { entries?: Row[] }
-      const rows = board.entries ?? []
+      const rows = await fetchBoardEntries<Row>(API + '/board?gp=w:' + weekly.week)
       $('weeklyRows').replaceChildren(
         ...rows.map((e) => {
           const li = document.createElement('li')
