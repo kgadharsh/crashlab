@@ -15,11 +15,11 @@ CREATE TABLE IF NOT EXISTS entries (
 CREATE INDEX IF NOT EXISTS entries_board ON entries (gp, finished DESC, total_time ASC);
 CREATE INDEX IF NOT EXISTS entries_player_day ON entries (player, day);
 
--- A player's chosen board name. Sign-in only proves who someone is; no real name from Google or GitHub is kept.
+-- A player's unique profile username. Sign-in only proves who someone is; no real name from Google is kept.
 CREATE TABLE IF NOT EXISTS players (
   id TEXT PRIMARY KEY,         -- the sign-in id, e.g. google:123
-  name TEXT NOT NULL,          -- as typed, shown on the board
-  name_key TEXT NOT NULL UNIQUE, -- lower case, so Ann and ann cannot both exist
+  name TEXT NOT NULL,          -- public username shown on every leaderboard
+  name_key TEXT NOT NULL UNIQUE, -- normalized and lower case, so equivalent usernames cannot both exist
   created_at INTEGER NOT NULL
 );
 

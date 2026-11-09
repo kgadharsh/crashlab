@@ -80,10 +80,10 @@ export function renderProfile(root: HTMLElement, d: ProfileData) {
   // top: who this is
   const top = h('div', 'ptop')
   const lookName = LOOKS[d.look]?.name ?? 'Classic'
-  // who this is: the name on the board (or how to get one), then the car's name, which can be changed right here
+  // who this is: the unique public username (or how to get one), then the separate car name
   const who = h('div', 'pplayer')
   const id = d.identity
-  who.append(h('span', 'pk', 'Board name'))
+  who.append(h('span', 'pk', 'Username'))
   if (id.kind === 'in') {
     who.append(h('b', 'pn', id.name))
     const change = h('button', 'btn small', 'Change')
@@ -91,7 +91,7 @@ export function renderProfile(root: HTMLElement, d: ProfileData) {
     who.append(change)
   } else if (id.kind === 'noname') {
     who.append(h('span', 'pn muted', 'signed in, no name yet'))
-    const pick = h('button', 'btn small primary', 'Choose a name')
+    const pick = h('button', 'btn small primary', 'Choose username')
     pick.addEventListener('click', d.onOpenBoard)
     who.append(pick)
   } else if (id.kind === 'out') {

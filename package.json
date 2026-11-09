@@ -8,7 +8,8 @@
     "build": "tsc && vite build",
     "preview": "vite preview",
     "check": "tsc && tsc -p tsconfig.scripts.json",
-    "test:leaderboard": "tsx --test scripts/leaderboardCheck.ts"
+    "test:leaderboard": "tsx --test scripts/leaderboardCheck.ts",
+    "test:profile-name": "tsx --test scripts/profileNameCheck.ts"
   },
   "devDependencies": {
     "@cloudflare/workers-types": "^5.20261106.1",

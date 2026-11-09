@@ -298,6 +298,7 @@ body.has-nudge { padding-bottom: 76px; }
 .spec dd { margin: 0; font: 500 13px var(--mono); text-align: right; }
 
 .msg { font: 500 13px var(--mono); color: var(--muted); min-height: 1.4em; }
+.msg:empty { display: none; }
 .msg.bad { color: var(--bad); }
 .warn { border-left: 3px solid var(--bad); padding-left: 10px; }
 
@@ -570,7 +571,7 @@ body.full .layout { grid-template-columns: minmax(0, 720px); justify-content: ce
 .more summary { cursor: pointer; color: var(--muted); font: 600 12px var(--head); letter-spacing: 0.12em; text-transform: uppercase; }
 .more summary:hover { color: var(--text); }
 
-/* profile: board name and car name */
+/* profile: username and car name */
 .pplayer { display: flex; align-items: center; justify-content: center; gap: 10px; flex-wrap: wrap; }
 .pk { font: 700 11px var(--head); letter-spacing: 0.14em; text-transform: uppercase; color: var(--muted); }
 .pn { font: 700 17px var(--head); letter-spacing: 0.06em; text-transform: uppercase; }
