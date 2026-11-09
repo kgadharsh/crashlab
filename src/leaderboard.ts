@@ -105,7 +105,7 @@ export function createLeaderboard({ getCar, getGpId, goRace, notify, raceAgainst
   let daily: Daily | null = null
   let dailyLeft: number | undefined // entries left today, once the server has said
 
-  // the player's chosen board name: undefined while unknown, null when they have not chosen one yet
+  // the player's unique profile username: undefined while unknown, null when they have not chosen one yet
   let myName: string | null | undefined
   const renderWho = async () => {
     const signed = !!nameIn(store.get(TOKEN_KEY))
@@ -142,16 +142,15 @@ export function createLeaderboard({ getCar, getGpId, goRace, notify, raceAgainst
       }
     }
     $('onlineNameRow').hidden = myName !== null
-    $('resultBoardGo').textContent = myName ? 'Enter it on the leaderboard' : 'Choose a board name to enter'
-    $('onlineWho').textContent = myName ? 'Playing as ' + myName + '. ' : 'Signed in. Choose the name the board will show.'
+    $('resultBoardGo').textContent = myName ? 'Enter it on the leaderboard' : 'Choose a username to enter'
+    $('onlineWho').textContent = myName ? 'Playing as ' + myName + '. ' : 'Signed in. Choose your unique public username.'
     if (myName) {
       const change = document.createElement('button')
       change.className = 'btn small'
-      change.textContent = 'Change name'
+      change.textContent = 'Change username'
       change.addEventListener('click', () => {
-        $('onlineNameRow').hidden = false
         ;($('onlineName') as HTMLInputElement).value = myName ?? ''
-        $('onlineName').focus()
+        showNameForm('boardOnline')
       })
       $('onlineWho').append(change)
     }
@@ -246,9 +245,15 @@ export function createLeaderboard({ getCar, getGpId, goRace, notify, raceAgainst
     try {
       const res = await fetch(API + '/me', { method: 'PUT', headers: headers(), body: JSON.stringify({ name }) })
       const data = (await res.json()) as { name?: string; error?: string }
-      if (!res.ok) return say(data.error ?? 'That name could not be saved.', true)
+      if (!res.ok) {
+        const pending = store.get(PENDING_KEY)
+        const messageId = pending === 'weekly' ? 'weeklyMsg' : pending === 'daily' ? 'dailyMsg' : 'onlineMsg'
+        $(messageId).textContent = data.error ?? 'That username could not be saved.'
+        $(messageId).classList.add('bad')
+        return
+      }
       myName = data.name
-      say('Your board name is ' + data.name + '.')
+      say('Your username is ' + data.name + '.')
       reshow()
       await renderWho()
       const pending = store.get(PENDING_KEY)
@@ -257,6 +262,8 @@ export function createLeaderboard({ getCar, getGpId, goRace, notify, raceAgainst
         return enter(pending)
       }
       refresh()
+      refreshWeekly()
+      refreshDaily()
     } catch {
       say('The board is not reachable right now.', true)
     }
@@ -306,7 +313,8 @@ export function createLeaderboard({ getCar, getGpId, goRace, notify, raceAgainst
     const panel = $(panelId)
     const anchor = panelId === 'dailyPanel' ? $('dailyGo') : panelId === 'weeklyPanel' ? $('weeklyGo') : $('onlineWho')
     row.hidden = false
-    if (row.parentElement !== panel) panel.insertBefore(row, anchor.nextSibling)
+    const before = panelId === 'boardOnline' ? anchor.nextSibling : anchor.closest('.actions')?.nextSibling ?? null
+    if (row.parentElement !== panel) panel.insertBefore(row, before)
     show('onlineNameRow').scrollIntoView({ behavior: 'smooth', block: 'center' })
     $('onlineName').focus()
   }
@@ -395,7 +403,7 @@ export function createLeaderboard({ getCar, getGpId, goRace, notify, raceAgainst
         store.set(PENDING_KEY, gpId)
         await renderWho()
         showNameForm(isWeekly ? 'weeklyPanel' : isDaily ? 'dailyPanel' : 'boardOnline')
-        tell('Choose the name the board will show, and your car goes on the board.')
+        tell('Choose your unique username, and your car goes on the board.')
       }
       if (!res.ok) return tell(data.error ?? 'The board could not take that car.', true)
       const queue = data.ahead ? ' ' + data.ahead + (data.ahead === 1 ? ' setup is' : ' setups are') + ' ahead of it.' : ''
@@ -432,11 +440,11 @@ export function createLeaderboard({ getCar, getGpId, goRace, notify, raceAgainst
     if (myName === null) {
       store.set(PENDING_KEY, gpId)
       showNameForm('boardOnline')
-      return say('Choose the name the board will show, and your car goes on the board.')
+      return say('Choose your unique username, and your car goes on the board.')
     }
     enter(gpId)
   })
-  // Back from signing in with an entry waiting: finish it, or ask for a board name first
+  // Back from signing in with an entry waiting: finish it, or ask for a profile username first
   void (async () => {
     const pending = store.get(PENDING_KEY)
     if (!pending) return
@@ -450,7 +458,7 @@ export function createLeaderboard({ getCar, getGpId, goRace, notify, raceAgainst
     }
     if (myName === null) {
       showNameForm(pending === 'weekly' ? 'weeklyPanel' : pending === 'daily' ? 'dailyPanel' : 'boardOnline')
-      const message = pending === 'weekly' ? 'Signed in. Choose the name the board will show, and your car goes on the Weekly Challenge.' : pending === 'daily' ? 'Signed in. Choose the name the board will show, and your car goes on the Daily Challenge.' : 'Signed in. Choose the name the board will show, and your car goes on the board.'
+      const message = pending === 'weekly' ? 'Signed in. Choose your unique username to enter the Weekly Challenge.' : pending === 'daily' ? 'Signed in. Choose your unique username to enter the Daily Challenge.' : 'Signed in. Choose your unique username to enter the leaderboard.'
       const messageId = pending === 'weekly' ? 'weeklyMsg' : pending === 'daily' ? 'dailyMsg' : 'onlineMsg'
       $(messageId).textContent = message
       $(messageId).classList.remove('bad')
@@ -523,7 +531,7 @@ export function createLeaderboard({ getCar, getGpId, goRace, notify, raceAgainst
     $('hubDailyEnds').textContent = 'ends in ' + timeLeft(daily.endsAt - Date.now())
     $('hubDailyNow').textContent = daily.name + ' · ' + twistOf(daily) + (signed && dailyLeft !== undefined ? ' · ' + dailyLeft + (dailyLeft === 1 ? ' entry' : ' entries') + ' left' : '')
     const go = $<HTMLButtonElement>('dailyGo')
-    go.textContent = !signed ? 'Sign in with Google to enter' : myName === null ? 'Choose a board name to enter' : 'Enter your car'
+    go.textContent = !signed ? 'Sign in with Google to enter' : myName === null ? 'Choose a username to enter' : 'Enter your car'
     go.disabled = signed && dailyLeft === 0
   }
   async function refreshDaily() {
@@ -582,7 +590,7 @@ export function createLeaderboard({ getCar, getGpId, goRace, notify, raceAgainst
     if (myName === null) {
       store.set(PENDING_KEY, 'daily')
       showNameForm('dailyPanel')
-      return sayDaily('Choose the name the board will show, and your car goes into the Daily Challenge.')
+      return sayDaily('Choose your unique username, and your car goes into the Daily Challenge.')
     }
     enter('daily')
   })
@@ -610,7 +618,7 @@ export function createLeaderboard({ getCar, getGpId, goRace, notify, raceAgainst
     $('hubWeeklyEnds').textContent = 'ends in ' + timeLeft(weekly.endsAt - Date.now())
     $('hubWeeklyNow').textContent = weekly.name + ' · ' + (weekly.wet ? 'wet' : 'dry') + (weekly.night && weekly.ice ? ', night + ice' : weekly.night ? ', night' : weekly.ice ? ', ice' : '') + (signed && weeklyLeft !== undefined ? ' · ' + weeklyLeft + (weeklyLeft === 1 ? ' entry' : ' entries') + ' left' : '')
     const go = $<HTMLButtonElement>('weeklyGo')
-    go.textContent = !signed ? 'Sign in with Google to enter' : myName === null ? 'Choose a board name to enter' : 'Enter your car'
+    go.textContent = !signed ? 'Sign in with Google to enter' : myName === null ? 'Choose a username to enter' : 'Enter your car'
     go.disabled = signed && weeklyLeft === 0
   }
   async function refreshWeekly() {
@@ -671,7 +679,7 @@ export function createLeaderboard({ getCar, getGpId, goRace, notify, raceAgainst
     if (myName === null) {
       store.set(PENDING_KEY, 'weekly')
       showNameForm('weeklyPanel')
-      return sayWeekly('Choose the name the board will show, and your car goes into the Weekly Challenge.')
+      return sayWeekly('Choose your unique username, and your car goes into the Weekly Challenge.')
     }
     enter('weekly')
   })

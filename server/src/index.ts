@@ -4,6 +4,7 @@ import { carFromJson, carToJson } from '../../src/carFile'
 import { buildProblem, cleanBuild, type Build } from '../../src/setup'
 import { PRACTICE_COUNT } from '../../src/track'
 import { sign, verify } from './auth'
+import { normalizeProfileName, profileNameKey, profileNameProblem } from './profileName'
 import { GRAND_PRIXES, dailyGp, dayOf, dayStart, medalFor, raceCar, weekOf, weekStart, weeklyGp, type GrandPrix } from '../../src/race'
 
 export interface Env {
@@ -51,7 +52,7 @@ async function playerOf(req: Request, env: Env): Promise<{ id: string; display: 
 // The game sends the player here with where to come back to (ret) and a nonce it keeps. The provider asks them to
 // approve, then sends them back with a code; the Worker swaps it for who they are and returns them to the game
 // with a signed token in the part of the address after #, which never reaches any server.
-// Nothing from the provider is shown: players choose their own board name (see /me), because the board is public.
+// Nothing from the provider is shown: players choose their own unique profile username (see /me), because the board is public.
 type State = { ret: string; nonce: string; exp: number }
 const page = (text: string, status: number) => new Response(text, { status, headers: { 'Content-Type': 'text/plain; charset=utf-8' } })
 
@@ -177,11 +178,11 @@ async function submit(req: Request, env: Env): Promise<Response> {
     name = typeof body.name === 'string' && body.name.trim() ? body.name.trim().slice(0, 40) : 'Unnamed'
   }
 
-  // a signed-in player must have chosen a board name (a local dev-header player is named by the header)
+  // a signed-in player must have chosen a profile username (a local dev-header player is named by the header)
   let display = player.display
   if (!player.id.startsWith('dev:')) {
     const me = await env.DB.prepare('SELECT name FROM players WHERE id = ?').bind(player.id).first<{ name: string }>()
-    if (!me) return json(req, { error: 'Choose a board name first.', needName: true }, 409)
+    if (!me) return json(req, { error: 'Choose a profile username first.', needName: true }, 409)
     display = me.name
   }
   const day = new Date().toISOString().slice(0, 10)
@@ -389,7 +390,7 @@ async function rankOf(env: Env, gpId: string, playerId: string): Promise<number 
   return row && row.mine !== null ? row.ahead + 1 : null
 }
 
-// The signed-in player's board name (null until they choose one) and their place on each board
+// The signed-in player's unique profile username (null until they choose one) and their place on each board
 async function getMe(req: Request, env: Env): Promise<Response> {
   await ensureOfficial(env)
   const player = await playerOf(req, env)
@@ -424,7 +425,6 @@ async function getMe(req: Request, env: Env): Promise<Response> {
   return json(req, { name: me?.name ?? null, ranks, weekly, daily, jobs })
 }
 
-const NAME_RULE = /^[\p{L}\p{N}][\p{L}\p{N} _.-]{1,18}[\p{L}\p{N}]$/u // 3 to 20 characters: letters, numbers, and inside the name spaces . _ -
 async function setMe(req: Request, env: Env): Promise<Response> {
   const player = await playerOf(req, env)
   if (!player || player.id.startsWith('dev:')) return json(req, { error: 'Sign in first.' }, 401)
@@ -434,13 +434,15 @@ async function setMe(req: Request, env: Env): Promise<Response> {
   } catch {
     return json(req, { error: 'That is not valid JSON.' }, 400)
   }
-  const name = typeof body.name === 'string' ? body.name.trim().replace(/\s+/g, ' ') : ''
-  if (!NAME_RULE.test(name)) return json(req, { error: 'Use 3 to 20 letters, numbers, spaces, dots, dashes or underscores.' }, 400)
+  const name = typeof body.name === 'string' ? normalizeProfileName(body.name) : ''
+  const problem = profileNameProblem(name)
+  if (problem === 'format') return json(req, { error: 'Use 3 to 20 letters or numbers, with spaces, dots, dashes or underscores only between them.' }, 400)
+  if (problem === 'language') return json(req, { error: 'That username contains language that is not allowed. Choose another.' }, 400)
   try {
     await env.DB.prepare('INSERT INTO players (id, name, name_key, created_at) VALUES (?, ?, ?, ?) ON CONFLICT(id) DO UPDATE SET name = excluded.name, name_key = excluded.name_key')
-      .bind(player.id, name, name.toLowerCase(), Date.now()).run()
+      .bind(player.id, name, profileNameKey(name), Date.now()).run()
   } catch (e) {
-    if (String(e).includes('UNIQUE')) return json(req, { error: 'That name is taken. Try another.' }, 409)
+    if (String(e).includes('UNIQUE')) return json(req, { error: 'That username is taken. Try another.' }, 409)
     throw e
   }
   return json(req, { name })
