@@ -28,7 +28,7 @@ export function driverFor(build: Build): Drive {
 
 // start: an existing car to carry on training, instead of beginning from random brains. It also
 // competes in the final pick, so carrying on never hands back a car the judging scores worse.
-export function createTraining(build: Build, seed: number, budget = TRAINING_BUDGET, start?: number[]) {
+export function createTraining(build: Build, seed: number, budget = TRAINING_BUDGET, start?: number[], maxGenerations?: number) {
   const shape = brainShape(build)
   if (start && start.length !== genomeLength(shape)) throw new Error('That car was built for different sensors')
   const trackRng = makeRng(seed + 77777) // separate, so the tracks drawn do not change the evolution's own luck
@@ -43,13 +43,13 @@ export function createTraining(build: Build, seed: number, budget = TRAINING_BUD
   const advance = (report: GenerationReport): TrainingStep => {
     spent += report.steps
     generations++
-    return { report, spent: Math.min(spent, budget), finished: spent >= budget }
+    return { report, spent: Math.min(spent, budget), finished: spent >= budget || (maxGenerations !== undefined && generations >= maxGenerations) }
   }
   // The finalists, and the tracks they are judged on: the practice tracks and their mirrored and backwards versions
   const finalists = (population: number[][]) => (start ? [start, ...population.slice(0, FINALISTS - 1)] : population.slice(0, FINALISTS))
   const judgingTracks = () => layouts(practice.flatMap((t) => [t, ...trackVariants(t)]), FINAL_LAYOUTS)
   return {
-    // Run one generation. finished is true once the budget is spent.
+    // Run one generation. finished is true once the budget is spent or the optional cap is reached.
     step(): TrainingStep {
       return advance(evolution.step())
     },

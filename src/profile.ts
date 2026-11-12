@@ -128,44 +128,68 @@ export function renderProfile(root: HTMLElement, d: ProfileData) {
   // badges
   const bs = section('Badges', earned + ' of ' + list.length)
   const grid = h('div', 'badges')
-  for (const b of list) {
+  for (const b of list.filter((badge) => badge.got)) {
     const cell = h('div', 'badge' + (b.got ? ' got' : ''))
     cell.dataset.tip = b.hint // shown at once on hover, focus or tap (a title tooltip is slow and never shows on a phone)
     cell.tabIndex = 0
     cell.append(h('span', 'bi', b.got ? b.icon : '🔒'), h('b', '', b.name), h('small', '', b.got ? 'Earned' : b.hint))
     grid.append(cell)
   }
-  bs.append(grid)
+  if (earned) bs.append(grid)
+  else bs.append(h('div', 'psmall', 'No badges earned yet.'))
+  const locked = list.filter((badge) => !badge.got)
+  if (locked.length) {
+    const more = h('details', 'pdetail')
+    more.append(h('summary', '', 'Locked badges · ' + locked.length))
+    const lockedGrid = h('div', 'badges')
+    for (const b of locked) {
+      const cell = h('div', 'badge')
+      cell.dataset.tip = b.hint
+      cell.tabIndex = 0
+      cell.append(h('span', 'bi', '🔒'), h('b', '', b.name), h('small', '', b.hint))
+      lockedGrid.append(cell)
+    }
+    more.append(lockedGrid)
+    bs.append(more)
+  }
 
   // best race times
   const rs = section('Race records')
+  let raceRecords = 0
   for (const gp of GRAND_PRIXES) {
     const best = loadBest(gp)
+    if (!best) continue
+    raceRecords++
     const medal = best ? medalFor(best, gp) : null
     const fewest = loadFewest(gp.id)
     const row = h('div', 'prow')
     row.append(dot(medal), h('span', 'pl', gp.name))
-    const val = h('span', 'pv', best ? best.finished + '/' + RACE_COUNT + (best.finished === RACE_COUNT ? ' · ' + best.totalTime.toFixed(1) + ' s' : '') : 'not raced')
+    const val = h('span', 'pv', best.finished + '/' + RACE_COUNT + (best.finished === RACE_COUNT ? ' · ' + best.totalTime.toFixed(1) + ' s' : ''))
     row.append(val)
     rs.append(row)
     const sub = (['gold', 'silver', 'bronze'] as const).filter((m) => fewest[m] !== undefined).map((m) => m + ' in ' + fewest[m] + ' rounds').join(' · ')
-    if (best) rs.append(h('div', 'psmall', (best.name ? best.name + ' · ' : '') + (sub || 'No medal yet')))
+    rs.append(h('div', 'psmall', (best.name ? best.name + ' · ' : '') + (sub || 'No medal yet')))
   }
+  if (!raceRecords) rs.append(h('div', 'psmall', 'No race records yet.'))
 
   // track medals (car) and laps by hand
   const ts = section('Track records', 'car (dry) · you (dry)')
   const wet = false
+  let trackRecords = 0
   d.trackNames.forEach((name, id) => {
-    const row = h('div', 'prow')
     const car = bestOn(medals, id, wet)
     const hand = handBest(id, wet)
+    if (!car && hand === null) return
+    trackRecords++
+    const row = h('div', 'prow')
     row.append(dot(car?.medal), h('span', 'pl', name), h('span', 'pv', (car ? car.time.toFixed(1) + ' s' : '–') + '  ·  '))
     const mine = h('span', 'pv hand', hand !== null ? hand.toFixed(1) + ' s' : '–')
     row.lastElementChild!.append(dot(handMedal(id, wet)), mine)
     ts.append(row)
   })
   const wetCount = Object.keys(medals).filter((k) => k.endsWith(':wet')).length
-  ts.append(h('div', 'psmall', 'Medals on ' + Object.keys(medals).length + ' track and road combinations' + (wetCount ? ', ' + wetCount + ' of them wet' : '') + '.'))
+  if (trackRecords) ts.append(h('div', 'psmall', 'Medals on ' + Object.keys(medals).length + ' track and road combinations' + (wetCount ? ', ' + wetCount + ' of them wet' : '') + '.'))
+  else ts.append(h('div', 'psmall', 'No track records yet.'))
 
   // streak and perks
   const ps = section('Streak and perks', s.days ? s.days + (s.days === 1 ? ' day' : ' days') + ' in a row' : 'start one today')

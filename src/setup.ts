@@ -120,6 +120,7 @@ export const DEFAULT_BUILD: Build = {
 // The training budget is counted in simulated driving steps (60 per second of driving),
 // so a fast computer gives no advantage. More practice tracks spend it faster.
 export const TRAINING_BUDGET = 30_000_000 // about 75 s on one laptop thread and about 25 s on four, depending on the build; longer on a phone
+export const QUICK_GENERATION_LIMIT = 100
 export const KEEP_TRAINING_SHARE = 0.3 // carrying on from a car spends this share of the budget
 export const POPULATION = 100
 export const REPLAY_EVERY = 10 // while watching, every 10th generation is replayed on screen

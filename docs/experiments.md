@@ -17,6 +17,10 @@ Each result here was measured by a script in `scripts/`. Runs are small, so trea
 - The driving-style sliders did not hurt: fast and cautious averaged the same as the default.
 - More practice tracks looked best, but n = 3.
 
+## 12 Nov 2026: making driving-style rewards consequential
+
+The 4–6 Nov slider comparisons above used smaller fitness weights and found no reliable race-day advantage. The weights are now larger: top-speed reward can add 20 points, a crash at full safety costs 30, and steering changes at full smoothness cost 40 per unit of average change. This makes the selected training objective a real trade-off rather than a subtle nudge; it does not mean any setting is universally faster or safer. The new weights still need a multi-seed, full-budget race comparison before claiming a competitive advantage.
+
 ## 4 Nov 2026: where does the luck come from?
 
 `scripts/luckDiagnose.ts`, default build, on the new set of 8 distinct practice tracks. For each training seed, the 20 finalists the car is picked from were raced on the same 20 unseen tracks.

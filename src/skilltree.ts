@@ -9,9 +9,9 @@ const NS = 'http://www.w3.org/2000/svg'
 const CX = 290
 const CY = 306
 const BRANCHES: { name: Branch; angle: number; colour: string; blurb: string }[] = [
-  { name: 'Eyes', angle: -90, colour: '#3fd0ff', blurb: 'what the car sees' },
-  { name: 'Engine', angle: -30, colour: '#ffb31a', blurb: 'how it moves' },
-  { name: 'Tyres', angle: 30, colour: '#3ddc84', blurb: 'what it grips' },
+  { name: 'Eyes', angle: -90, colour: '#4b43e9', blurb: 'what the car sees' },
+  { name: 'Engine', angle: -30, colour: '#e5a83c', blurb: 'how it moves' },
+  { name: 'Tyres', angle: 30, colour: '#58d68d', blurb: 'what it grips' },
   { name: 'Body', angle: 90, colour: '#f4f6f8', blurb: 'what it can take' },
   { name: 'Brain', angle: 150, colour: '#b48cff', blurb: 'how it thinks' },
   { name: 'Practice', angle: 210, colour: '#ff7a9c', blurb: 'how it trains' },

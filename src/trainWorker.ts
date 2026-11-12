@@ -1,5 +1,5 @@
 // Runs training in the background so the page stays smooth.
-// Messages in:  { type: 'start', build, seed, watch }  begin a run
+// Messages in:  { type: 'start', build, seed, watch, maxGenerations? }  begin a run
 // Messages out: { type: 'progress', ... } after every generation, then { type: 'done', ... }
 // Training always runs at full speed. When the player is watching, every REPLAY_EVERY-th
 // generation also carries its cars, so the page can replay it while training carries on.
@@ -10,7 +10,7 @@ import { REPLAY_EVERY, TRAINING_BUDGET, type Build } from './setup'
 
 // start: an existing car to carry on from, and budget: how much to spend (both left out for a fresh run)
 // threads: how many threads to score cars on (left out: as many as the device has, up to MAX_THREADS)
-type Message = { type: 'start'; build: Build; seed: number; watch: boolean; start?: number[]; budget?: number; threads?: number }
+type Message = { type: 'start'; build: Build; seed: number; watch: boolean; start?: number[]; budget?: number; maxGenerations?: number; threads?: number }
 
 const worker = self as unknown as {
   postMessage(message: unknown): void
@@ -44,7 +44,7 @@ function finish(run: Run, genome: number[], spent: number) {
   worker.postMessage({ type: 'done', genome, generations: run.generations, spent })
 }
 
-// Run one generation on this thread and report it. Returns true when the budget is spent.
+// Run one generation on this thread and report it. Returns true when the budget or optional cap is reached.
 function runOne(run: Run, watch: boolean, budget: number): boolean {
   const step = run.step()
   report(step, watch, budget)
@@ -70,7 +70,7 @@ worker.onmessage = async (event) => {
   const m = event.data
   if (m.type !== 'start') return
   const budget = m.budget ?? TRAINING_BUDGET
-  const run = createTraining(m.build, m.seed, budget, m.start)
+  const run = createTraining(m.build, m.seed, budget, m.start, m.maxGenerations)
   const threads = m.threads ?? threadsHere()
   const pool = threads > 1 ? createPoolScorer(m.build, driverFor(m.build), threads - 1) : null
   if (!pool) {

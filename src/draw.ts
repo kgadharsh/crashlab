@@ -10,19 +10,19 @@ export const H = 500
 
 // Canvas colours (these match the CSS tokens in style.css)
 export const COL = {
-  ground: '#07090c',
-  road: '#1b2027',
-  roadWet: '#183a5c', // a wet road is clearly blue, with puddles and rain on top
-  wall: '#5b6573',
-  kerbA: '#e8ecf1',
-  kerbB: '#d83a34',
-  text: '#e8ecf1',
-  muted: '#8a94a3',
-  accent: '#ffb31a', // amber: your car, the lead car
-  tele: '#3fd0ff', // cyan: telemetry, rays
-  bad: '#ff4d4d',
-  good: '#3ddc84',
-  swarm: 'rgba(63,208,255,0.55)',
+  ground: '#040205',
+  road: '#282431',
+  roadWet: '#29245b', // wet asphalt shifts toward the violet support colour
+  wall: '#817c91',
+  kerbA: '#f5f2fa',
+  kerbB: '#e65f59',
+  text: '#f5f2fa',
+  muted: '#aaa5b7',
+  accent: '#e5a83c',
+  tele: '#4b43e9',
+  bad: '#ff6b66',
+  good: '#58d68d',
+  swarm: 'rgba(75,67,233,0.52)',
 }
 
 // ---------- TRACK SHAPES, BUILT ONCE PER TRACK ----------
@@ -257,7 +257,7 @@ export function drawMinimap(g: CanvasRenderingContext2D, track: Track, cam: Came
   const x0 = 12
   const y0 = H - MAP_H - 12
   g.save()
-  g.fillStyle = 'rgba(7,9,12,0.82)'
+  g.fillStyle = 'rgba(4,2,5,0.86)'
   g.fillRect(x0 - 6, y0 - 6, MAP_W + 12, MAP_H + 12)
   g.strokeStyle = 'rgba(255,255,255,0.12)'
   g.lineWidth = 1
@@ -369,7 +369,7 @@ export function drawCar(g: CanvasRenderingContext2D, c: { x: number; y: number; 
 export type Thought = { inputs: number[]; hidden: number[]; outputs: number[]; rays?: number } // rays: how many inputs are rays (the next is speed)
 export function drawBrain(g: CanvasRenderingContext2D, t: Thought, x: number, y: number, w: number, h: number) {
   g.save()
-  g.fillStyle = 'rgba(7,9,12,0.78)'
+  g.fillStyle = 'rgba(4,2,5,0.82)'
   g.fillRect(x, y, w, h)
   g.strokeStyle = COL.road
   g.lineWidth = 1
@@ -397,7 +397,7 @@ export function drawBrain(g: CanvasRenderingContext2D, t: Thought, x: number, y:
   const step = (bottom - top) / t.hidden.length
   t.hidden.forEach((a, i) => {
     const cy = top + step * (i + 0.5)
-    g.fillStyle = a >= 0 ? `rgba(255,179,26,${0.2 + 0.8 * Math.abs(a)})` : `rgba(63,208,255,${0.2 + 0.8 * Math.abs(a)})`
+    g.fillStyle = a >= 0 ? `rgba(229,168,60,${0.2 + 0.8 * Math.abs(a)})` : `rgba(75,67,233,${0.2 + 0.8 * Math.abs(a)})`
     g.beginPath()
     g.arc(cols[1] + colW / 2, cy, Math.min(7, step * 0.38), 0, Math.PI * 2)
     g.fill()
@@ -426,7 +426,7 @@ export function drawRays(g: CanvasRenderingContext2D, car: Car) {
     const x = car.x + Math.cos(car.angle + a) * d
     const y = car.y + Math.sin(car.angle + a) * d
     const near = d < car.spec.rayRange * 0.35
-    g.strokeStyle = near ? 'rgba(255,77,77,0.8)' : 'rgba(63,208,255,0.55)'
+    g.strokeStyle = near ? 'rgba(255,107,102,0.8)' : 'rgba(75,67,233,0.8)'
     g.lineWidth = 1.5
     g.beginPath()
     g.moveTo(car.x, car.y)
@@ -476,14 +476,14 @@ export function drawSensorFan(g: CanvasRenderingContext2D, car: Car, zoom: numbe
   const from = car.angle + rayAngles[0]
   const to = car.angle + rayAngles[n - 1]
   g.save()
-  g.fillStyle = 'rgba(63,208,255,0.07)'
+  g.fillStyle = 'rgba(75,67,233,0.15)'
   g.beginPath()
   g.moveTo(car.x, car.y)
   g.arc(car.x, car.y, rayRange, from, to)
   g.closePath()
   g.fill()
 
-  g.strokeStyle = 'rgba(63,208,255,0.4)'
+  g.strokeStyle = 'rgba(75,67,233,0.72)'
   g.lineWidth = px
   g.setLineDash([5 * px, 5 * px])
   for (const a of rayAngles) {

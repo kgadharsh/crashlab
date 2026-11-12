@@ -328,9 +328,9 @@ export function progressOf(car: Car): number {
 }
 
 // The score training uses: progress, adjusted by the player's driving style
-export const PACE_BONUS = 10 // checkpoints of bonus for driving at top speed the whole time
-export const CRASH_PENALTY = 15 // checkpoints lost for a crash at full safety
-export const JERK_PENALTY = 20 // checkpoints lost per unit of average steering change, at full smoothness
+export const PACE_BONUS = 20 // maximum fitness points for average speed at the car's top speed
+export const CRASH_PENALTY = 30 // fitness points lost for a crash at full safety
+export const JERK_PENALTY = 40 // fitness points lost per unit of average steering change at full smoothness
 export function fitnessOf(car: Car, reward: Reward): number {
   const steps = Math.max(car.steps, 1)
   const avgSpeed = Math.max(0, car.speedSum / steps)

@@ -1,7 +1,7 @@
 import './style.css'
 import { GOLD_TIME, GRAND_PRIXES, RACE_COUNT, medalFor, raceCar, type GrandPrix } from './race'
 import { SHORT_PREFIX, carFromChallenge, carFromShort, challengeCode, shortCode } from './challenge'
-import { DEFAULT_BUILD, CHASSIS, KEEP_TRAINING_SHARE, LIMITS, POPULATION, REPLAY_EVERY, TRAINING_BUDGET, buildProblem, cleanBuild, genomeLength, brainShape, specOf, levelOf, maxPractice, maxRays, maxSpread, rivalOf, pointsUsed, POINT_BUDGET, type Build, type Parts } from './setup'
+import { DEFAULT_BUILD, CHASSIS, KEEP_TRAINING_SHARE, LIMITS, POPULATION, QUICK_GENERATION_LIMIT, REPLAY_EVERY, TRAINING_BUDGET, buildProblem, cleanBuild, genomeLength, brainShape, specOf, levelOf, maxPractice, maxRays, maxSpread, rivalOf, pointsUsed, POINT_BUDGET, type Build, type Parts } from './setup'
 import { CHECKPOINTS, NITRO_STEPS, STALL_STEPS, createCar, drive, getInputs, step, type Brain, type Car } from './sim'
 import { think } from './brain'
 import { PRACTICE, PRACTICE_COUNT, practiceOnRoad, practiceTrack, trackFeatures, trackStats, type Track } from './track'
@@ -109,7 +109,7 @@ function hours(steps: number) {
 // ---------- PAGE ----------
 document.querySelector('#app')!.innerHTML = `
 <header class="top">
-  <div class="brand"><svg class="logo" viewBox="-1 -1 34 34" aria-hidden="true"><rect x="-1" y="-1" width="34" height="34" rx="8" fill="#ffb31a"/><path d="M28 16 15 10.5 4.5 12.5v7L15 21.5z" fill="#181204"/><ellipse cx="14" cy="16" rx="3.4" ry="1.9" fill="#ffb31a"/></svg><span class="word">CRASH<b>LAB</b></span></div>
+  <div class="brand"><svg class="logo" viewBox="-1 -1 34 34" aria-hidden="true"><rect x="-1" y="-1" width="34" height="34" rx="8" fill="var(--accent)"/><path d="M28 16 15 10.5 4.5 12.5v7L15 21.5z" fill="var(--accent-ink)"/><ellipse cx="14" cy="16" rx="3.4" ry="1.9" fill="var(--accent)"/></svg><span class="word">CRASH<b>LAB</b></span></div>
   <nav class="tabs" role="tablist">
     <button class="tab" data-tab="garage" role="tab"><span class="tnum">1</span>Garage</button>
     <button class="tab" data-tab="skills" role="tab"><span class="tnum">2</span>Skill tree</button>
@@ -117,7 +117,7 @@ document.querySelector('#app')!.innerHTML = `
     <button class="tab" data-tab="race" role="tab"><span class="tnum">4</span>Race</button>
     <button class="tab profile" data-tab="profile" role="tab"><span class="pico" aria-hidden="true">☻</span>Profile</button>
   </nav>
-  <button type="button" class="btn small primary hot" id="topChallenge" disabled title="Train a car first, then dare a friend to beat it">⚔ Challenge a friend</button>
+  <button type="button" class="btn small primary hot" id="topChallenge" title="Train a car first, then dare a friend to beat it">⚔ Challenge a friend</button>
   <div class="chip" id="chip"></div>
   <button type="button" class="btn small shelfbtn" id="shelfBtn" aria-haspopup="dialog" aria-expanded="false" aria-controls="shelfPop" title="Cars you have saved: switch back to any of them">My cars</button>
   <div class="shelfpop" id="shelfPop" role="dialog" aria-label="My cars" hidden>
@@ -142,8 +142,7 @@ document.querySelector('#app')!.innerHTML = `
     <div id="garage" class="side">
       <div class="panel">
         <h2>Your job</h2>
-        <p class="tip" style="margin-top:0">Build a car, train its brain on practice tracks, then race it on ${RACE_COUNT} tracks it has never seen. Gold: all ${RACE_COUNT} in under ${GOLD_TIME} s.</p>
-        <p class="tip">Not sure where to start? The setup below is a fair starting point, not a winner: when the game trains it for the leaderboard, the same way it trains everyone's, it does not finish every track. Change one thing at a time in the next steps to see what it does. A car you have not touched is a car anyone can build.</p>
+        <p class="tip" style="margin-top:0">Build a car, train it on practice tracks, then race ${RACE_COUNT} new tracks. Gold means finishing all ${RACE_COUNT} in under ${GOLD_TIME} s. Start with the setup below; change one thing at a time to see what helps.</p>
       </div>
       <div class="panel name">
         <label for="name" class="namelabel">Your car's name <span>tap the name to change it</span></label>
@@ -179,7 +178,7 @@ document.querySelector('#app')!.innerHTML = `
         <label class="row"><span>Reward speed</span><input type="range" id="pace" min="0" max="100" step="5" /><output id="paceOut"></output></label>
         <label class="row"><span>Punish crashes</span><input type="range" id="safety" min="0" max="100" step="5" /><output id="safetyOut"></output></label>
         <label class="row"><span>Punish jerky steering</span><input type="range" id="smooth" min="0" max="100" step="5" /><output id="smoothOut"></output></label>
-        <p class="tip">Training always rewards getting round the track. These sliders add extras. Reward speed pushes the car to go faster and take more risks. Punish crashes makes it drive more carefully. Punish jerky steering makes it steer smoothly. In our tests the sliders did not clearly help or hurt, so zero is a fine start.</p>
+        <p class="tip">These change which cars training keeps: speed adds up to 20 points, a crash can cost 30, and steering changes can cost up to 40. They trade off pace, survival and smoothness; none is a guaranteed faster build.</p>
       </div>
       <div class="panel">
         <h2><span class="n">04</span>Practice tracks<span class="aside" id="pickCount"></span></h2>
@@ -207,9 +206,10 @@ document.querySelector('#app')!.innerHTML = `
         <h2>Training<span class="aside" id="trainState">ready</span></h2>
         <div class="budget"><div class="bar"><i id="budgetBar" style="width:0%"></i></div>
           <div class="legend"><span id="budgetUsed"></span><span id="budgetGen"></span></div></div>
-        <p class="tip">Every training run gets the same amount of practice, shared by all ${POPULATION} cars and all your practice tracks. It is counted in simulated driving, not seconds, so a faster device gets no advantage. More practice tracks use it up faster, so you get fewer rounds. Nothing carries over between runs: every new run starts with a full amount, so you can train as often as you like. Keep training uses ${Math.round(KEEP_TRAINING_SHARE * 100)}% of a full run. In numbers, a full run is ${hours(TRAINING_BUDGET)} hours of simulated driving, which the game plays through in about a minute.</p>
+        <p class="tip">Every training run gets the same amount of practice, shared by all ${POPULATION} cars and all your practice tracks. It is counted in simulated driving, not seconds, so a faster device gets no advantage. More practice tracks use it up faster, so you get fewer rounds. Round counts are estimates, not caps: short crashes can mean more rounds. Phones take longer, but device speed does not change the count. Nothing carries over between runs: every new run starts with a full amount, so you can train as often as you like. Keep training uses ${Math.round(KEEP_TRAINING_SHARE * 100)}% of a full run. In numbers, a full run is ${hours(TRAINING_BUDGET)} hours of simulated driving, which the game plays through in about a minute on a laptop (longer on a phone).</p>
         <div class="actions">
           <button class="btn primary" id="train">Start training</button>
+          <button class="btn" id="quickTrain">Quick run · ${QUICK_GENERATION_LIMIT} rounds</button>
           <button class="btn" id="keep">Keep training</button>
           <button class="btn" id="shelveQuick">Save to shelf</button>
           <button class="btn" id="swapQuick" hidden>Back to previous car</button>
@@ -219,7 +219,7 @@ document.querySelector('#app')!.innerHTML = `
         <label class="row" style="grid-template-columns:auto 1fr;margin-top:10px"><input type="checkbox" id="watchAll" checked /><span>Replay every ${REPLAY_EVERY}th round</span></label>
         <label class="row" style="grid-template-columns:auto 1fr"><input type="checkbox" id="bestOnly" /><span>Show only the best car (lighter on phones)</span></label>
         <label class="row" style="grid-template-columns:auto 1fr"><span>Watch on</span><select id="watchTrack" aria-label="Practice track to watch"></select></label>
-        <p class="tip">Training goes in rounds. In each round, ${POPULATION} cars drive all your practice tracks, with the blocks moved each time. The best 10 carry over unchanged and the rest are children of good cars, with small random changes. The screen shows one track.</p>
+        <p class="tip">Each round breeds ${POPULATION} cars from the strongest drivers. The replay shows one practice track.</p>
         <p class="msg" id="trainMsg"></p>
         <p class="tip" id="trainTip" hidden></p>
       </div>
@@ -252,8 +252,8 @@ document.querySelector('#app')!.innerHTML = `
         <div class="actions"><button class="btn primary hot" id="shareCar">⚔ Challenge a friend</button></div>
         <p class="tip" style="margin-top:4px">Copies a link. Your friend opens it, races your car on the same secret tracks, and tries to beat it.</p>
         <select id="driveTrack" aria-label="Track to watch the car on" hidden></select>
-        <div class="actions"><button class="btn small" id="testDrive">Watch it drive</button><button class="btn small" id="swapCar" hidden>Switch to previous car</button></div>
-        <p class="tip" style="margin-top:4px">To watch it on a particular track, tap that track on the Track board.</p>
+        <div class="actions" id="testDriveActions"><button class="btn small" id="testDrive">Watch it drive</button><button class="btn small" id="swapCar" hidden>Switch to previous car</button></div>
+        <p class="tip" id="testDriveTip" style="margin-top:4px">To watch a particular lap, tap its track on the Track board.</p>
         <details class="more">
           <summary>More: save, load, playtest notes</summary>
           <div class="actions">
@@ -469,7 +469,6 @@ function setTab(t: Tab) {
   tab = t
   if (t === 'race') hideNudge()
   if (t === 'garage') renderLooks()
-  if (t === 'skills') renderParts()
   if (t === 'profile') showProfile()
   document.querySelectorAll<HTMLButtonElement>('.tab[data-tab]').forEach((btn) => {
     btn.classList.toggle('on', btn.dataset.tab === t)
@@ -482,6 +481,7 @@ function setTab(t: Tab) {
   $('profile').hidden = t !== 'profile'
   $('practice').hidden = t !== 'practice'
   $('race').hidden = t !== 'race'
+  if (t === 'skills') renderParts()
   $('graphBox').hidden = t !== 'practice'
   strip.hidden = t === 'garage' // everything in it is already in the Garage's panels
   if (t !== 'practice') {
@@ -713,7 +713,7 @@ function renderChip() {
 // ---------- TRAINING ----------
 type History = { best: number; mean: number }[] // laps driven in one practice attempt: the best car, and the average car
 type Finish = { genome: number[]; generations: number }
-type Run = { build: Build; name: string; history: History; watching: boolean; judging: boolean; finish: Finish | null; spent: number; budget: number; keep: boolean; startedAt: number; awayAtStart: number; tipStart: number; secs?: number }
+type Run = { build: Build; name: string; history: History; watching: boolean; judging: boolean; finish: Finish | null; spent: number; budget: number; keep: boolean; quick: boolean; maxGenerations?: number; startedAt: number; awayAtStart: number; tipStart: number; secs?: number }
 
 // How long the page has been hidden in all (a phone asleep, another tab in front), so a training's time
 // counts only the time it ran on screen. Without this a run left while the phone slept reads as an hour.
@@ -750,7 +750,7 @@ const currentTip = (r: Run) => TIPS[(r.tipStart + Math.floor((performance.now() 
 
 let worker: Worker | null = null
 let run: Run | null = null
-let lastRun: { spent: number; generations: number; budget: number } | null = null // what the finished run used, for the budget panel
+let lastRun: { spent: number; generations: number; budget: number; quick: boolean } | null = null // what the finished run used, for the budget panel
 
 type Swarm = { gen: number; genomes: number[][]; bestSteps: number; trackId: number; track: Track; cars: Car[]; brains: Brain[]; done: boolean[]; hold: number; trails: { x: number; y: number }[][]; lead: number; speed: number; owed: number; frames: number; plays: number; rush: number }
 let swarm: Swarm | null = null
@@ -778,7 +778,7 @@ function stopTraining(text: string) {
 
 function finishTraining(f: Finish) {
   const r = run!
-  lastRun = { spent: r.spent, generations: f.generations, budget: r.budget }
+  lastRun = { spent: r.spent, generations: f.generations, budget: r.budget, quick: r.quick }
   logEvent({ k: 'train', secs: r.secs ?? runSeconds(r), generations: f.generations, keep: r.keep, wet: r.build.weather === 'wet', rays: r.build.sensors.count, practice: r.build.practice.length })
   if (car) rememberPrevious(car) // the car this run replaces, in case the new one is worse
   // the generations the brain has had in all: carrying on adds to the car's count (unknown if the old car's was)
@@ -806,18 +806,19 @@ function finishTraining(f: Finish) {
 const canKeepTraining = () => !!car && genomeLength(brainShape(b)) === car.genome.length
 
 // keep: carry on from your car with a share of the budget, instead of starting from random brains
-function startTraining(keep: boolean) {
+function startTraining(keep: boolean, quick = false) {
   if (worker) return
   if (keep && !canKeepTraining()) return
   hideNudge()
   stopTestDrive()
   const watch = input('watchAll').checked
   const budget = keep ? TRAINING_BUDGET * KEEP_TRAINING_SHARE : TRAINING_BUDGET
-  run = { build: clone(b), name: draft.name, history: [], watching: watch, judging: false, finish: null, spent: 0, budget, keep, startedAt: performance.now(), awayAtStart: hiddenNow(), tipStart: Math.floor(Math.random() * TIPS.length) }
+  const maxGenerations = quick ? QUICK_GENERATION_LIMIT : undefined
+  run = { build: clone(b), name: draft.name, history: [], watching: watch, judging: false, finish: null, spent: 0, budget, keep, quick, maxGenerations, startedAt: performance.now(), awayAtStart: hiddenNow(), tipStart: Math.floor(Math.random() * TIPS.length) }
   ghostCurve = lastCurves[refKey(run.build)] ?? null
   drawGraph([])
   const pace = watch ? 'Every ' + REPLAY_EVERY + 'th round is replayed here.' : ''
-  trainMsg(keep ? 'Carrying on from your car at full speed. ' + pace : watch ? 'Training at full speed. ' + pace : 'Training at full speed...')
+  trainMsg(quick ? 'Quick run: up to ' + QUICK_GENERATION_LIMIT + ' rounds. ' + pace : keep ? 'Carrying on from your car at full speed. ' + pace : watch ? 'Training at full speed. ' + pace : 'Training at full speed...')
   worker = new Worker(new URL('./trainWorker.ts', import.meta.url), { type: 'module' })
   worker.onmessage = (event: MessageEvent) => {
     const m = event.data
@@ -849,7 +850,7 @@ function startTraining(keep: boolean) {
     }
   }
   worker.onerror = () => stopTraining('Training failed. Try again.')
-  worker.postMessage({ type: 'start', build: run.build, seed: Math.floor(Math.random() * 1e9), watch, budget, start: keep ? car!.genome : undefined })
+  worker.postMessage({ type: 'start', build: run.build, seed: Math.floor(Math.random() * 1e9), watch, budget, maxGenerations, start: keep ? car!.genome : undefined })
   renderPractice()
 }
 
@@ -857,6 +858,7 @@ $('train').addEventListener('click', () => {
   if (worker) stopTraining('Training stopped. Your car from before is unchanged.')
   else startTraining(false)
 })
+$('quickTrain').addEventListener('click', () => startTraining(false, true))
 $('keep').addEventListener('click', () => startTraining(true))
 
 // Swap back to the car before the latest run (and again, to go forward: the two cars trade places)
@@ -1408,11 +1410,20 @@ function renderBoard() {
   const done = laps.filter((l): l is Lap => !!l)
   const finished = done.filter((l) => l.time !== null).length
   $('boardCount').textContent = !car ? '' : done.length < PRACTICE_COUNT ? 'driving laps…' : finished + ' of ' + PRACTICE_COUNT + ' finished'
-  const rebuild = boardShown !== boardVersion || !car !== !$('board').querySelector('.brow:not(:disabled)')
+  $('boardNext').hidden = !car
+  $('boardStars').hidden = !car
+  const rebuild = boardShown !== boardVersion || !!car !== !!$('board').querySelector('.brow')
   boardShown = boardVersion
   if (rebuild) paintRows()
   paintNotes()
   function paintRows() {
+  if (!car) {
+    const empty = document.createElement('p')
+    empty.className = 'board-empty'
+    empty.textContent = 'No track results yet. Train a car to see its laps here.'
+    $('board').replaceChildren(empty)
+    return
+  }
   const head = document.createElement('div')
   head.className = 'bhead'
   head.append(...['TRACK', 'THIS CAR', 'BEST'].map((t) => Object.assign(document.createElement('span'), { textContent: t })))
@@ -1616,14 +1627,15 @@ function renderPractice() {
   const spent = run?.spent ?? lastRun?.spent ?? 0
   const total = run?.budget ?? lastRun?.budget ?? TRAINING_BUDGET
   $('budgetBar').style.width = (100 * spent) / total + '%'
-  $('budgetUsed').textContent = Math.round((100 * spent) / total) + '% of ' + (run ? (run.keep ? 'this short run' : 'a full run') : lastRun ? 'that run' : 'a full run')
+  $('budgetUsed').textContent = Math.round((100 * spent) / total) + '% of ' + (run ? (run.quick ? 'the full budget · quick run' : run.keep ? 'this short run' : 'a full run') : lastRun ? (lastRun.quick ? 'the full budget · quick run' : 'that run') : 'a full run')
   $('budgetGen').textContent = run
-    ? 'round ' + run.history.length
+    ? 'round ' + run.history.length + (run.quick ? ' / ' + QUICK_GENERATION_LIMIT : '')
     : lastRun
-      ? lastRun.generations + ' rounds · done'
+      ? lastRun.generations + ' rounds · ' + (lastRun.quick ? 'quick run done' : 'done')
       : 'about ' + estGenerations(b) + ' rounds for a full run, ' + Math.max(1, Math.round(estGenerations(b) * KEEP_TRAINING_SHARE)) + ' for Keep training'
   $('trainState').textContent = training ? (run?.watching ? 'watching' : 'training') : 'ready'
   $('train').textContent = training ? 'Stop' : car ? 'Train a new car' : 'Start training'
+  $('quickTrain').hidden = training
   $('skip').hidden = !(training && run?.watching)
   $<HTMLButtonElement>('keep').disabled = training || !canKeepTraining()
   $('keepHint').textContent = !car
@@ -1665,10 +1677,11 @@ function renderPractice() {
       ? car.name + ' was trained with a different setup. Train again to use the new one.'
       : car.name + ' is trained and ready' + (car.runs ? ', from ' + car.runs + (car.runs === 1 ? ' training run.' : ' training runs (Keep training adds one each time).') : '.')
   $<HTMLButtonElement>('testDrive').disabled = !car || training
+  $('testDriveActions').hidden = !car
+  $('testDriveTip').hidden = !car
   $('testDrive').textContent = test ? 'Stop watching' : 'Watch it drive'
   $<HTMLButtonElement>('saveCar').disabled = !car
   $<HTMLButtonElement>('shareCar').disabled = !car
-  $<HTMLButtonElement>('topChallenge').disabled = !car
   $('topChallenge').title = car ? 'Copy a link that lets a friend race ' + car.name + ' and try to beat it' : 'Train a car first, then dare a friend to beat it'
   $('handGo').textContent = hand ? 'Stop driving' : 'Take the wheel'
   renderHandBoard()
@@ -1855,7 +1868,7 @@ function draw() {
       drawTrack(ctx, sw.track)
       sw.trails.forEach((trail, i) => {
         if (trail.length < 2) return
-        ctx.strokeStyle = i === sw.lead ? 'rgba(255,179,26,0.7)' : 'rgba(63,208,255,0.16)'
+        ctx.strokeStyle = i === sw.lead ? 'rgba(229,168,60,0.88)' : 'rgba(75,67,233,0.3)'
         ctx.lineWidth = i === sw.lead ? 3 : 2
         ctx.beginPath()
         ctx.moveTo(trail[0].x, trail[0].y)
@@ -2058,7 +2071,16 @@ const ASKS = 'crashlab.dareAsks'
 const asked = () => Number(localStorage.getItem(ASKS)) || 0
 const dareDialog = $<HTMLDialogElement>('dareDialog')
 function showDare(kind: 'trained' | 'entered' | 'asked') {
-  if (!car || dareDialog.open) return
+  if (dareDialog.open) return
+  if (!car) {
+    $('dareTitle').textContent = 'Train a car first'
+    $('dareText').textContent = 'Once your car is trained, you can challenge a friend to race it.'
+    $('dareMsg').textContent = ''
+    $('dareGo').textContent = 'Go to Practice'
+    $('dareLink').hidden = true
+    dareDialog.showModal()
+    return
+  }
   if (kind !== 'asked' && (counts().shares > 0 || asked() >= 3)) return
   if (kind !== 'asked') try {
     localStorage.setItem(ASKS, String(asked() + 1))
@@ -2080,6 +2102,11 @@ function showDare(kind: 'trained' | 'entered' | 'asked') {
 $('dareNo').addEventListener('click', () => dareDialog.close())
 $('topChallenge').addEventListener('click', () => showDare('asked')) // always in the top bar, so the option is never hidden
 $('dareGo').addEventListener('click', async () => {
+  if (!car) {
+    dareDialog.close()
+    setTab('practice')
+    return
+  }
   await shareCar((text) => ($('dareMsg').textContent = text), $<HTMLInputElement>('dareLink'), true)
   if (!$('dareLink').hidden) return // it could not copy: the link is shown to copy by hand
   $('dareGo').textContent = 'Copied ✓'

@@ -52,7 +52,7 @@ const bestKey = (gp: GrandPrix) => 'crashlab.best.' + gp.id // the first Grand P
 const GP_KEY = 'crashlab.gp'
 const SPEEDS = [1, 4, 16]
 const HOLD = 90 // 1.5 seconds on each finished lap
-const MEDAL_COLOUR: Record<Exclude<Medal, null>, string> = { gold: '#ffcc33', silver: '#c7ced8', bronze: '#cd8a4f' }
+const MEDAL_COLOUR: Record<Exclude<Medal, null>, string> = { gold: '#e5a83c', silver: '#c7ced8', bronze: '#cd8a4f' }
 
 export function loadBest(gp: GrandPrix): Best | null {
   try {
@@ -449,7 +449,7 @@ export function createRaceView(d: RaceDeps) {
     if (r.summary) {
       // the whole race is over: the result on top of the last track
       const medal = medalFor(r.summary, r.gp)
-      ctx.fillStyle = 'rgba(7,9,12,0.72)'
+      ctx.fillStyle = 'rgba(4,2,5,0.78)'
       ctx.fillRect(0, 0, W, H)
       hudText(medal ? medal.toUpperCase() : headline(r.summary, r.gp), W / 2, H / 2 - 16, 64, medal ? MEDAL_COLOUR[medal] : isSecretGp(r.gp) ? COL.text : COL.muted, 'center')
       hudText(r.summary.finished + ' / ' + RACE_COUNT + ' FINISHED  ·  ' + r.summary.totalTime.toFixed(1) + ' S', W / 2, H / 2 + 22, 22, COL.text, 'center')

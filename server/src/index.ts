@@ -5,6 +5,7 @@ import { buildProblem, cleanBuild, type Build } from '../../src/setup'
 import { PRACTICE_COUNT } from '../../src/track'
 import { sign, verify } from './auth'
 import { normalizeProfileName, profileNameKey, profileNameProblem } from './profileName'
+import { withSecurityHeaders } from './securityHeaders'
 import { GRAND_PRIXES, dailyGp, dayOf, dayStart, medalFor, raceCar, weekOf, weekStart, weeklyGp, type GrandPrix } from '../../src/race'
 
 export interface Env {
@@ -491,27 +492,31 @@ async function loadChallenge(req: Request, env: Env, code: string): Promise<Resp
   return row ? json(req, { car: row.car }) : json(req, { error: 'That challenge link is not known.' }, 404)
 }
 
+const handleRequest = async (req: Request, env: Env): Promise<Response> => {
+  if (req.method === 'OPTIONS') return new Response(null, { status: 204, headers: { ...cors(req), 'Access-Control-Allow-Methods': 'GET, POST, PUT' } })
+  const url = new URL(req.url)
+  const m = url.pathname.match(/^\/entries\/(\d+)$/)
+  const auth = url.pathname.match(/^\/auth\/(google)(\/callback)?$/)
+  const ch = url.pathname.match(/^\/challenges\/([A-Za-z0-9_-]+)$/)
+  if (req.method === 'GET' && auth) return auth[2] ? finishSignIn(auth[1], url, env) : startSignIn(auth[1], url, env)
+  if (req.method === 'POST' && url.pathname === '/challenges') return saveChallenge(req, env)
+  if (req.method === 'GET' && ch) return CODE.test(ch[1]) ? loadChallenge(req, env, ch[1]) : json(req, { error: 'That challenge link is damaged.' }, 400)
+  if (req.method === 'POST' && url.pathname === '/entries') return submit(req, env)
+  if (req.method === 'GET' && url.pathname === '/jobs/next') return nextJobs(req, env, Math.min(20, Math.max(1, Number(url.searchParams.get('limit')) || 5)))
+  if (req.method === 'POST' && url.pathname === '/jobs/migrate') return migrate(req, env)
+  const jm = url.pathname.match(/^\/jobs\/(\d+)$/)
+  if (req.method === 'POST' && jm) return finishJob(req, env, Number(jm[1]))
+  if (req.method === 'GET' && url.pathname === '/board') return board(req, env, url.searchParams.get('gp') ?? 'gp1')
+  if (req.method === 'GET' && url.pathname === '/weekly') return weeklyInfo(req, env)
+  if (req.method === 'GET' && url.pathname === '/daily') return dailyInfo(req, env)
+  if (url.pathname === '/me' && req.method === 'GET') return getMe(req, env)
+  if (url.pathname === '/me' && req.method === 'PUT') return setMe(req, env)
+  if (req.method === 'GET' && m) return entry(req, env, Number(m[1]))
+  return json(req, { error: 'Not found.' }, 404)
+}
+
 export default {
   async fetch(req: Request, env: Env): Promise<Response> {
-    if (req.method === 'OPTIONS') return new Response(null, { status: 204, headers: { ...cors(req), 'Access-Control-Allow-Methods': 'GET, POST, PUT' } })
-    const url = new URL(req.url)
-    const m = url.pathname.match(/^\/entries\/(\d+)$/)
-    const auth = url.pathname.match(/^\/auth\/(google)(\/callback)?$/)
-    const ch = url.pathname.match(/^\/challenges\/([A-Za-z0-9_-]+)$/)
-    if (req.method === 'GET' && auth) return auth[2] ? finishSignIn(auth[1], url, env) : startSignIn(auth[1], url, env)
-    if (req.method === 'POST' && url.pathname === '/challenges') return saveChallenge(req, env)
-    if (req.method === 'GET' && ch) return CODE.test(ch[1]) ? loadChallenge(req, env, ch[1]) : json(req, { error: 'That challenge link is damaged.' }, 400)
-    if (req.method === 'POST' && url.pathname === '/entries') return submit(req, env)
-    if (req.method === 'GET' && url.pathname === '/jobs/next') return nextJobs(req, env, Math.min(20, Math.max(1, Number(url.searchParams.get('limit')) || 5)))
-    if (req.method === 'POST' && url.pathname === '/jobs/migrate') return migrate(req, env)
-    const jm = url.pathname.match(/^\/jobs\/(\d+)$/)
-    if (req.method === 'POST' && jm) return finishJob(req, env, Number(jm[1]))
-    if (req.method === 'GET' && url.pathname === '/board') return board(req, env, url.searchParams.get('gp') ?? 'gp1')
-    if (req.method === 'GET' && url.pathname === '/weekly') return weeklyInfo(req, env)
-    if (req.method === 'GET' && url.pathname === '/daily') return dailyInfo(req, env)
-    if (url.pathname === '/me' && req.method === 'GET') return getMe(req, env)
-    if (url.pathname === '/me' && req.method === 'PUT') return setMe(req, env)
-    if (req.method === 'GET' && m) return entry(req, env, Number(m[1]))
-    return json(req, { error: 'Not found.' }, 404)
+    return withSecurityHeaders(await handleRequest(req, env))
   },
 }
