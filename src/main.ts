@@ -207,7 +207,6 @@ document.querySelector('#app')!.innerHTML = `
         <h2>Training<span class="aside" id="trainState">ready</span></h2>
         <div class="budget"><div class="bar"><i id="budgetBar" style="width:0%"></i></div>
           <div class="legend"><span id="budgetUsed"></span><span id="budgetGen"></span></div></div>
-        <p class="tip">Every training run gets the same amount of practice, shared by all ${POPULATION} cars and all your practice tracks. It is counted in simulated driving, not seconds, so a faster device gets no advantage. More practice tracks use it up faster, so you get fewer rounds. Nothing carries over between runs: every new run starts with a full amount, so you can train as often as you like. Keep training uses ${Math.round(KEEP_TRAINING_SHARE * 100)}% of a full run. In numbers, a full run is ${hours(TRAINING_BUDGET)} hours of simulated driving, which the game plays through in about a minute.</p>
         <div class="actions">
           <button class="btn primary" id="train">Start training</button>
           <button class="btn" id="keep">Keep training</button>
@@ -215,13 +214,17 @@ document.querySelector('#app')!.innerHTML = `
           <button class="btn" id="swapQuick" hidden>Back to previous car</button>
           <button class="btn" id="skip" hidden>Skip to the end</button>
         </div>
+        <p class="msg" id="trainMsg"></p>
+        <p class="tip" id="trainTip" hidden></p>
         <p class="tip" id="keepHint" style="margin-top:8px"></p>
         <label class="row" style="grid-template-columns:auto 1fr;margin-top:10px"><input type="checkbox" id="watchAll" checked /><span>Replay every ${REPLAY_EVERY}th round</span></label>
         <label class="row" style="grid-template-columns:auto 1fr"><input type="checkbox" id="bestOnly" /><span>Show only the best car (lighter on phones)</span></label>
         <label class="row" style="grid-template-columns:auto 1fr"><span>Watch on</span><select id="watchTrack" aria-label="Practice track to watch"></select></label>
-        <p class="tip">Training goes in rounds. In each round, ${POPULATION} cars drive all your practice tracks, with the blocks moved each time. The best 10 carry over unchanged and the rest are children of good cars, with small random changes. The screen shows one track.</p>
-        <p class="msg" id="trainMsg"></p>
-        <p class="tip" id="trainTip" hidden></p>
+        <details class="more">
+          <summary>How training works</summary>
+          <p class="tip">Training goes in rounds. In each round, ${POPULATION} cars drive all your practice tracks, with the blocks moved each time. The best 10 carry over unchanged and the rest are children of good cars, with small random changes. The screen shows one track.</p>
+          <p class="tip">Every training run gets the same amount of practice, shared by all ${POPULATION} cars and all your practice tracks. It is counted in simulated driving, not seconds, so a faster device gets no advantage. More practice tracks use it up faster, so you get fewer rounds. Nothing carries over between runs: every new run starts with a full amount, so you can train as often as you like. Keep training uses ${Math.round(KEEP_TRAINING_SHARE * 100)}% of a full run. In numbers, a full run is ${hours(TRAINING_BUDGET)} hours of simulated driving, which the game plays through in about a minute.</p>
+        </details>
       </div>
       <div class="panel" id="boardPanel">
         <h2>Track board<span class="aside" id="boardCount"></span></h2>
@@ -465,8 +468,17 @@ const cameFrom = (() => {
   }
 })()
 let tab: Tab = cameFrom ?? 'garage'
+// On a narrow window the track is pinned under the top bar while a training run goes on, so the cars stay in sight
+const PINS_TRACK = window.matchMedia('(max-width: 960px) and (min-height: 600px)') // the same condition as the stylesheet's
+const REDUCED_MOTION = window.matchMedia('(prefers-reduced-motion: reduce)')
+// the top bar wraps to a different height at each width, and the pinned track sits right under it
+const setTopHeight = () => document.documentElement.style.setProperty('--top-h', Math.round(document.querySelector('.top')!.getBoundingClientRect().height) + 'px')
+setTopHeight()
+new ResizeObserver(setTopHeight).observe(document.querySelector('.top')!)
+const syncTrainView = () => document.body.classList.toggle('trainview', !!worker && tab === 'practice')
 function setTab(t: Tab) {
   tab = t
+  syncTrainView()
   if (t === 'race') hideNudge()
   if (t === 'garage') renderLooks()
   if (t === 'skills') renderParts()
@@ -811,6 +823,8 @@ function startTraining(keep: boolean) {
   if (keep && !canKeepTraining()) return
   hideNudge()
   stopTestDrive()
+  // a narrow window stacks the track above the panels: bring it back into view, where it is then held while the run lasts
+  if (PINS_TRACK.matches) window.scrollTo({ top: 0, behavior: REDUCED_MOTION.matches ? 'auto' : 'smooth' })
   const watch = input('watchAll').checked
   const budget = keep ? TRAINING_BUDGET * KEEP_TRAINING_SHARE : TRAINING_BUDGET
   run = { build: clone(b), name: draft.name, history: [], watching: watch, judging: false, finish: null, spent: 0, budget, keep, startedAt: performance.now(), awayAtStart: hiddenNow(), tipStart: Math.floor(Math.random() * TIPS.length) }
@@ -1613,6 +1627,7 @@ function renderPractice() {
   renderWatchOptions()
   if (!run && !lastRun) drawGraph([]) // idle (before anything has run this visit): the last run and your record for the chosen practice tracks
   const training = !!worker
+  syncTrainView()
   const spent = run?.spent ?? lastRun?.spent ?? 0
   const total = run?.budget ?? lastRun?.budget ?? TRAINING_BUDGET
   $('budgetBar').style.width = (100 * spent) / total + '%'

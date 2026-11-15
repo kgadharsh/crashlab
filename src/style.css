@@ -730,3 +730,30 @@ body { padding-bottom: 44px; }
 .spHead span { font: 500 12px var(--mono); letter-spacing: 0; text-transform: none; color: var(--muted); }
 .spNow { font-size: 13px; color: var(--muted); padding-bottom: 8px; border-bottom: 1px solid var(--line); }
 .shelfpop p:empty { display: none; }
+
+/* ---------- TRAINING ON A NARROW SCREEN ---------- */
+/* the explanation is folded away, so its summary has to be a full-size thing to press */
+#practice .more summary { display: flex; align-items: center; min-height: 44px; }
+#practice .more .tip:first-of-type { margin-top: 0; }
+@media (max-width: 960px) {
+  /* the button that starts a run is the widest, tallest thing in the panel */
+  #practice .panel[data-fixed] .actions .btn { min-height: 44px; flex: 1 1 auto; }
+  #practice .panel[data-fixed] #train { flex-basis: 100%; min-height: 48px; font-size: 16px; }
+  #practice .panel[data-fixed] label.row { min-height: 44px; margin: 0; }
+  #practice .panel[data-fixed] select { min-height: 44px; }
+}
+/* While a run goes on, the track is held under the top bar and the panels scroll beneath it. Not on a short
+   window (a phone on its side), where the track would leave no room for anything else. */
+@media (max-width: 960px) and (min-height: 600px) {
+  body.trainview .view {
+    position: sticky;
+    top: var(--top-h, 0px);
+    z-index: 4;
+    margin: -12px -16px 0;
+    padding: 12px 16px 10px;
+    background: var(--bg);
+    border-bottom: 1px solid var(--line);
+  }
+  /* the round and the budget are on the track screen and in the panel below, so the four counters give up their room */
+  body.trainview .strip { display: none; }
+}
