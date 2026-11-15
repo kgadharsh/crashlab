@@ -132,9 +132,11 @@ document.querySelector('#app')!.innerHTML = `
   </div>
 </header>
 <main class="layout">
+  <nav class="pitlane" id="pitlane" aria-label="The five settings of your car, then the way to Practice"></nav>
   <section class="view">
     <div class="screen">
       <canvas id="track" width="${W}" height="${H}" role="img" aria-label="The track, seen from above, with the car driving on it"></canvas>
+      <div class="gantry" id="gantry" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i></div>
     </div>
     <div class="strip" id="strip"></div>
     <div class="graph" id="graphBox"><p id="graphStatus"></p><canvas id="graph" width="240" height="44" aria-hidden="true"></canvas></div>
@@ -147,7 +149,7 @@ document.querySelector('#app')!.innerHTML = `
         <button class="btn primary wide" id="firstTrain">Train this car</button>
         <button class="textbtn" id="firstTune">Tune it first</button>
       </div>
-      <div class="panel" id="jobPanel">
+      <div class="panel" id="jobPanel" data-fixed>
         <h2>Your job</h2>
         <p class="tip" style="margin-top:0">Build a car, train its brain on practice tracks, then race it on ${RACE_COUNT} tracks it has never seen. Gold: all ${RACE_COUNT} in under ${GOLD_TIME} s.</p>
         <details class="more">
@@ -160,7 +162,7 @@ document.querySelector('#app')!.innerHTML = `
         <div class="namebox"><input id="name" maxlength="24" aria-label="Car name (you can change it)" placeholder="Name your car" spellcheck="false" /><span class="pencil" aria-hidden="true">✎</span></div>
       </div>
       <div class="panel">
-        <h2>Car design<span class="aside" id="starCount"></span></h2>
+        <h2><span class="n">1</span>Car design<span class="aside" id="starCount"></span></h2>
         <div class="looks" id="looks"></div>
         <p class="tip" id="lookTip"></p>
         <div class="paints" id="paints"></div>
@@ -170,7 +172,7 @@ document.querySelector('#app')!.innerHTML = `
         <p class="tip" id="streakLine"></p>
       </div>
       <div class="panel">
-        <h2><span class="n">01</span>Sensors<span class="aside" id="weights"></span></h2>
+        <h2><span class="n">2</span>Sensors<span class="aside" id="weights"></span></h2>
         <label class="row"><span>Eyes (rays)</span><input type="range" id="count" min="${LIMITS.count[0]}" max="${LIMITS.count[1]}" step="1" /><output id="countOut"></output></label>
         <label class="row"><span>View width</span><input type="range" id="spread" min="${LIMITS.spread[0]}" max="${LIMITS.spread[1]}" step="5" /><output id="spreadOut"></output></label>
         <p class="tip" style="margin-top:0">More rays see more, but take more rounds to train. A wider view sees bends sooner.</p>
@@ -180,7 +182,7 @@ document.querySelector('#app')!.innerHTML = `
         </details>
       </div>
       <div class="panel">
-        <h2><span class="n">02</span>Car setup</h2>
+        <h2><span class="n">3</span>Car setup</h2>
         <label class="row trade"><span>Grip</span><input type="range" id="balance" min="0" max="100" step="5" aria-label="Grip or top speed" /><span>Speed</span></label>
         <div class="stats">
           <div class="stat">Top speed<div class="bar amber"><i id="speedBar"></i></div><b id="speedOut"></b></div>
@@ -193,7 +195,7 @@ document.querySelector('#app')!.innerHTML = `
         </details>
       </div>
       <div class="panel">
-        <h2><span class="n">03</span>What to reward</h2>
+        <h2><span class="n">4</span>What to reward</h2>
         <label class="row"><span>Reward speed</span><input type="range" id="pace" min="0" max="100" step="5" /><output id="paceOut"></output></label>
         <label class="row"><span>Punish crashes</span><input type="range" id="safety" min="0" max="100" step="5" /><output id="safetyOut"></output></label>
         <label class="row"><span>Punish jerky steering</span><input type="range" id="smooth" min="0" max="100" step="5" /><output id="smoothOut"></output></label>
@@ -204,7 +206,7 @@ document.querySelector('#app')!.innerHTML = `
         </details>
       </div>
       <div class="panel">
-        <h2><span class="n">04</span>Practice tracks<span class="aside" id="pickCount"></span></h2>
+        <h2><span class="n">5</span>Practice tracks<span class="aside" id="pickCount"></span></h2>
         <div class="roads" role="group" aria-label="Road the practice tracks are driven on"><button type="button" class="road" data-road="dry" aria-pressed="true"><i aria-hidden="true">☀</i><b>Dry road</b><small>Grand Prix 1</small></button><button type="button" class="road wetroad" data-road="wet" aria-pressed="false"><i aria-hidden="true">🌧</i><b>Wet road</b><small>Grand Prix 2: tyres lose grip sooner</small></button></div>
         <select id="weather" aria-label="Road the practice tracks are driven on" hidden><option value="dry">Dry</option><option value="wet">Wet</option></select>
         <div class="actions" style="margin-top:2px"><label class="check"><input type="checkbox" id="condNight" /> Night</label><label class="check"><input type="checkbox" id="condIce" /> Ice patches</label></div>
@@ -544,6 +546,7 @@ new ResizeObserver(setTopHeight).observe(document.querySelector('.top')!)
 const syncTrainView = () => document.body.classList.toggle('trainview', !!worker && tab === 'practice')
 function setTab(t: Tab) {
   tab = t
+  document.body.dataset.tab = t // the stylesheet shows the pit lane and the start lights by tab
   syncTrainView()
   if (t === 'race') hideNudge()
   if (t === 'garage') renderLooks()
@@ -764,6 +767,7 @@ function renderGarage() {
   })
   renderParts()
   renderChassis()
+  renderPit()
   trackGrid.querySelectorAll<HTMLButtonElement>('.track').forEach((btn) => {
     const id = Number(btn.dataset.id)
     const on = b.practice.includes(id)
@@ -772,6 +776,46 @@ function renderGarage() {
     btn.querySelector('.tt')!.textContent = trackTags(id)
   })
 }
+
+// ---------- THE PIT LANE ----------
+// On a wide screen the Garage's five settings also run across the page as pit boxes, each showing what it is set
+// to, and the lane ends at the pit exit, which leads to Practice. A box opens its panel in the column beside it.
+const PIT_BOXES: { name: string; holds: string; value: () => string }[] = [
+  { name: 'Car design', holds: 'looks', value: () => LOOKS[look].name },
+  { name: 'Sensors', holds: 'count', value: () => b.sensors.count + ' rays · ' + b.sensors.spread + '°' },
+  { name: 'Car setup', holds: 'balance', value: () => 'Top speed ' + kmh(specOf(b).maxSpeed) },
+  { name: 'What to reward', holds: 'pace', value: () => (b.reward.pace || b.reward.safety || b.reward.smooth ? 'Speed ' + pct(b.reward.pace) + ' · care ' + pct(b.reward.safety) : 'No extras') },
+  { name: 'Practice tracks', holds: 'tracks', value: () => b.practice.length + ' picked · ' + (b.weather === 'wet' ? 'wet' : 'dry') },
+]
+const pitButtons = PIT_BOXES.map((box, i) => {
+  const btn = Object.assign(document.createElement('button'), { type: 'button', className: 'pitbox' })
+  btn.innerHTML = '<i aria-hidden="true">' + (i + 1) + '</i><b></b><small></small>'
+  btn.querySelector('b')!.textContent = box.name
+  btn.addEventListener('click', () => {
+    const panel = $(box.holds).closest<HTMLElement>('.panel')!
+    reveal($(box.holds))
+    renderPit()
+    panel.scrollIntoView({ behavior: REDUCED_MOTION.matches ? 'auto' : 'smooth', block: 'nearest' })
+  })
+  return btn
+})
+const pitExit = Object.assign(document.createElement('button'), { type: 'button', className: 'pitbox pitexit' })
+pitExit.innerHTML = '<svg viewBox="0 0 44 30" fill="none" stroke="currentColor" stroke-width="6" aria-hidden="true"><path d="M2 15h36M26 4l12 11-12 11"/></svg><b>Pit exit</b><small></small>'
+// with no car yet the pit exit starts the first training, as the first-visit button does; after that it leads to Practice
+pitExit.addEventListener('click', () => (car ? document.querySelector<HTMLButtonElement>('.tab[data-tab="practice"]')!.click() : $('firstTrain').click()))
+$('pitlane').append(...pitButtons, pitExit)
+function renderPit() {
+  PIT_BOXES.forEach((box, i) => {
+    const open = !$(box.holds).closest('.panel')!.classList.contains('folded')
+    pitButtons[i].classList.toggle('on', open)
+    pitButtons[i].setAttribute('aria-pressed', String(open))
+    pitButtons[i].querySelector('small')!.textContent = box.value()
+  })
+  pitExit.querySelector('small')!.textContent = car ? 'To Practice' : 'Train this car'
+}
+// a box's panel can also be opened or folded from the column itself
+$('garage').addEventListener('click', () => requestAnimationFrame(renderPit))
+$('garage').addEventListener('keyup', () => requestAnimationFrame(renderPit))
 
 function changed() {
   save(KEYS.draft, draft)
@@ -1882,7 +1926,7 @@ function parked(): Car {
 }
 
 function hudText(text: string, x: number, y: number, size: number, colour: string = COL.text, align: CanvasTextAlign = 'left') {
-  ctx.font = '700 ' + size + 'px "Barlow Condensed", sans-serif'
+  ctx.font = '700 ' + size + 'px "Archivo Narrow", sans-serif'
   ctx.textAlign = align
   ctx.textBaseline = 'alphabetic'
   ctx.fillStyle = colour
@@ -1900,7 +1944,7 @@ function setStrip(cells: [string, string][]) {
 
 // Centred text that wraps onto more lines to fit a width
 function hudWrap(text: string, x: number, y: number, width: number, size: number, colour: string, lineHeight: number) {
-  ctx.font = '700 ' + size + 'px "Barlow Condensed", sans-serif'
+  ctx.font = '700 ' + size + 'px "Archivo Narrow", sans-serif'
   ctx.textAlign = 'center'
   ctx.textBaseline = 'alphabetic'
   ctx.fillStyle = colour
@@ -1979,7 +2023,7 @@ function draw() {
       drawTrack(ctx, sw.track)
       sw.trails.forEach((trail, i) => {
         if (trail.length < 2) return
-        ctx.strokeStyle = i === sw.lead ? 'rgba(255,179,26,0.7)' : 'rgba(63,208,255,0.16)'
+        ctx.strokeStyle = i === sw.lead ? 'rgba(255,210,31,0.7)' : 'rgba(111,176,255,0.16)'
         ctx.lineWidth = i === sw.lead ? 3 : 2
         ctx.beginPath()
         ctx.moveTo(trail[0].x, trail[0].y)

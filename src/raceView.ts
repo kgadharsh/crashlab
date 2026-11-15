@@ -43,6 +43,7 @@ type Live = {
   newBest: boolean
   ghost: Ghost | null // a friend's car from a challenge link, driving the same track beside yours
   wait: number // steps spent waiting at the end of a track for the ghost to finish
+  lights: number // steps left in the start lights: they come on one at a time, then go out and the race starts
   watching: boolean // no car of your own: the friend's car is the one racing, and nothing is recorded
 }
 type Ghost = { car: CarFile; brain: Brain; spec: CarSpec; lap: Car; done: boolean }
@@ -177,6 +178,17 @@ export function createRaceView(d: RaceDeps) {
     return { car: rival, brain: genomeToBrain(rival.genome, brainShape(rival.build)), spec, lap: createCar(track, spec), done: false }
   }
 
+  // The start lights over the race screen: off while nothing is racing, one more lit every fifth of a second,
+  // all five held for a moment, then out. Once the race is under way they are put away.
+  const LIGHTS = 78 // steps of the page clock: five lights at 12 steps each, then a hold
+  const REDUCED = window.matchMedia('(prefers-reduced-motion: reduce)')
+  function showLights(r: Live | null) {
+    const gantry = $('gantry')
+    gantry.hidden = !!r && r.lights <= 0
+    const lit = r && r.lights > 0 ? Math.min(5, Math.floor((LIGHTS - r.lights) / 12) + 1) : 0
+    ;[...gantry.children].forEach((lamp, i) => lamp.classList.toggle('lit', i < lit))
+  }
+
   function start() {
     const own = d.getCar()
     const rival = rivalCar()
@@ -197,6 +209,7 @@ export function createRaceView(d: RaceDeps) {
       newBest: false,
       ghost: own && rival ? makeGhost(rival, gpTrack(gp(), 0)) : null,
       wait: 0,
+      lights: REDUCED.matches ? 0 : LIGHTS,
       watching: !own,
     }
     follow(d.cam, live.lap, true)
@@ -241,6 +254,7 @@ export function createRaceView(d: RaceDeps) {
   function skip() {
     const r = live
     if (!r || r.summary) return
+    r.lights = 0
     if (r.results.length === r.index) {
       while (!lapIsOver(r.lap)) drive(r.lap, r.brain)
       r.results.push(finishLap(r.lap))
@@ -258,6 +272,11 @@ export function createRaceView(d: RaceDeps) {
   function tick() {
     const r = live
     if (!r || r.summary) return
+    if (r.lights > 0) {
+      r.lights--
+      showLights(r)
+      return
+    }
     const stepGhost = () => {
       const g = r.ghost
       if (!g || g.done) return
@@ -284,6 +303,7 @@ export function createRaceView(d: RaceDeps) {
 
   // ---------- THE SIDE PANEL ----------
   function render() {
+    showLights(live)
     const car = d.getCar()
     const racing = !!live && !live.summary
     const rival = rivalCar()

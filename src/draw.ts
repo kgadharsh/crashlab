@@ -8,21 +8,22 @@ import { BLOCK_HALF, CHECKPOINT_STRIDE, HALF_WIDTH, NIGHT_RANGE, WORLD, type Tra
 export const W = 800 // the screen
 export const H = 500
 
-// Canvas colours (these match the CSS tokens in style.css)
+// Canvas colours: everything on the track screen is drawn on asphalt, so these are the light-on-dark
+// versions of the tokens in style.css
 export const COL = {
-  ground: '#07090c',
-  road: '#1b2027',
-  roadWet: '#183a5c', // a wet road is clearly blue, with puddles and rain on top
-  wall: '#5b6573',
-  kerbA: '#e8ecf1',
-  kerbB: '#d83a34',
-  text: '#e8ecf1',
-  muted: '#8a94a3',
-  accent: '#ffb31a', // amber: your car, the lead car
-  tele: '#3fd0ff', // cyan: telemetry, rays
-  bad: '#ff4d4d',
-  good: '#3ddc84',
-  swarm: 'rgba(63,208,255,0.55)',
+  ground: '#1d2023', // the run-off: dark tarmac
+  road: '#34383c', // the road: worn asphalt, with a painted white edge
+  roadWet: '#27425e', // a wet road is clearly blue, with puddles and rain on top
+  wall: '#eef0ed',
+  kerbA: '#ffffff',
+  kerbB: '#d8261c',
+  text: '#ffffff',
+  muted: '#b9bec2',
+  accent: '#ffd21f', // flag yellow: your car, the lead car
+  tele: '#6fb0ff', // flag blue: telemetry, other cars
+  bad: '#ff5a4f',
+  good: '#3bd47d',
+  swarm: 'rgba(111,176,255,0.55)',
 }
 
 // ---------- TRACK SHAPES, BUILT ONCE PER TRACK ----------
@@ -90,7 +91,7 @@ export function drawTrack(g: CanvasRenderingContext2D, track: Track, detail = tr
     if (detail) drawRain(g)
   }
   if (detail) {
-    g.strokeStyle = 'rgba(255,255,255,0.08)'
+    g.strokeStyle = 'rgba(255,255,255,0.2)'
     g.lineWidth = 2
     g.setLineDash([16, 20])
     g.stroke(s.dashes)
@@ -113,9 +114,9 @@ export function drawTrack(g: CanvasRenderingContext2D, track: Track, detail = tr
     g.lineCap = 'butt'
   }
   g.strokeStyle = COL.wall
-  g.lineWidth = 2
+  g.lineWidth = 3
   g.stroke(s.edges)
-  g.lineWidth = 6
+  g.lineWidth = 8
   g.strokeStyle = COL.kerbA
   g.stroke(s.kerbA)
   g.strokeStyle = COL.kerbB
@@ -257,7 +258,7 @@ export function drawMinimap(g: CanvasRenderingContext2D, track: Track, cam: Came
   const x0 = 12
   const y0 = H - MAP_H - 12
   g.save()
-  g.fillStyle = 'rgba(7,9,12,0.82)'
+  g.fillStyle = 'rgba(16,18,20,0.86)'
   g.fillRect(x0 - 6, y0 - 6, MAP_W + 12, MAP_H + 12)
   g.strokeStyle = 'rgba(255,255,255,0.12)'
   g.lineWidth = 1
@@ -291,7 +292,18 @@ export function drawMinimap(g: CanvasRenderingContext2D, track: Track, cam: Came
 export function drawCar(g: CanvasRenderingContext2D, c: { x: number; y: number; angle: number }, length: number, width: number, body: string, look = 0) {
   const L = length / 2
   const Wd = width / 2
-  const tyre = Math.max(2, width * 0.2)
+  const tyre = Math.max(2, width * 0.24)
+  if (width >= 18) {
+    // a soft shadow, always falling the same way whichever way the car points (not for the small cars of a swarm)
+    g.save()
+    g.translate(c.x + width * 0.1, c.y + width * 0.16)
+    g.rotate(c.angle)
+    g.fillStyle = 'rgba(0,0,0,0.32)'
+    g.beginPath()
+    g.ellipse(0, 0, L * 1.04, Wd * 1.08, 0, 0, Math.PI * 2)
+    g.fill()
+    g.restore()
+  }
   g.save()
   g.translate(c.x, c.y)
   g.rotate(c.angle)
@@ -302,10 +314,10 @@ export function drawCar(g: CanvasRenderingContext2D, c: { x: number; y: number; 
     g.fill()
   }
   const wheels = (front: number, back: number, spread: number) => {
-    g.fillStyle = '#020304'
+    g.fillStyle = '#0c0d0e'
     for (const x of [L * front, L * back]) {
-      g.fillRect(x, -Wd * spread, L * 0.42, tyre)
-      g.fillRect(x, Wd * spread - tyre, L * 0.42, tyre)
+      g.fillRect(x, -Wd * spread - tyre * 0.15, L * 0.42, tyre)
+      g.fillRect(x, Wd * spread - tyre * 0.85, L * 0.42, tyre)
     }
   }
   const cockpit = (x: number, rx: number, ry: number) => {
@@ -313,6 +325,16 @@ export function drawCar(g: CanvasRenderingContext2D, c: { x: number; y: number; 
     g.beginPath()
     g.ellipse(L * x, 0, L * rx, Wd * ry, 0, 0, Math.PI * 2)
     g.fill()
+    // the driver's helmet
+    g.fillStyle = '#f4f6f8'
+    g.beginPath()
+    g.arc(L * (x - rx * 0.15), 0, Wd * ry * 0.5, 0, Math.PI * 2)
+    g.fill()
+  }
+  // a darker stripe down the middle of the body, from behind the nose to the tail
+  const stripe = (from: number, to: number) => {
+    g.fillStyle = 'rgba(0,0,0,0.24)'
+    g.fillRect(L * from, -Wd * 0.09, L * (to - from), Wd * 0.18)
   }
   if (look === 1) {
     // Arrow: a long pointed nose and a wide rear wing
@@ -321,6 +343,7 @@ export function drawCar(g: CanvasRenderingContext2D, c: { x: number; y: number; 
     g.fillRect(L * 0.62, -Wd * 0.9, L * 0.14, Wd * 1.8)
     g.fillRect(-L, -Wd * 1.05, L * 0.2, Wd * 2.1)
     poly([[1.1, 0], [0.1, -0.3], [-0.2, -0.55], [-0.85, -0.45], [-0.85, 0.45], [-0.2, 0.55], [0.1, 0.3]])
+    stripe(-0.85, 0.7)
     cockpit(-0.12, 0.22, 0.26)
   } else if (look === 2) {
     // Wedge: a flat triangle with side pods
@@ -340,6 +363,7 @@ export function drawCar(g: CanvasRenderingContext2D, c: { x: number; y: number; 
     g.fillRect(L * 0.82, -Wd * 1.1, L * 0.14, Wd * 2.2)
     g.fillRect(-L * 1.05, -Wd * 1, L * 0.18, Wd * 2)
     poly([[1.05, 0], [0.4, -0.2], [-0.95, -0.28], [-0.95, 0.28], [0.4, 0.2]])
+    stripe(-0.95, 0.7)
     cockpit(-0.05, 0.2, 0.2)
   } else if (look === 4) {
     // Hyper: wide and aggressive, with twin tail fins and a pale stripe
@@ -359,6 +383,7 @@ export function drawCar(g: CanvasRenderingContext2D, c: { x: number; y: number; 
     g.fillRect(L * 0.72, -Wd * 0.8, L * 0.16, Wd * 1.6)
     g.fillRect(-L, -Wd * 0.85, L * 0.2, Wd * 1.7)
     poly([[1, 0], [0.2, -0.34], [-0.1, -0.72], [-0.85, -0.5], [-0.85, 0.5], [-0.1, 0.72], [0.2, 0.34]])
+    stripe(-0.85, 0.68)
     cockpit(-0.12, 0.24, 0.3)
   }
   g.restore()
@@ -369,12 +394,12 @@ export function drawCar(g: CanvasRenderingContext2D, c: { x: number; y: number; 
 export type Thought = { inputs: number[]; hidden: number[]; outputs: number[]; rays?: number } // rays: how many inputs are rays (the next is speed)
 export function drawBrain(g: CanvasRenderingContext2D, t: Thought, x: number, y: number, w: number, h: number) {
   g.save()
-  g.fillStyle = 'rgba(7,9,12,0.78)'
+  g.fillStyle = 'rgba(16,18,20,0.84)'
   g.fillRect(x, y, w, h)
   g.strokeStyle = COL.road
   g.lineWidth = 1
   g.strokeRect(x + 0.5, y + 0.5, w - 1, h - 1)
-  g.font = '700 11px "Barlow Condensed", sans-serif'
+  g.font = '700 11px "Archivo Narrow", sans-serif'
   g.textBaseline = 'alphabetic'
   g.fillStyle = COL.muted
   const colW = (w - 24) / 3
@@ -397,7 +422,7 @@ export function drawBrain(g: CanvasRenderingContext2D, t: Thought, x: number, y:
   const step = (bottom - top) / t.hidden.length
   t.hidden.forEach((a, i) => {
     const cy = top + step * (i + 0.5)
-    g.fillStyle = a >= 0 ? `rgba(255,179,26,${0.2 + 0.8 * Math.abs(a)})` : `rgba(63,208,255,${0.2 + 0.8 * Math.abs(a)})`
+    g.fillStyle = a >= 0 ? `rgba(255,210,31,${0.2 + 0.8 * Math.abs(a)})` : `rgba(111,176,255,${0.2 + 0.8 * Math.abs(a)})`
     g.beginPath()
     g.arc(cols[1] + colW / 2, cy, Math.min(7, step * 0.38), 0, Math.PI * 2)
     g.fill()
@@ -426,15 +451,15 @@ export function drawRays(g: CanvasRenderingContext2D, car: Car) {
     const x = car.x + Math.cos(car.angle + a) * d
     const y = car.y + Math.sin(car.angle + a) * d
     const near = d < car.spec.rayRange * 0.35
-    g.strokeStyle = near ? 'rgba(255,77,77,0.8)' : 'rgba(63,208,255,0.55)'
+    g.strokeStyle = near ? 'rgba(255,90,79,0.9)' : 'rgba(255,255,255,0.7)'
     g.lineWidth = 1.5
     g.beginPath()
     g.moveTo(car.x, car.y)
     g.lineTo(x, y)
     g.stroke()
-    g.fillStyle = near ? COL.bad : COL.tele
+    g.fillStyle = near ? COL.bad : COL.accent
     g.beginPath()
-    g.arc(x, y, 3, 0, Math.PI * 2)
+    g.arc(x, y, 3.5, 0, Math.PI * 2)
     g.fill()
   })
 }
@@ -476,14 +501,14 @@ export function drawSensorFan(g: CanvasRenderingContext2D, car: Car, zoom: numbe
   const from = car.angle + rayAngles[0]
   const to = car.angle + rayAngles[n - 1]
   g.save()
-  g.fillStyle = 'rgba(63,208,255,0.07)'
+  g.fillStyle = 'rgba(255,210,31,0.1)'
   g.beginPath()
   g.moveTo(car.x, car.y)
   g.arc(car.x, car.y, rayRange, from, to)
   g.closePath()
   g.fill()
 
-  g.strokeStyle = 'rgba(63,208,255,0.4)'
+  g.strokeStyle = 'rgba(255,255,255,0.35)'
   g.lineWidth = px
   g.setLineDash([5 * px, 5 * px])
   for (const a of rayAngles) {
@@ -501,7 +526,7 @@ export function drawSensorFan(g: CanvasRenderingContext2D, car: Car, zoom: numbe
   g.beginPath()
   g.arc(car.x, car.y, arcR, from, to)
   g.stroke()
-  g.font = '700 ' + 15 * px + 'px "Barlow Condensed", sans-serif'
+  g.font = '700 ' + 15 * px + 'px "Archivo Narrow", sans-serif'
   g.textAlign = 'center'
   g.textBaseline = 'middle'
   const spread = Math.round(((rayAngles[n - 1] - rayAngles[0]) * 180) / Math.PI) + '°'
@@ -513,7 +538,7 @@ export function drawSensorFan(g: CanvasRenderingContext2D, car: Car, zoom: numbe
   g.fillText(spread, cx, cy)
 
   // every ray's angle if they are far enough apart to read, otherwise just the outer rays and the middle one
-  g.font = '700 ' + 13 * px + 'px "Barlow Condensed", sans-serif'
+  g.font = '700 ' + 13 * px + 'px "Archivo Narrow", sans-serif'
   g.fillStyle = COL.muted
   const apart = n < 2 || rayRange * Math.abs(rayAngles[1] - rayAngles[0]) * zoom >= 46
   rayAngles.forEach((a, i) => {
@@ -541,14 +566,14 @@ export function drawCrash(g: CanvasRenderingContext2D, x: number, y: number) {
 // A small picture of a whole track for the practice-track picker
 export function drawThumb(canvas: HTMLCanvasElement, track: Track) {
   const g = canvas.getContext('2d')!
-  g.fillStyle = COL.ground
+  g.fillStyle = '#25282b'
   g.fillRect(0, 0, canvas.width, canvas.height)
   g.save()
   const k = Math.min(canvas.width / WORLD.w, canvas.height / WORLD.h)
   g.translate((canvas.width - WORLD.w * k) / 2, (canvas.height - WORLD.h * k) / 2)
   g.scale(k, k)
   // at this size the road would be a hairline, so it is drawn as one thick bright line
-  g.strokeStyle = '#7d8796'
+  g.strokeStyle = COL.wall
   g.lineWidth = 2 * HALF_WIDTH * 1.6
   g.lineJoin = 'round'
   g.stroke(shapesOf(track).dashes)
