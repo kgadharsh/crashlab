@@ -445,21 +445,35 @@ function showNudge(carName: string) {
   more.className = 'more'
   more.textContent = ' Race it on ' + RACE_COUNT + ' tracks it has never seen.'
   $('nudgeText').replaceChildren(carName + ' is trained.', more)
+  $('nudgeGo').hidden = false
+  raceNudgeUp = true
   nudge.hidden = false
   document.body.classList.add('has-nudge') // keeps the bar from covering the last panel
 }
 // The same bar can carry other news, such as players who passed you on the board while you were away
+// While the bar is telling the player to race a new car, other news waits: one thing at a time. It is shown
+// once the bar is closed or the next race has a result.
+let raceNudgeUp = false
+let waitingNotice: string | null = null
 function showNotice(text: string) {
+  if (raceNudgeUp) {
+    waitingNotice = text
+    return
+  }
+  waitingNotice = null
   $('nudgeText').replaceChildren(text)
+  $('nudgeGo').hidden = true // news has no race to send the player to
   nudge.hidden = false
   document.body.classList.add('has-nudge')
 }
-function hideNudge() {
+function hideNudge(showWaiting = false) {
   nudge.hidden = true
+  raceNudgeUp = false
   document.body.classList.remove('has-nudge')
+  if (showWaiting && waitingNotice) showNotice(waitingNotice)
 }
 $('nudgeGo').addEventListener('click', () => setTab('race'))
-$('nudgeClose').addEventListener('click', hideNudge)
+$('nudgeClose').addEventListener('click', () => hideNudge(true))
 
 // ---------- TABS ----------
 type Tab = 'garage' | 'skills' | 'practice' | 'race' | 'profile'
@@ -845,7 +859,6 @@ function finishTraining(f: Finish) {
   raceView?.render()
   if (here) startTestDrive()
   if (tab !== 'race') showNudge(car.name)
-  showDare('trained')
 }
 
 // Keep training carries on from the car you have, so its brain must be the same size as the garage's
@@ -2096,7 +2109,11 @@ const leaderboard = createLeaderboard({
 })
 raceView = createRaceView({ onResult: (gpId, r) => {
   leaderboard.showResult(gpId, r)
-  if (r) announceParts()
+  if (!r) return
+  if (waitingNotice) showNotice(waitingNotice)
+  announceParts()
+  // a finished race is something to show off: ask then, once the player has had a moment with the result
+  if (r.finished > 0) setTimeout(() => tab === 'race' && showDare('raced', r), 2500)
 },  ctx, cam, getCar: () => car, isStale: carIsStale, getChallenge: () => challenge, getLook: () => look, goTo: setTab, hudText, setStrip })
 
 
@@ -2106,7 +2123,7 @@ raceView = createRaceView({ onResult: (gpId, r) => {
 const ASKS = 'crashlab.dareAsks'
 const asked = () => Number(localStorage.getItem(ASKS)) || 0
 const dareDialog = $<HTMLDialogElement>('dareDialog')
-function showDare(kind: 'trained' | 'entered' | 'asked') {
+function showDare(kind: 'raced' | 'entered' | 'asked', result?: { finished: number; totalTime: number }) {
   if (!car || dareDialog.open) return
   if (kind !== 'asked' && (counts().shares > 0 || asked() >= 3)) return
   if (kind !== 'asked') try {
@@ -2114,12 +2131,12 @@ function showDare(kind: 'trained' | 'entered' | 'asked') {
   } catch {
     /* storage blocked: it may ask again */
   }
-  $('dareTitle').textContent = kind === 'asked' ? 'Challenge a friend' : kind === 'trained' ? car.name + ' is trained' : car.name + ' is entered'
+  $('dareTitle').textContent = kind === 'asked' ? 'Challenge a friend' : kind === 'raced' ? car.name + ' finished ' + (result?.finished ?? 0) + ' of ' + RACE_COUNT : car.name + ' is entered'
   $('dareText').textContent =
     kind === 'asked'
       ? 'They open your link, race ' + car.name + ' on the same secret tracks, and try to beat it. Nobody has to sign in.'
-      : kind === 'trained'
-      ? 'Before you race it, dare a friend. They open your link, race your car on the same secret tracks, and try to beat it. Nobody has to sign in.'
+      : kind === 'raced'
+      ? 'Dare a friend to beat that. They open your link, race your car on the same secret tracks, and try to do better. Nobody has to sign in.'
       : 'While the game trains your setup for the board, dare a friend to beat your car. The link comes with your result card, ready to paste into a chat. Nobody has to sign in.'
   $('dareMsg').textContent = ''
   $('dareGo').textContent = 'Copy challenge link'
