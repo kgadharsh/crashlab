@@ -118,7 +118,7 @@ document.querySelector('#app')!.innerHTML = `
     <button class="tab" data-tab="race" role="tab"><span class="tnum">4</span>Race</button>
     <button class="tab profile" data-tab="profile" role="tab"><span class="pico" aria-hidden="true">☻</span>Profile</button>
   </nav>
-  <button type="button" class="btn small primary hot" id="topChallenge" disabled title="Train a car first, then dare a friend to beat it">⚔ Challenge a friend</button>
+  <button type="button" class="btn small primary hot" id="topChallenge" disabled title="Train a car first, then dare a friend to beat it">⚔ Challenge<span class="long"> a friend</span></button>
   <div class="chip" id="chip"></div>
   <button type="button" class="btn small shelfbtn" id="shelfBtn" aria-haspopup="dialog" aria-expanded="false" aria-controls="shelfPop" title="Cars you have saved: switch back to any of them">My cars</button>
   <div class="shelfpop" id="shelfPop" role="dialog" aria-label="My cars" hidden>
@@ -548,7 +548,11 @@ function setTab(t: Tab) {
   renderPractice()
   raceView?.render()
 }
-document.querySelectorAll<HTMLButtonElement>('.tab[data-tab]').forEach((btn) => btn.addEventListener('click', () => setTab(btn.dataset.tab as Tab)))
+document.querySelectorAll<HTMLButtonElement>('.tab[data-tab]').forEach((btn) => btn.addEventListener('click', () => {
+  const changed = tab !== btn.dataset.tab
+  setTab(btn.dataset.tab as Tab)
+  if (changed) window.scrollTo(0, 0) // a new tab starts at its top, not where the last one was left
+}))
 
 // ---------- THE RACE TAB'S SECTIONS ----------
 // The Race tab opens on a menu: the Daily Challenge, the Weekly Challenge and the fixed Grand Prix. Each opens the same race
@@ -786,12 +790,12 @@ function renderChip() {
   const chip = $('chip')
   chip.classList.toggle('stale', carIsStale())
   if (!car) {
-    chip.textContent = 'No car yet: train one in Practice'
+    chip.textContent = worker ? 'Training your first car…' : 'No car yet: train one in Practice'
     return
   }
   const label = document.createElement('b')
   label.textContent = car.name
-  chip.replaceChildren('CAR ', label, carIsStale() ? ' · setup changed, retrain' : ' · ready')
+  chip.replaceChildren('CAR ', label, worker ? ' · training a new car' : carIsStale() ? ' · setup changed, retrain' : ' · ready')
 }
 
 // ---------- TRAINING ----------
@@ -858,6 +862,7 @@ function stopTraining(text: string) {
   waiting = []
   trainMsg(text)
   renderPractice()
+  renderChip()
 }
 
 function finishTraining(f: Finish) {
@@ -904,6 +909,7 @@ function startTraining(keep: boolean) {
   const pace = watch ? 'Every ' + REPLAY_EVERY + 'th round is replayed here.' : ''
   trainMsg(keep ? 'Carrying on from your car at full speed. ' + pace : watch ? 'Training at full speed. ' + pace : 'Training at full speed...')
   worker = new Worker(new URL('./trainWorker.ts', import.meta.url), { type: 'module' })
+  renderChip()
   worker.onmessage = (event: MessageEvent) => {
     const m = event.data
     if (!run) return

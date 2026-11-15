@@ -771,3 +771,51 @@ body.full .layout { grid-template-columns: minmax(0, 720px); justify-content: ce
 .resultbig { margin: 10px 0 0; font: 700 21px/1.2 var(--head); letter-spacing: 0.03em; color: var(--text); text-wrap: balance; }
 .resultbig + .resultbig { margin-top: 4px; font-size: 18px; color: var(--accent); }
 .resultbig:empty { display: none; }
+
+/* ---------- TOP BAR BETWEEN PHONE AND WIDE ---------- */
+/* the bar no longer has room for everything on one line: the car's status takes a line of its own */
+@media (min-width: 961px) and (max-width: 1280px) {
+  .top { flex-wrap: wrap; gap: 6px 14px; }
+  .tab { white-space: nowrap; padding: 10px 10px; font-size: 15px; }
+  .tab.profile { margin-left: 4px; padding-left: 10px; }
+  #topChallenge .long { display: none; }
+  .shelfbtn { margin-left: auto; }
+  .chip { order: 9; flex-basis: 100%; max-width: 100%; margin-left: 0; }
+}
+
+/* ---------- PHONE: TABS AT THE THUMB, FULL-SIZE CONTROLS ---------- */
+@media (max-width: 960px) {
+  /* the five tabs are a bar along the bottom of the window, each one a full-size thing to press */
+  .tabs {
+    position: fixed; left: 0; right: 0; bottom: 0; z-index: 7; order: 0; width: auto; overflow: visible;
+    display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 0;
+    background: var(--panel); border-top: 1px solid var(--line);
+  }
+  .tab, .tab.profile {
+    display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px;
+    min-height: 56px; margin: 0; padding: 6px 2px; border: 0; border-top: 3px solid transparent;
+    font-size: 13px; letter-spacing: 0.06em; white-space: nowrap;
+  }
+  .tab.on { border-top-color: var(--accent); border-bottom-color: transparent; }
+  .tab .tnum, .tab .pico { margin: 0; font-size: 12px; line-height: 1; }
+  body { padding-bottom: 57px; }
+  body.has-nudge { padding-bottom: 133px; }
+  .nudge { bottom: 57px; }
+
+  /* the top bar is two short rows: the name and the saved cars, then the car's status and the challenge */
+  .top { gap: 8px 10px; padding: 8px 16px; }
+  .shelfbtn { margin-left: auto; }
+  .chip { order: 3; flex: 1 1 55%; min-width: 0; min-height: 44px; line-height: 36px; padding: 3px 10px; font-size: 12px; }
+  #topChallenge { order: 4; }
+  #topChallenge .long { display: none; }
+
+  /* nothing to press is under 44px */
+  .btn, .btn.small, select, .name input, .rbar .back, .brow, .panel.fold > h2 { min-height: 44px; }
+  .panel.fold > h2 { align-items: center; }
+  input[type='range'] { height: 44px; }
+  .swatch { width: 44px; height: 44px; }
+  .paints { flex-wrap: wrap; }
+  label.row:has(input[type='checkbox']), .check { min-height: 44px; margin: 0; }
+  input[type='checkbox'] { width: 22px; height: 22px; accent-color: var(--accent); }
+}
+.tab:focus-visible { outline: 2px solid var(--tele); outline-offset: -2px; }
