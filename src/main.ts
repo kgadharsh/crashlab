@@ -9,7 +9,8 @@ import { genomeToBrain } from './genome'
 import { carFromJson, carToJson, type CarFile } from './carFile'
 import { API, createLeaderboard } from './leaderboard'
 import { fetchBoardEntries } from './boardData'
-import { reveal, setupFolds } from './fold'
+import { openOnly, reveal, setupFolds } from './fold'
+import { icon } from './icons'
 import { PERKS, PAINTS, drawMine, hasPerk, loadPaint, paintColour, nextPerk, savePaint, shelfSize, streak, visit } from './perks'
 import { renderProfile } from './profile'
 import { createSkillTree } from './skilltree'
@@ -116,9 +117,9 @@ document.querySelector('#app')!.innerHTML = `
     <button class="tab" data-tab="skills" id="tab-skills" role="tab" aria-controls="skills"><span class="tnum">2</span>Skill tree</button>
     <button class="tab" data-tab="practice" id="tab-practice" role="tab" aria-controls="practice"><span class="tnum">3</span>Practice</button>
     <button class="tab" data-tab="race" id="tab-race" role="tab" aria-controls="race"><span class="tnum">4</span>Race</button>
-    <button class="tab profile" data-tab="profile" id="tab-profile" role="tab" aria-controls="profile"><span class="pico" aria-hidden="true">☻</span>Profile</button>
+    <button class="tab profile" data-tab="profile" id="tab-profile" role="tab" aria-controls="profile"><span class="pico" aria-hidden="true">${icon('user')}</span>Profile</button>
   </nav>
-  <button type="button" class="btn small primary hot" id="topChallenge" disabled title="Train a car first, then dare a friend to beat it">⚔ Challenge<span class="long"> a friend</span></button>
+  <button type="button" class="btn small primary hot" id="topChallenge" disabled title="Train a car first, then dare a friend to beat it">${icon('swords')} Challenge<span class="long"> a friend</span></button>
   <div class="chip" id="chip"></div>
   <button type="button" class="btn small shelfbtn" id="shelfBtn" aria-haspopup="dialog" aria-expanded="false" aria-controls="shelfPop" title="Cars you have saved: switch back to any of them">My cars</button>
   <div class="shelfpop" id="shelfPop" role="dialog" aria-label="My cars" hidden>
@@ -143,6 +144,7 @@ document.querySelector('#app')!.innerHTML = `
   </section>
   <aside class="side">
     <div id="garage" class="side" role="tabpanel" aria-labelledby="tab-garage">
+      <div class="bay"><canvas id="bayCar" width="760" height="300" role="img" aria-label="Your car, seen from above"></canvas><div class="baytag"><b id="bayName"></b><small id="bayLine"></small></div></div>
       <div class="panel first" id="firstRun" data-fixed hidden>
         <h1 id="firstTitle">Build a car that wins gold</h1>
         <p id="firstLine">Gold is all ${RACE_COUNT} secret tracks in under ${GOLD_TIME} s. Your car trains itself in a minute or two, then races them.</p>
@@ -159,7 +161,7 @@ document.querySelector('#app')!.innerHTML = `
       </div>
       <div class="panel name">
         <label for="name" class="namelabel">Your car's name <span>tap the name to change it</span></label>
-        <div class="namebox"><input id="name" maxlength="24" aria-label="Car name (you can change it)" placeholder="Name your car" spellcheck="false" /><span class="pencil" aria-hidden="true">✎</span></div>
+        <div class="namebox"><input id="name" maxlength="24" aria-label="Car name (you can change it)" placeholder="Name your car" spellcheck="false" /><span class="pencil" aria-hidden="true">${icon('pencil')}</span></div>
       </div>
       <div class="panel">
         <h2><span class="n">1</span>Car design<span class="aside" id="starCount"></span></h2>
@@ -207,7 +209,7 @@ document.querySelector('#app')!.innerHTML = `
       </div>
       <div class="panel">
         <h2><span class="n">5</span>Practice tracks<span class="aside" id="pickCount"></span></h2>
-        <div class="roads" role="group" aria-label="Road the practice tracks are driven on"><button type="button" class="road" data-road="dry" aria-pressed="true"><i aria-hidden="true">☀</i><b>Dry road</b><small>Grand Prix 1</small></button><button type="button" class="road wetroad" data-road="wet" aria-pressed="false"><i aria-hidden="true">🌧</i><b>Wet road</b><small>Grand Prix 2: tyres lose grip sooner</small></button></div>
+        <div class="roads" role="group" aria-label="Road the practice tracks are driven on"><button type="button" class="road" data-road="dry" aria-pressed="true"><i aria-hidden="true">${icon('sun')}</i><b>Dry road</b><small>Grand Prix 1</small></button><button type="button" class="road wetroad" data-road="wet" aria-pressed="false"><i aria-hidden="true">${icon('rain')}</i><b>Wet road</b><small>Grand Prix 2: tyres lose grip sooner</small></button></div>
         <select id="weather" aria-label="Road the practice tracks are driven on" hidden><option value="dry">Dry</option><option value="wet">Wet</option></select>
         <div class="actions" style="margin-top:2px"><label class="check"><input type="checkbox" id="condNight" /> Night</label><label class="check"><input type="checkbox" id="condIce" /> Ice patches</label></div>
         <p class="tip" style="margin-top:2px">Grand Prix 2 is raced on a wet road. A car practised only on dry roads loses most of its grip there, so practise on wet roads to prepare for it.</p>
@@ -269,9 +271,9 @@ document.querySelector('#app')!.innerHTML = `
         </details>
         <div class="actions"><select id="handTrack" aria-label="Track to drive yourself"></select><button class="btn primary" id="handGo">Take the wheel</button></div>
         <div class="pad" id="pad" hidden>
-          <button type="button" data-k="l" aria-label="Steer left">◀</button><button type="button" data-k="r" aria-label="Steer right">▶</button>
-          <button type="button" data-k="d" aria-label="Brake">▼</button><button type="button" data-k="u" aria-label="Gas">▲</button>
-          <button type="button" data-k="b" id="padBoost" aria-label="Boost" hidden>⚡</button>
+          <button type="button" data-k="l" aria-label="Steer left">${icon('left')}</button><button type="button" data-k="r" aria-label="Steer right">${icon('right')}</button>
+          <button type="button" data-k="d" aria-label="Brake">${icon('down')}</button><button type="button" data-k="u" aria-label="Gas">${icon('up')}</button>
+          <button type="button" data-k="b" id="padBoost" aria-label="Boost" hidden>${icon('zap')}</button>
         </div>
         <p class="msg" id="handMsg"></p>
         <div class="board" id="handBoard"></div>
@@ -284,7 +286,7 @@ document.querySelector('#app')!.innerHTML = `
         <h2>Your car</h2>
         <p class="tip" id="carState" style="margin-top:0"></p>
         <p class="tip">While you watch it drive, the box in the corner shows what the car sees (its rays), thinks (its neurons) and does (steering and gas).</p>
-        <div class="actions"><button class="btn primary hot" id="shareCar">⚔ Challenge a friend</button></div>
+        <div class="actions"><button class="btn primary hot" id="shareCar">${icon('swords')} Challenge a friend</button></div>
         <p class="tip" style="margin-top:4px">Copies a link. Your friend opens it, races your car on the same secret tracks, and tries to beat it.</p>
         <select id="driveTrack" aria-label="Track to watch the car on" hidden></select>
         <div class="actions"><button class="btn small" id="testDrive">Watch it drive</button><button class="btn small" id="swapCar" hidden>Switch to previous car</button></div>
@@ -352,7 +354,7 @@ document.querySelector('#app')!.innerHTML = `
       </div>
       <div class="panel" id="gpPanel" data-fixed>
         <h2><span id="gpTitle">Grand Prix 1</span><span class="aside" id="gpAside">8 secret tracks</span></h2>
-        <div class="roads" id="gpRoads" role="group" aria-label="Which Grand Prix to race"><button type="button" class="road" id="gp0" aria-pressed="true"><i aria-hidden="true">☀</i><b>Dry road</b><small>Grand Prix 1</small></button><button type="button" class="road wetroad" id="gp1" aria-pressed="false"><i aria-hidden="true">🌧</i><b>Wet road</b><small>Grand Prix 2</small></button><button type="button" class="road" id="gp2" aria-pressed="false" hidden>Past week</button></div>
+        <div class="roads" id="gpRoads" role="group" aria-label="Which Grand Prix to race"><button type="button" class="road" id="gp0" aria-pressed="true"><i aria-hidden="true">${icon('sun')}</i><b>Dry road</b><small>Grand Prix 1</small></button><button type="button" class="road wetroad" id="gp1" aria-pressed="false"><i aria-hidden="true">${icon('rain')}</i><b>Wet road</b><small>Grand Prix 2</small></button><button type="button" class="road" id="gp2" aria-pressed="false" hidden>Past week</button></div>
         <div class="actions">
           <button class="btn primary wide" id="raceGo">Race your car</button>
           <button class="btn" id="raceSpeed">Speed 4×</button>
@@ -390,7 +392,7 @@ document.querySelector('#app')!.innerHTML = `
       </div>
       <div class="panel" id="boardOnline" hidden>
         <h2>Leaderboard</h2>
-        <div class="roads slim" role="group" aria-label="Which leaderboard"><button type="button" class="road on" id="onlineDry" aria-pressed="true"><i aria-hidden="true">☀</i><b>Dry road</b></button><button type="button" class="road wetroad" id="onlineWet" aria-pressed="false"><i aria-hidden="true">🌧</i><b>Wet road</b></button></div>
+        <div class="roads slim" role="group" aria-label="Which leaderboard"><button type="button" class="road on" id="onlineDry" aria-pressed="true"><i aria-hidden="true">${icon('sun')}</i><b>Dry road</b></button><button type="button" class="road wetroad" id="onlineWet" aria-pressed="false"><i aria-hidden="true">${icon('rain')}</i><b>Wet road</b></button></div>
         <ol class="rank" id="onlineRows"></ol>
         <p class="tip" id="onlineEmpty" hidden>First place is open: the first car entered takes it.</p>
         <p class="tip" style="margin-top:4px">Every car on these boards was trained by the game itself: one run, the same way for everyone. Only your setup counts, not how often you retrain. An entry shows up within about 30 minutes.</p>
@@ -419,7 +421,7 @@ document.querySelector('#app')!.innerHTML = `
         <p class="resultbig" id="resultBoardPlace"></p>
         <p class="tip" id="resultLine" style="margin-top:8px"></p>
         <p class="tip" id="advice"></p>
-        <div class="actions"><button class="btn small" id="resultGarage">Edit setup in Garage →</button><button class="btn small" id="resultPractice">Go to Practice →</button><button class="btn small hot" id="resultShare">⚔ Share this result</button></div>
+        <div class="actions"><button class="btn small" id="resultGarage">Edit setup in Garage →</button><button class="btn small" id="resultPractice">Go to Practice →</button><button class="btn small hot" id="resultShare">${icon('swords')} Share this result</button></div>
         <input id="resultLink" readonly hidden aria-label="Challenge link" style="width:100%;margin-top:6px" />
         <div id="resultBoard" hidden>
           <p class="tip" id="resultBoardAsk" style="margin-top:12px;color:var(--text);font-weight:600">Put this on the leaderboard?</p>
@@ -441,7 +443,7 @@ document.querySelector('#app')!.innerHTML = `
   <a class="soc" href="https://www.linkedin.com/in/kgadharsh" target="_blank" rel="noopener noreferrer" aria-label="LinkedIn @kgadharsh"><svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor" aria-hidden="true"><path d="M4.98 3.5a2.5 2.5 0 1 1 0 5 2.5 2.5 0 0 1 0-5zM3 9.75h4V21H3zM9.75 9.75h3.8v1.6h.06c.53-1 1.82-2.05 3.75-2.05 4 0 4.74 2.63 4.74 6.05V21h-4v-5.1c0-1.22-.02-2.78-1.7-2.78-1.7 0-1.96 1.33-1.96 2.7V21h-4z"/></svg><span>@kgadharsh</span></a>
 </footer>
 <dialog class="dare" id="dareDialog" aria-labelledby="dareTitle">
-  <div class="dare-ico" aria-hidden="true">⚔️</div>
+  <div class="dare-ico" aria-hidden="true">${icon('swords')}</div>
   <h3 id="dareTitle">Dare a friend</h3>
   <p id="dareText"></p>
   <div class="actions"><button type="button" class="btn primary" id="dareGo">Copy challenge link</button><button type="button" class="btn" id="dareNo">Not now</button></div>
@@ -451,7 +453,7 @@ document.querySelector('#app')!.innerHTML = `
 <div class="nudge" id="raceNudge" role="status" hidden>
   <p id="nudgeText"></p>
   <button class="btn primary" id="nudgeGo">Race<span class="long"> your car</span> →</button>
-  <button class="btn small" id="nudgeClose" aria-label="Dismiss">✕</button>
+  <button class="btn small" id="nudgeClose" aria-label="Dismiss">${icon('x')}</button>
 </div>`
 
 const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T
@@ -645,7 +647,10 @@ function setName(value: string) {
   changed()
   raceView?.render()
 }
-nameInput.addEventListener('input', () => setName(nameInput.value))
+nameInput.addEventListener('input', () => {
+  setName(nameInput.value)
+  renderBay()
+})
 
 const b = draft.build
 function bindSlider(id: string, get: () => number, set: (v: number) => void, scale = 1) {
@@ -768,6 +773,7 @@ function renderGarage() {
   renderParts()
   renderChassis()
   renderPit()
+  renderBay()
   trackGrid.querySelectorAll<HTMLButtonElement>('.track').forEach((btn) => {
     const id = Number(btn.dataset.id)
     const on = b.practice.includes(id)
@@ -793,7 +799,7 @@ const pitButtons = PIT_BOXES.map((box, i) => {
   btn.querySelector('b')!.textContent = box.name
   btn.addEventListener('click', () => {
     const panel = $(box.holds).closest<HTMLElement>('.panel')!
-    reveal($(box.holds))
+    openOnly($(box.holds))
     renderPit()
     panel.scrollIntoView({ behavior: REDUCED_MOTION.matches ? 'auto' : 'smooth', block: 'nearest' })
   })
@@ -816,6 +822,45 @@ function renderPit() {
 // a box's panel can also be opened or folded from the column itself
 $('garage').addEventListener('click', () => requestAnimationFrame(renderPit))
 $('garage').addEventListener('keyup', () => requestAnimationFrame(renderPit))
+
+// ---------- THE CAR IN ITS BOX ----------
+// The car drawn large at the top of the Garage, standing on its grid slot, in the chosen design and paint
+const bayCanvas = $<HTMLCanvasElement>('bayCar')
+function renderBay() {
+  const g = bayCanvas.getContext('2d')!
+  const w = bayCanvas.width
+  const h = bayCanvas.height
+  g.fillStyle = '#2b2e31'
+  g.fillRect(0, 0, w, h)
+  // tyre marks running in from behind the car
+  g.fillStyle = 'rgba(0,0,0,0.2)'
+  g.fillRect(0, h * 0.5 - 70, w * 0.42, 18)
+  g.fillRect(0, h * 0.5 + 60, w * 0.42, 18)
+  // the slot painted on the ground: a bracket ahead of the nose and the next slot behind
+  g.strokeStyle = 'rgba(255,255,255,0.85)'
+  g.lineWidth = 7
+  g.beginPath()
+  g.moveTo(w - 150, 34)
+  g.lineTo(w - 96, 34)
+  g.lineTo(w - 96, h - 74)
+  g.lineTo(w - 150, h - 74)
+  g.stroke()
+  g.strokeStyle = 'rgba(255,255,255,0.3)'
+  g.beginPath()
+  g.moveTo(70, 34)
+  g.lineTo(124, 34)
+  g.moveTo(70, h - 34)
+  g.lineTo(124, h - 34)
+  g.stroke()
+  // the kerb along the far edge
+  for (let x = 0; x < w; x += 40) {
+    g.fillStyle = (x / 40) % 2 ? '#ffffff' : COL.kerbB
+    g.fillRect(x, 0, 40, 10)
+  }
+  drawCar(g, { x: w * 0.5 - 6, y: h * 0.5 + 4, angle: 0 }, 330, 175, paintColour(), look)
+  $('bayName').textContent = nameInput.value.trim() || 'Your car'
+  $('bayLine').textContent = LOOKS[look].name + ' · ' + b.sensors.count + ' rays'
+}
 
 function changed() {
   save(KEYS.draft, draft)
@@ -1232,6 +1277,8 @@ function startHand() {
   resetHand(hand)
   controls.enable(true)
   $('pad').hidden = false
+  document.body.classList.add('handview') // on a narrow screen the track is held at the top and the pad at the bottom
+  window.scrollTo(0, 0)
   $('padBoost').hidden = !hasPerk('nitro')
   handMsg('Go! ← → steer, ↑ gas, ↓ brake' + (hasPerk('nitro') ? ', Space for the boost.' : '.'))
   renderPractice()
@@ -1241,6 +1288,7 @@ function stopHand() {
   hand = null
   controls.enable(false)
   $('pad').hidden = true
+  document.body.classList.remove('handview')
   handMsg('')
   renderPractice()
 }
@@ -1452,7 +1500,7 @@ function renderPaints() {
   const s = streak()
   const next = nextPerk()
   $('streakLine').textContent =
-    '🔥 ' + s.days + (s.days === 1 ? ' day' : ' days') + ' in a row. ' +
+    s.days + (s.days === 1 ? ' day' : ' days') + ' in a row. ' +
     (next ? 'Next perk: ' + next.name + ' at ' + next.days + ' days (' + Math.max(1, next.days - Math.max(s.days, 0)) + ' to go). ' + (s.today ? 'Come back tomorrow to keep it.' : 'Play today to keep it going.') : 'Every perk is yours: ' + PERKS.map((p) => p.name).join(', ') + '.')
 }
 function showProfile() {

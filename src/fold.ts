@@ -88,6 +88,16 @@ export function setupFolds(tabIds: string[], steps: string[] = []) {
   }
 }
 
+// Open the panel holding this element and fold every other panel of its tab, whatever was open before
+export function openOnly(el: HTMLElement) {
+  const panel = el.closest<HTMLElement>('.panel.fold')
+  if (!panel) return
+  const tab = panel.parentElement!
+  const i = foldable(tab).indexOf(panel)
+  openIndex(tab, i)
+  if (tab.id) save(tab.id, i)
+}
+
 // Open the panel holding this element (folding the others in its tab), so the player can see it
 export function reveal(el: HTMLElement) {
   const panel = el.closest<HTMLElement>('.panel.fold')

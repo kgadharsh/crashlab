@@ -7,6 +7,7 @@ import { PARTS, type Progress } from './parts'
 import { LOOKS } from './looks'
 import { handBest, handMedal } from './driver'
 import { PERKS, streak } from './perks'
+import { icon, type IconName } from './icons'
 import { challengeRecord, counts } from './playLog'
 
 import type { BoardStats, Identity } from './leaderboard'
@@ -37,21 +38,21 @@ function badges(d: ProfileData, medals: Medals): Badge[] {
   const s = streak()
   const clean = GRAND_PRIXES.some((gp) => loadBest(gp)?.finished === RACE_COUNT)
   return [
-    { icon: '🏁', name: 'First lap', hint: 'Finish a lap on the track board', got: all.length > 0 },
-    { icon: '🥇', name: 'Track gold', hint: 'Win gold on any practice track', got: all.some((m) => m.medal === 'gold') },
-    { icon: '🧹', name: 'Clean sweep', hint: 'Finish all ' + RACE_COUNT + ' race tracks in one race', got: clean },
-    { icon: '🏆', name: 'Podium', hint: 'Win a Grand Prix medal', got: gps.some((m) => m !== null) },
-    { icon: '👑', name: 'Grand Prix gold', hint: 'Win gold in a Grand Prix', got: gps.includes('gold') },
-    { icon: '🌧️', name: 'Rain driver', hint: 'Finish the wet Grand Prix', got: (loadBest(GRAND_PRIXES[1])?.finished ?? 0) > 0 },
-    { icon: '📅', name: 'Weekender', hint: "Enter this week's Weekly Challenge (needs a Google sign-in)", got: d.progress.racedWeekly },
-    { icon: '🧑‍🔧', name: 'Hands on', hint: 'Drive 3 practice tracks yourself', got: d.progress.licence >= 3 },
-    { icon: '🎓', name: 'Licensed', hint: 'Drive 8 practice tracks yourself', got: d.progress.licence >= 8 },
-    { icon: '🌳', name: 'Fully grown', hint: 'Unlock every node in the skill tree', got: PARTS.every((p) => p.open(d.progress)) },
-    { icon: '🔥', name: 'On a roll', hint: 'Play on 3 days in a row', got: s.best >= 3 },
-    { icon: '🔁', name: 'Regular', hint: 'Play on 7 days in a row', got: s.best >= 7 },
-    { icon: '⚔️', name: 'Rival beaten', hint: 'Beat a friend\'s challenge car', got: ch.won > 0 },
-    { icon: '📣', name: 'Showman', hint: 'Share a challenge', got: c.shares > 0 },
-    { icon: '🧪', name: 'Tinkerer', hint: 'Train 5 cars', got: c.trainings >= 5 },
+    { icon: 'flag' as const, name: 'First lap', hint: 'Finish a lap on the track board', got: all.length > 0 },
+    { icon: 'medal' as const, name: 'Track gold', hint: 'Win gold on any practice track', got: all.some((m) => m.medal === 'gold') },
+    { icon: 'sparkle' as const, name: 'Clean sweep', hint: 'Finish all ' + RACE_COUNT + ' race tracks in one race', got: clean },
+    { icon: 'trophy' as const, name: 'Podium', hint: 'Win a Grand Prix medal', got: gps.some((m) => m !== null) },
+    { icon: 'crown' as const, name: 'Grand Prix gold', hint: 'Win gold in a Grand Prix', got: gps.includes('gold') },
+    { icon: 'rain' as const, name: 'Rain driver', hint: 'Finish the wet Grand Prix', got: (loadBest(GRAND_PRIXES[1])?.finished ?? 0) > 0 },
+    { icon: 'calendar' as const, name: 'Weekender', hint: "Enter this week's Weekly Challenge (needs a Google sign-in)", got: d.progress.racedWeekly },
+    { icon: 'wheel' as const, name: 'Hands on', hint: 'Drive 3 practice tracks yourself', got: d.progress.licence >= 3 },
+    { icon: 'cap' as const, name: 'Licensed', hint: 'Drive 8 practice tracks yourself', got: d.progress.licence >= 8 },
+    { icon: 'tree' as const, name: 'Fully grown', hint: 'Unlock every node in the skill tree', got: PARTS.every((p) => p.open(d.progress)) },
+    { icon: 'flame' as const, name: 'On a roll', hint: 'Play on 3 days in a row', got: s.best >= 3 },
+    { icon: 'repeat' as const, name: 'Regular', hint: 'Play on 7 days in a row', got: s.best >= 7 },
+    { icon: 'swords' as const, name: 'Rival beaten', hint: 'Beat a friend\'s challenge car', got: ch.won > 0 },
+    { icon: 'megaphone' as const, name: 'Showman', hint: 'Share a challenge', got: c.shares > 0 },
+    { icon: 'flask' as const, name: 'Tinkerer', hint: 'Train 5 cars', got: c.trainings >= 5 },
   ]
 }
 
@@ -108,7 +109,9 @@ export function renderProfile(root: HTMLElement, d: ProfileData) {
   const nameInput = Object.assign(document.createElement('input'), { className: 'pnameinput', value: d.carName, maxLength: 24, placeholder: 'Name your car', spellcheck: false })
   nameInput.setAttribute('aria-label', 'Car name (you can change it)')
   nameInput.addEventListener('input', () => d.onRename(nameInput.value))
-  nameBox.append(nameInput, h('span', 'pencil', '✎'))
+  const pencil = h('span', 'pencil')
+  pencil.innerHTML = icon('pencil')
+  nameBox.append(nameInput, pencil)
   carBox.append(nameBox)
   top.append(who, carBox, h('div', 'psub', lookName + ' design · ★ ' + d.stars + ' · ' + earned + ' of ' + list.length + ' badges'))
   const numbers = h('div', 'pnums')
@@ -132,7 +135,9 @@ export function renderProfile(root: HTMLElement, d: ProfileData) {
     const cell = h('div', 'badge' + (b.got ? ' got' : ''))
     cell.dataset.tip = b.hint // shown at once on hover, focus or tap (a title tooltip is slow and never shows on a phone)
     cell.tabIndex = 0
-    cell.append(h('span', 'bi', b.got ? b.icon : '🔒'), h('b', '', b.name), h('small', '', b.got ? 'Earned' : b.hint))
+    const pic = h('span', 'bi')
+    pic.innerHTML = icon(b.got ? (b.icon as IconName) : 'lock')
+    cell.append(pic, h('b', '', b.name), h('small', '', b.got ? 'Earned' : b.hint))
     grid.append(cell)
   }
   bs.append(grid)
@@ -198,7 +203,7 @@ export function renderProfile(root: HTMLElement, d: ProfileData) {
     })
     lbBody.replaceWith(...rows)
     const t = st.trophies
-    if (t && t.some((n) => n)) lb.querySelector('h3')!.append(h('span', 'aside', '🥇 ' + t[0] + '  🥈 ' + t[1] + '  🥉 ' + t[2]))
+    if (t && t.some((n) => n)) lb.querySelector('h3')!.append(h('span', 'aside', 'Gold ' + t[0] + ' · silver ' + t[1] + ' · bronze ' + t[2]))
   })
 
   root.replaceChildren(top, lb, bs, rs, ts, ps)

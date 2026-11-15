@@ -2,6 +2,7 @@
 // glows when it is fitted, is plain when it can be fitted, and shows a lock when it has not been earned yet. On a wide screen
 // pointing at a node (or clicking it) opens its card in a popover beside it, so nobody scrolls between the tree and the card; on a
 // phone the card sits under the tree and stays stuck to the bottom of the screen while the tree is on show. It is where a node is fitted or taken off. The rules live in parts.ts and setup.ts; this file only draws.
+import { ICONS, type IconName } from './icons'
 import { PARTS, type Branch, type Part, type PartId, type Progress } from './parts'
 import { NODES, POINT_BUDGET, levelOf, pointsUsed, rivalOf, type Build } from './setup'
 
@@ -16,12 +17,12 @@ const BRANCHES: { name: Branch; angle: number; colour: string; blurb: string }[]
   { name: 'Brain', angle: 150, colour: '#b48cff', blurb: 'how it thinks' },
   { name: 'Practice', angle: 210, colour: '#ff7a9c', blurb: 'how it trains' },
 ]
-const ICON: Record<PartId, string> = {
-  range: '🔭', focus: '🎯', lens: '👀', lights: '🔦',
-  launch: '🚀', quick: '⚡', feather: '🪶', wing: '✈️',
-  tyres: '🌧️', steady: '🧭', studs: '❄️',
-  brain: '🧠', grip: '🧲', slot: '🏁',
-  wide: '↔️', rally: '🏔️', bumper: '🛡️', spotter: '🧊', aids: '🚨', traction: '⚙️', brakes: '🛑', turbo: '🌀', inters: '💧', lean: '🍃', huge: '🐘', slot2: '🗺️',
+const ICON: Record<PartId, IconName> = {
+  range: 'reach', focus: 'target', lens: 'eye', lights: 'lamp',
+  launch: 'rocket', quick: 'zap', feather: 'feather', wing: 'wing',
+  tyres: 'rain', steady: 'compass', studs: 'snow',
+  brain: 'chip', grip: 'magnet', slot: 'flag',
+  wide: 'wide', rally: 'mountain', bumper: 'shield', spotter: 'warning', aids: 'buoy', traction: 'cog', brakes: 'stop', turbo: 'wind', inters: 'drop', lean: 'leaf', huge: 'bigchip', slot2: 'flags',
 }
 const R0 = 126
 const RSTEP = 48
@@ -115,10 +116,10 @@ export function createSkillTree(d: TreeDeps) {
     g.style.setProperty('--nc', p.branch.colour)
     el('circle', { r: 26, class: 'halo', fill: p.branch.colour }, g)
     const disc = el('circle', { r: 21, class: 'disc', stroke: p.branch.colour }, g)
-    const icon = el('text', { y: 6, class: 'icon' }, g)
-    icon.textContent = ICON[part.id]
-    const lock = el('text', { x: 14, y: 20, class: 'lockmark' }, g)
-    lock.textContent = '🔒'
+    const icon = el('svg', { x: -11, y: -11, width: 22, height: 22, viewBox: '0 0 24 24', class: 'icon' }, g)
+    icon.innerHTML = ICONS[ICON[part.id]]
+    const lock = el('svg', { x: 9, y: 9, width: 13, height: 13, viewBox: '0 0 24 24', class: 'lockmark' }, g)
+    lock.innerHTML = ICONS.lock
     el('circle', { cx: 16, cy: -16, r: 8, class: 'ptbg' }, g)
     const pips = el('text', { x: 16, y: -12.5, class: 'pts' }, g)
     pips.textContent = String(part.points)

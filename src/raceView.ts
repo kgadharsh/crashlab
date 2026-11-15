@@ -11,6 +11,7 @@ import {
 import { logEvent, recordChallenge } from './playLog'
 import { loadFewest, recordFewest } from './board'
 import { drawMine } from './perks'
+import { icon } from './icons'
 import { COL, H, W, clear, drawCar, drawCrash, drawMinimap, drawRays, drawTrack, follow, withCamera, type Camera } from './draw'
 
 // A friend's car to beat (with its result in each Grand Prix on this device), or why their link could not be used
@@ -146,7 +147,7 @@ export function createRaceView(d: RaceDeps) {
         : 'These were last week\'s secret tracks. They are open now: race them as often as you like. This week\'s are still secret.'
       : medalRules(gp())
     $('gp2').hidden = !pastWeek
-    if (pastWeek) $('gp2').innerHTML = pastWeek.day !== undefined ? '<i aria-hidden="true">⚡</i><b></b><small>' + (pastWeek.day === dayOf(Date.now()) ? 'Today · open to all' : 'Past day · open now') + '</small>' : '<i aria-hidden="true">📅</i><b></b><small>Past week · open now</small>'
+    if (pastWeek) $('gp2').innerHTML = pastWeek.day !== undefined ? '<i aria-hidden="true">' + icon('zap') + '</i><b></b><small>' + (pastWeek.day === dayOf(Date.now()) ? 'Today · open to all' : 'Past day · open now') + '</small>' : '<i aria-hidden="true">📅</i><b></b><small>Past week · open now</small>'
     if (pastWeek) $('gp2').querySelector('b')!.textContent = pastWeek.name
     choices().forEach((_, i) => {
       const b = $('gp' + i)
@@ -334,12 +335,12 @@ export function createRaceView(d: RaceDeps) {
         text.className = 't'
         if (r) {
           mark.className = 'st ' + (r.time !== null ? 'ok' : 'bad')
-          mark.textContent = r.time !== null ? '✓' : '✕'
+          mark.innerHTML = icon(r.time !== null ? 'check' : 'x')
           text.textContent = r.time !== null ? time(r.time) + ' s' : CAUSE_LABEL[r.cause!] + ' · ' + Math.round(r.progress * 100) + '%'
         } else if (racing && i === live!.index) {
           li.className = 'now'
           mark.className = 'st'
-          mark.textContent = '▸'
+          mark.innerHTML = icon('right')
           text.textContent = 'driving…'
         } else {
           mark.className = 'st'
@@ -378,9 +379,9 @@ export function createRaceView(d: RaceDeps) {
         watched || isSecretGp(live!.gp)
           ? ''
           : medal === 'gold'
-            ? 'Gold with ' + Math.max(0, live!.gp.goldTime - s.totalTime).toFixed(1) + ' s to spare.'
+            ? 'Gold medal, ' + Math.max(0, live!.gp.goldTime - s.totalTime).toFixed(1) + ' s ahead.'
             : medal === 'silver'
-              ? Math.max(0.1, s.totalTime - live!.gp.goldTime).toFixed(1) + ' s from gold.'
+              ? Math.max(0.1, s.totalTime - live!.gp.goldTime).toFixed(1) + ' s behind the gold medal.'
               : s.finished >= BRONZE_FINISHES
                 ? 'Finish ' + tracks(left) + ' for silver.'
                 : 'Finish ' + tracks(BRONZE_FINISHES - s.finished) + ' for bronze.'
@@ -508,12 +509,19 @@ export function createRaceView(d: RaceDeps) {
       ['Track', Math.min(r.index + 1, RACE_COUNT) + '<small>/' + RACE_COUNT + '</small>'],
       ['Finished', sum.finished + '<small>/' + r.results.length + '</small>'],
       ['Total time', sum.totalTime.toFixed(1) + '<small> s</small>'],
-      // something to race against on every track: how far the finished tracks are ahead of or behind the pace that wins gold
+      // something to race against on every track: how far the finished tracks are ahead of or behind the time that wins the gold medal
       // (a Grand Prix with no gold line keeps the lap counter)
       r.gp.goldTime > 0
-        ? ['Gold pace', sum.finished ? ((d) => (d > 0 ? '+' : '−') + Math.abs(d).toFixed(1) + '<small> s ' + (d > 0 ? 'behind' : 'ahead') + '</small>')(sum.totalTime - (r.gp.goldTime * sum.finished) / RACE_COUNT) : '–']
+        ? ['Gold medal', sum.finished ? goldGap(sum.totalTime - (r.gp.goldTime * sum.finished) / RACE_COUNT) : '–']
         : ['Lap', r.summary ? '–' : Math.round((100 * Math.min(lap.passed, CHECKPOINTS)) / CHECKPOINTS) + '<small>%</small>'],
     ])
+  }
+
+  // How the finished tracks stand against the time that wins the gold medal: seconds ahead (green) or behind (red)
+  function goldGap(d: number): string {
+    const gap = Math.abs(d).toFixed(1)
+    if (gap === '0.0') return 'Level'
+    return '<span class="' + (d > 0 ? 'behind' : 'ahead') + '">' + gap + '<small> s ' + (d > 0 ? 'behind' : 'ahead') + '</small></span>'
   }
 
   ;[...GRAND_PRIXES, null].forEach((_, i) => $('gp' + i).addEventListener('click', () => selectGp(i)))

@@ -386,6 +386,25 @@ export function drawCar(g: CanvasRenderingContext2D, c: { x: number; y: number; 
     stripe(-0.85, 0.68)
     cockpit(-0.12, 0.24, 0.3)
   }
+  if (width >= 60) {
+    // drawn large (the Garage's car): a highlight along each tyre, a visor on the helmet and a number on the tail
+    g.fillStyle = 'rgba(255,255,255,0.14)'
+    for (const x of [L * 0.3, L * -0.8]) {
+      g.fillRect(x + L * 0.04, -Wd * 1.02, L * 0.34, tyre * 0.16)
+      g.fillRect(x + L * 0.04, Wd * 1.02 - tyre * 0.16, L * 0.34, tyre * 0.16)
+    }
+    g.fillStyle = '#16181a'
+    g.fillRect(-L * 0.115, -Wd * 0.13, L * 0.035, Wd * 0.26)
+    g.fillStyle = '#f4f6f8'
+    g.beginPath()
+    g.arc(-L * 0.56, 0, Wd * 0.2, 0, Math.PI * 2)
+    g.fill()
+    g.fillStyle = '#16181a'
+    g.font = '800 ' + Wd * 0.28 + 'px Archivo, sans-serif'
+    g.textAlign = 'center'
+    g.textBaseline = 'middle'
+    g.fillText('7', -L * 0.56, Wd * 0.02)
+  }
   g.restore()
 }
 

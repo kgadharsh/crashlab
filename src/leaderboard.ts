@@ -27,9 +27,9 @@ const runsOf = (e: Row) => (e.runs ? ' · ' + e.runs + (e.runs === 1 ? ' run' : 
 type Podium = { place: number; id: number; display: string; finished: number; totalTime: number }
 type Daily = { day: number; seed: number; name: string; wet: boolean; night?: boolean; ice?: boolean; endsAt: number; limit: number; past: { day: number; seed: number; podium: Podium[] }[] }
 type Weekly = { week: number; name: string; wet: boolean; night?: boolean; ice?: boolean; endsAt: number; limit: number; past: { week: number; seed: number; podium: Podium[] }[] }
-const TROPHY = ['🥇', '🥈', '🥉']
-// Weekly trophies after a name, e.g. 🥇2 🥉1
-const trophyText = (t?: number[]) => (t ?? []).flatMap((n, i) => (n ? [TROPHY[i] + (n > 1 ? n : '')] : [])).join(' ')
+const TROPHY = ['gold', 'silver', 'bronze']
+// Weekly trophies after a name, e.g. 2 gold · 1 bronze
+const trophyText = (t?: number[]) => (t ?? []).flatMap((n, i) => (n ? [n + ' ' + TROPHY[i]] : [])).join(' · ')
 function timeLeft(ms: number): string {
   const h = Math.max(0, Math.floor(ms / 3600000))
   return h >= 24 ? Math.floor(h / 24) + ' d ' + (h % 24) + ' h' : h >= 1 ? h + ' h' : 'under an hour'
@@ -612,7 +612,7 @@ export function createLeaderboard({ getCar, getShelf, getGpId, goRace, notify, r
               const race = Object.assign(document.createElement('button'), { className: 'btn small', textContent: 'Race' })
               race.setAttribute('aria-label', 'Race against ' + e.display + ' on ' + gp.name)
               race.addEventListener('click', () => loadRival({ ...e, rank: e.place, medal: null }, gp))
-              li.append(cell('n', TROPHY[e.place - 1]), cell('who', e.display), cell('res', e.finished + ' of 8 · ' + e.totalTime.toFixed(1) + ' s'), race)
+              li.append(cell('n', String(e.place)), cell('who', e.display), cell('res', e.finished + ' of 8 · ' + e.totalTime.toFixed(1) + ' s'), race)
               return li
             }),
           )
@@ -714,7 +714,7 @@ export function createLeaderboard({ getCar, getShelf, getGpId, goRace, notify, r
             const race = Object.assign(document.createElement('button'), { className: 'btn small', textContent: 'Race' })
             race.setAttribute('aria-label', 'Race against ' + e.display + ' on ' + gp.name)
             race.addEventListener('click', () => loadRival({ ...e, rank: e.place, medal: null }, gp))
-            li.append(cell('n', TROPHY[e.place - 1]), cell('who', e.display), cell('res', e.finished + ' of 8 · ' + e.totalTime.toFixed(1) + ' s'), race)
+            li.append(cell('n', String(e.place)), cell('who', e.display), cell('res', e.finished + ' of 8 · ' + e.totalTime.toFixed(1) + ' s'), race)
             return li
           }),
         )

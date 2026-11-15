@@ -9,6 +9,7 @@
   --text: #16181a;
   --muted: #555b60;
   --asphalt: #25282b;
+  --ground: #1d2023; /* the track screen's own ground, as drawn on the canvas */
   --asphalt-2: #33373b;
   --on-asphalt: #ffffff;
   --on-asphalt-muted: #c9cdd0;
@@ -86,11 +87,10 @@ a { color: inherit; text-underline-offset: 3px; }
 /* the car's state is a flag panel: a square of flag colour, then the words */
 .chip {
   margin-left: auto;
-  display: flex;
-  align-items: center;
-  gap: 10px;
+  position: relative;
   min-height: 34px;
-  padding: 0 12px 0 0;
+  padding: 8px 12px 8px 46px;
+  line-height: 18px;
   font: 500 13px var(--body);
   color: var(--text);
   background: var(--panel-2);
@@ -100,7 +100,7 @@ a { color: inherit; text-underline-offset: 3px; }
   text-overflow: ellipsis;
   max-width: 40vw;
 }
-.chip::before { content: ''; align-self: stretch; width: 34px; flex: none; background: var(--flag); }
+.chip::before { content: ''; position: absolute; left: 0; top: 0; bottom: 0; width: 34px; background: var(--flag); }
 .chip:has(b)::before { background: var(--good); }
 .chip.stale::before { background: var(--flag); }
 .chip b { font-weight: 700; }
@@ -109,17 +109,15 @@ a { color: inherit; text-underline-offset: 3px; }
 /* ---------- LAYOUT ---------- */
 .layout {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 420px;
-  gap: 20px;
-  padding: 20px 20px 32px;
-  max-width: 1400px;
-  margin: 0 auto;
+  grid-template-columns: minmax(0, 1fr) 440px;
 }
-.view { min-width: 0; display: flex; flex-direction: column; gap: 10px; }
-/* on a wide screen the track view stays in sight while the panels beside it scroll */
-@media (min-width: 961px) { .view { position: sticky; top: 84px; align-self: start; } }
-.screen { position: relative; border-radius: 6px; overflow: hidden; background: var(--asphalt); box-shadow: var(--shadow); }
-.screen canvas { display: block; width: 100%; height: auto; }
+/* the track is a slab of asphalt that runs from the edge of the window; the panels sit on concrete beside it */
+.view { min-width: 0; display: flex; flex-direction: column; background: var(--ground); color: var(--on-asphalt); }
+.layout > .side { padding: 20px 20px 32px; }
+/* on a wide screen the slab stays in sight, as tall as the window, while the panels beside it scroll */
+@media (min-width: 961px) { .view { position: sticky; top: var(--top-h, 70px); align-self: start; min-height: calc(100dvh - var(--top-h, 70px)); } }
+.screen { position: relative; overflow: hidden; background: var(--ground); }
+.screen canvas { display: block; width: 100%; height: auto; max-height: calc(100dvh - var(--top-h, 70px) - 96px); object-fit: contain; }
 .screen .corner { position: absolute; top: 10px; right: 10px; display: flex; gap: 6px; }
 .side { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
 
@@ -128,17 +126,17 @@ a { color: inherit; text-underline-offset: 3px; }
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 1px;
-  background: var(--line);
-  border: 1px solid var(--line);
-  border-radius: 6px;
-  overflow: hidden;
+  background: rgba(255, 255, 255, 0.16);
+  border-top: 1px solid rgba(255, 255, 255, 0.16);
 }
-.cell { background: var(--panel-2); padding: 8px 12px; min-width: 0; }
-.cell .k { font: 800 12px var(--head); letter-spacing: 0.01em; text-transform: uppercase; color: var(--muted); }
+.cell { background: var(--ground); padding: 10px 16px; min-width: 0; }
+.cell .k { font: 800 12px var(--head); letter-spacing: 0.01em; text-transform: uppercase; color: var(--on-asphalt-muted); }
 .cell .v { font: 700 22px/1.2 var(--mono); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.cell .v small { font-size: 12px; color: var(--muted); font-weight: 500; }
+.cell .v small { font-size: 12px; color: var(--on-asphalt-muted); font-weight: 500; }
+.cell .v .ahead, .cell .v .ahead small { color: #3bd47d; }
+.cell .v .behind, .cell .v .behind small { color: #ff7a70; }
 /* the training graph is drawn in the track's colours, so it sits on asphalt */
-.graph { border-radius: 6px; background: var(--asphalt); color: var(--on-asphalt); display: flex; align-items: center; gap: 14px; padding: 10px 14px; }
+.graph { background: var(--ground); color: var(--on-asphalt); border-top: 1px solid rgba(255, 255, 255, 0.16); display: flex; align-items: center; gap: 14px; padding: 10px 16px; }
 .graph p { margin: 0; flex: 1; font-size: 13.5px; line-height: 1.4; }
 .graph canvas { display: block; width: 160px; height: 30px; flex: none; }
 @media (max-width: 420px) { .graph canvas { width: 96px; } }
@@ -320,7 +318,8 @@ select, .actions > input, #shareLink, #resultLink, #dareLink {
 .medal { font: 800 40px/1 var(--head); }
 
 @media (max-width: 960px) {
-  .layout { grid-template-columns: minmax(0, 1fr); padding: 12px 16px 28px; }
+  .layout { grid-template-columns: minmax(0, 1fr); }
+  .layout > .side { padding: 12px 16px 28px; }
   .strip { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
 @media (max-width: 420px) {
@@ -407,6 +406,20 @@ select, .actions > input, #shareLink, #resultLink, #dareLink {
 .panel.fold.folded > :not(h2) { display: none !important; }
 .actions.next { justify-content: flex-end; margin-top: 10px; }
 
+/* ---------- ICONS ---------- */
+/* one drawn set (icons.ts): a 2px round line in the colour of the text beside it */
+.ico { width: 1em; height: 1em; flex: none; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; vertical-align: -0.14em; }
+.btn .ico { font-size: 1.25em; }
+.tower .st .ico { font-size: 16px; }
+
+/* ---------- THE CAR IN ITS BOX ---------- */
+/* the Garage opens on the car itself, drawn large on its grid slot in the design and paint you have chosen */
+.bay { position: relative; border-radius: 6px; overflow: hidden; background: var(--asphalt); color: var(--on-asphalt); }
+.bay canvas { display: block; width: 100%; height: auto; }
+.baytag { position: absolute; left: 14px; bottom: 8px; right: 14px; display: flex; align-items: baseline; justify-content: space-between; gap: 10px; }
+.baytag b { font: 800 17px/1.1 var(--head); font-stretch: 125%; text-transform: uppercase; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.baytag small { font-size: 13px; color: var(--on-asphalt-muted); white-space: nowrap; }
+
 /* ---------- THE GARAGE IS A PIT LANE ---------- */
 /* each setting is a pit box painted on asphalt, with its number on the ground. The open box is outlined in
    flag yellow and its controls sit on the page below the box's sign. */
@@ -447,14 +460,14 @@ select, .actions > input, #shareLink, #resultLink, #dareLink {
     display: grid;
     grid-template-columns: repeat(5, minmax(0, 1fr)) minmax(150px, 0.9fr);
     gap: 10px;
-    padding: 20px 14px 14px;
-    border-radius: 6px;
+    padding: 22px 20px 16px;
     background:
       repeating-linear-gradient(90deg, var(--accent) 0 28px, #fff 28px 56px) left top / 100% 8px no-repeat,
       repeating-linear-gradient(90deg, rgba(255, 255, 255, 0.55) 0 26px, transparent 26px 48px) left bottom 6px / 100% 3px no-repeat,
       var(--asphalt);
-    box-shadow: var(--shadow);
   }
+  /* the lane is where a box is opened, so the column beside the track shows only the open one */
+  #garage > .panel.fold.folded { display: none; }
 }
 .pitbox {
   position: relative;
@@ -505,19 +518,18 @@ select, .actions > input, #shareLink, #resultLink, #dareLink {
 }
 .name input:hover { border-color: var(--text); }
 .name input::placeholder { color: var(--muted); text-transform: none; letter-spacing: 0; font-weight: 500; }
-.pencil { position: absolute; right: 12px; top: 50%; transform: translateY(-50%); color: var(--muted); font-size: 18px; pointer-events: none; }
+.pencil { position: absolute; right: 12px; top: 50%; transform: translateY(-50%); color: var(--muted); font-size: 18px; line-height: 1; display: grid; pointer-events: none; }
 
 /* ---------- dry or wet: two big cards, not a small button ---------- */
 .roads { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin: 8px 0 2px; }
 .roads:has(#gp2:not([hidden])) { grid-template-columns: 1fr 1fr 1fr; }
 .road { display: grid; grid-template-columns: auto 1fr; grid-template-rows: auto auto; column-gap: 10px; align-items: center; text-align: left; padding: 10px 12px; border-radius: 5px; border: 2px solid var(--line-2); background: var(--panel-2); color: var(--muted); cursor: pointer; }
-.road i { grid-row: 1 / 3; font-style: normal; font-size: 26px; line-height: 1; filter: grayscale(0.8); }
+.road i { grid-row: 1 / 3; font-style: normal; font-size: 26px; line-height: 1; display: grid; }
 .road b { font: 800 14px/1.1 var(--head); text-transform: uppercase; }
 .road small { font: 500 12px/1.25 var(--body); grid-column: 2; }
-.road:hover:not(:disabled) { border-color: var(--text); color: var(--text); }
+.road:hover:not(:disabled):not(.on) { border-color: var(--text); color: var(--text); }
 .road.on { color: var(--on-asphalt); border-color: var(--asphalt); background: var(--asphalt); }
 .road.wetroad.on { border-color: var(--tele); background: var(--tele); }
-.road.on i { filter: none; }
 .road:disabled { opacity: 0.5; cursor: default; }
 .roads.slim .road { padding: 6px 10px; }
 .roads.slim .road i { font-size: 18px; grid-row: auto; }
@@ -541,15 +553,15 @@ select, .actions > input, #shareLink, #resultLink, #dareLink {
 .tree .node { cursor: pointer; outline: none; }
 .tree .node .halo { opacity: 0; transition: opacity 0.2s; }
 .tree .node .disc { fill: #1f2225; stroke-width: 2; transition: fill 0.2s; }
-.tree .node .icon { font-size: 19px; text-anchor: middle; }
-.tree .node .lockmark { font-size: 11px; text-anchor: middle; }
+.tree .node .icon, .tree .node .lockmark { fill: none; stroke: #fff; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; overflow: visible; }
+.tree .node .lockmark { stroke: var(--flag); stroke-width: 2.6; }
 .tree .node .ptbg { fill: #16181a; stroke: #5a6066; stroke-width: 1.5; }
 .tree .node .pts { fill: #fff; font: 700 10px var(--body); text-anchor: middle; }
 .tree .node:hover .disc, .tree .node:focus-visible .disc { fill: #3a3e42; }
 .tree .node.on .halo { opacity: 0.4; animation: pulse 2.4s ease-in-out infinite; }
 .tree .node.on .disc { fill: color-mix(in srgb, var(--nc) 38%, #1f2225); stroke-width: 4; }
 .tree .node.locked .disc { stroke: #5a6066; stroke-dasharray: 3 4; }
-.tree .node.locked .icon { opacity: 0.35; filter: grayscale(1); }
+.tree .node.locked .icon { opacity: 0.4; }
 .tree .node.locked .pts, .tree .node.locked .ptbg { opacity: 0.45; }
 .tree .node.short .disc { stroke-dasharray: 5 3; }
 .tree .node.sel .disc { stroke-width: 5; fill: #454a4f; }
@@ -557,7 +569,11 @@ select, .actions > input, #shareLink, #resultLink, #dareLink {
 @keyframes flow { to { stroke-dashoffset: -28; } }
 @keyframes pulse { 50% { opacity: 0.12; } }
 @media (prefers-reduced-motion: reduce) { .tree .link.lit, .tree .node.on .halo { animation: none; } }
-.ncard { margin-top: 8px; padding: 10px 12px; background: var(--panel-2); border: 1px solid var(--line-2); border-radius: 5px; }
+/* a node's card names it in its branch colour, so the card is asphalt like the tree */
+.ncard { margin-top: 8px; padding: 10px 12px; background: var(--asphalt); color: var(--on-asphalt); border: 1px solid #6a7076; border-radius: 5px; }
+.ncard .tip { color: var(--on-asphalt-muted); }
+.ncard .btn:not(.primary) { background: var(--asphalt-2); border-color: transparent; color: var(--on-asphalt); }
+.ncard :where(button):focus-visible { outline-color: #fff; }
 .nhead { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
 .nt { font: 800 18px var(--head); text-transform: uppercase; }
 .ncard .tip { margin: 6px 0 0; }
@@ -566,9 +582,9 @@ select, .actions > input, #shareLink, #resultLink, #dareLink {
 .ncard.pop .nhead { gap: 6px; }
 .ncard.stuck { position: sticky; bottom: 8px; z-index: 5; box-shadow: 0 -6px 18px rgba(22, 24, 26, 0.18); }
 .nclose { display: none; }
-.ncard.pop .nclose { display: block; position: absolute; top: 2px; right: 6px; background: none; border: 0; color: var(--muted); font-size: 20px; line-height: 1; cursor: pointer; }
-.ncard .nd { color: var(--text); }
-.ncard .nl { color: var(--accent); }
+.ncard.pop .nclose { display: block; position: absolute; top: 2px; right: 6px; background: none; border: 0; color: var(--on-asphalt-muted); font-size: 20px; line-height: 1; cursor: pointer; }
+.ncard .nd { color: var(--on-asphalt); }
+.ncard .nl { color: var(--flag); }
 
 /* ---------- paint, streak ---------- */
 .paints { display: flex; gap: 8px; margin-top: 10px; }
@@ -578,7 +594,7 @@ select, .actions > input, #shareLink, #resultLink, #dareLink {
 
 /* ---------- drive it yourself ---------- */
 .pad { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin-top: 10px; }
-.pad button { padding: 16px 0; font-size: 20px; border-radius: 6px; border: 0; background: var(--asphalt); color: var(--on-asphalt); touch-action: none; user-select: none; -webkit-user-select: none; }
+.pad button { display: grid; place-items: center; padding: 14px 0; font-size: 26px; border-radius: 6px; border: 0; background: var(--asphalt); color: var(--on-asphalt); touch-action: none; user-select: none; -webkit-user-select: none; }
 .pad button:active { background: var(--flag); color: var(--text); }
 
 /* ---------- the share card ---------- */
@@ -620,13 +636,12 @@ select, .actions > input, #shareLink, #resultLink, #dareLink {
 .psec h3 .aside { margin-left: auto; font: 500 13px var(--body); letter-spacing: 0; text-transform: none; color: var(--muted); }
 .badges { display: grid; grid-template-columns: repeat(auto-fill, minmax(112px, 1fr)); gap: 6px; }
 .badge { position: relative; cursor: help; background: var(--panel-2); border: 1px solid var(--line); border-radius: 6px; padding: 8px 6px; text-align: center; }
-.badge .bi { display: block; font-size: 26px; line-height: 1.2; filter: grayscale(1); }
+.badge .bi { display: block; font-size: 26px; line-height: 1.2; }
 .badge b { display: block; font: 800 12px var(--head); text-transform: uppercase; margin-top: 2px; }
 .badge small { display: block; font-size: 12px; color: var(--muted); line-height: 1.25; margin-top: 2px; }
 .badge::after { content: attr(data-tip); position: absolute; left: 50%; bottom: calc(100% + 6px); transform: translateX(-50%); width: max-content; max-width: 180px; padding: 6px 8px; border-radius: 5px; background: var(--asphalt); color: #fff; font-size: 12px; line-height: 1.3; text-align: center; opacity: 0; pointer-events: none; transition: opacity 0.1s; z-index: 5; }
 .badge:hover::after, .badge:focus-visible::after { opacity: 1; }
 .badge.got { border-color: var(--text); background: var(--flag); }
-.badge.got .bi { filter: none; }
 .badge.got small { color: var(--text); }
 .prow { display: flex; align-items: center; gap: 8px; padding: 7px 8px; background: var(--panel-2); border: 1px solid var(--line); border-radius: 4px; margin-bottom: 3px; font-size: 14px; }
 .prow .pl { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -643,12 +658,12 @@ select, .actions > input, #shareLink, #resultLink, #dareLink {
 
 /* skill tree and profile: no track screen, so the panel is centred and has room */
 body.full .view { display: none; }
-body.full .layout { grid-template-columns: minmax(0, 720px); justify-content: center; }
+body.full .layout { grid-template-columns: minmax(0, 760px); justify-content: center; }
 
 /* ---------- dare a friend ---------- */
 .dare { border: 0; border-radius: 8px; color: var(--text); max-width: 380px; width: calc(100% - 32px); padding: 32px 22px 18px; text-align: center; box-shadow: 0 20px 60px rgba(22, 24, 26, 0.35); background: linear-gradient(var(--flag) 0 10px, var(--panel) 10px); }
 .dare::backdrop { background: rgba(22, 24, 26, 0.6); }
-.dare-ico { font-size: 40px; line-height: 1; }
+.dare-ico { font-size: 40px; line-height: 1; display: grid; justify-content: center; }
 .dare h3 { margin: 8px 0 6px; font: 800 24px var(--head); text-transform: uppercase; }
 .dare p { margin: 0; color: var(--muted); }
 .dare .actions { justify-content: center; margin-top: 16px; }
@@ -810,15 +825,20 @@ body:not([data-tab='race']) .gantry { display: none; }
 }
 /* While a run goes on, the track is held under the top bar and the panels scroll beneath it. Not on a short
    window (a phone on its side), where the track would leave no room for anything else. */
+/* Driving it yourself on a narrow screen: the track is held under the top bar and the pad sits at the thumbs,
+   just above the tabs, so the road and the controls are on screen together. */
+@media (max-width: 960px) {
+  body.handview .view { position: sticky; top: var(--top-h, 0px); z-index: 4; }
+  body.handview .strip { display: none; }
+  body.handview .pad { position: fixed; left: 0; right: 0; bottom: 60px; z-index: 6; margin: 0; padding: 8px 12px; background: var(--asphalt); }
+  body.handview .pad button { background: var(--asphalt-2); min-height: 56px; }
+  body.handview { padding-bottom: 150px; }
+}
 @media (max-width: 960px) and (min-height: 600px) {
   body.trainview .view {
     position: sticky;
     top: var(--top-h, 0px);
     z-index: 4;
-    margin: -12px -16px 0;
-    padding: 12px 16px 10px;
-    background: var(--bg);
-    border-bottom: 1px solid var(--line);
   }
   /* the round and the budget are on the track screen and in the panel below, so the four counters give up their room */
   body.trainview .strip { display: none; }
@@ -843,10 +863,9 @@ body:not([data-tab='race']) .gantry { display: none; }
 
 /* ---------- TOP BAR BETWEEN PHONE AND WIDE ---------- */
 /* the bar no longer has room for everything on one line: the car's status takes a line of its own */
-@media (min-width: 961px) and (max-width: 1560px) {
+@media (min-width: 961px) and (max-width: 1560px) { #topChallenge .long { display: none; } .tab { padding: 10px 11px; } .chip { flex: 0 1 auto; min-width: 0; } }
+@media (min-width: 961px) and (max-width: 1240px) {
   .top { flex-wrap: wrap; gap: 8px 12px; }
-  .tab { padding: 10px 10px; }
-  #topChallenge .long { display: none; }
   .shelfbtn { margin-left: auto; }
   .chip { order: 9; flex-basis: 100%; max-width: 100%; margin-left: 0; }
 }
@@ -869,12 +888,14 @@ body:not([data-tab='race']) .gantry { display: none; }
   body { padding-bottom: 61px; }
   body.has-nudge { padding-bottom: 141px; }
   .nudge { bottom: 60px; }
+  /* a node's card rests above the tab bar, not over it */
+  .ncard.stuck { bottom: 68px; }
 
   /* the top bar is two short rows: the name and the saved cars, then the car's status and the challenge */
   .top { flex-wrap: wrap; gap: 8px 10px; padding: 8px 16px 16px; }
   .brand { font-size: 18px; }
   .shelfbtn { margin-left: auto; }
-  .chip { order: 3; flex: 1 1 55%; min-width: 0; max-width: 100%; margin-left: 0; min-height: 44px; font-size: 13px; line-height: 1.2; white-space: normal; }
+  .chip { order: 3; flex: 1 1 55%; min-width: 0; max-width: 100%; margin-left: 0; min-height: 44px; font-size: 13px; padding-top: 13px; padding-bottom: 13px; }
   #topChallenge { order: 4; }
   #topChallenge .long { display: none; }
 
