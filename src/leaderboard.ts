@@ -336,7 +336,7 @@ export function createLeaderboard({ getCar, getShelf, getGpId, goRace, notify, r
     const shelf = getShelf()
     const choices = [
       ...(current ? [{ value: 'current', label: 'Current car · ' + current.name }] : []),
-      ...shelf.map((c) => ({ value: 'shelf:' + carToJson(c), label: 'Shelf · ' + c.name })),
+      ...shelf.map((c) => ({ value: 'shelf:' + carToJson(c), label: 'My cars · ' + c.name })),
     ]
     select.replaceChildren(...choices.map((c) => Object.assign(document.createElement('option'), { value: c.value, textContent: c.label })))
     select.disabled = choices.length === 0
@@ -419,7 +419,7 @@ export function createLeaderboard({ getCar, getShelf, getGpId, goRace, notify, r
           $('resultBoardMsg').textContent = text
           $('resultBoardMsg').classList.toggle('bad', bad)
         }
-    if (!car) return tell('Choose an available car first. Train one or save it to your shelf if the list is empty.', true)
+    if (!car) return tell('Choose an available car first. Train one or save it to My cars if the list is empty.', true)
     tell('Entering your setup…')
     try {
       // the setup goes in, not the trained car: the game trains every setup itself, the same way for everyone

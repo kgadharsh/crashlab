@@ -112,11 +112,11 @@ document.querySelector('#app')!.innerHTML = `
 <header class="top">
   <div class="brand"><svg class="logo" viewBox="-1 -1 34 34" aria-hidden="true"><rect x="-1" y="-1" width="34" height="34" rx="8" fill="#ffb31a"/><path d="M28 16 15 10.5 4.5 12.5v7L15 21.5z" fill="#181204"/><ellipse cx="14" cy="16" rx="3.4" ry="1.9" fill="#ffb31a"/></svg><span class="word">CRASH<b>LAB</b></span></div>
   <nav class="tabs" role="tablist">
-    <button class="tab" data-tab="garage" role="tab"><span class="tnum">1</span>Garage</button>
-    <button class="tab" data-tab="skills" role="tab"><span class="tnum">2</span>Skill tree</button>
-    <button class="tab" data-tab="practice" role="tab"><span class="tnum">3</span>Practice</button>
-    <button class="tab" data-tab="race" role="tab"><span class="tnum">4</span>Race</button>
-    <button class="tab profile" data-tab="profile" role="tab"><span class="pico" aria-hidden="true">☻</span>Profile</button>
+    <button class="tab" data-tab="garage" id="tab-garage" role="tab" aria-controls="garage"><span class="tnum">1</span>Garage</button>
+    <button class="tab" data-tab="skills" id="tab-skills" role="tab" aria-controls="skills"><span class="tnum">2</span>Skill tree</button>
+    <button class="tab" data-tab="practice" id="tab-practice" role="tab" aria-controls="practice"><span class="tnum">3</span>Practice</button>
+    <button class="tab" data-tab="race" id="tab-race" role="tab" aria-controls="race"><span class="tnum">4</span>Race</button>
+    <button class="tab profile" data-tab="profile" id="tab-profile" role="tab" aria-controls="profile"><span class="pico" aria-hidden="true">☻</span>Profile</button>
   </nav>
   <button type="button" class="btn small primary hot" id="topChallenge" disabled title="Train a car first, then dare a friend to beat it">⚔ Challenge<span class="long"> a friend</span></button>
   <div class="chip" id="chip"></div>
@@ -127,20 +127,20 @@ document.querySelector('#app')!.innerHTML = `
     <div class="slot" id="spPrev" hidden><span id="spPrevText"></span><button class="btn small" id="spSwap">Switch back</button></div>
     <div class="shelf" id="spShelf"></div>
     <p class="tip" id="spEmpty" style="margin-top:0"></p>
-    <div class="actions"><button class="btn small primary" id="spShelve">Put your car on the shelf</button></div>
+    <div class="actions"><button class="btn small primary" id="spShelve">Save this car to My cars</button></div>
     <p class="msg" id="spMsg"></p>
   </div>
 </header>
 <main class="layout">
   <section class="view">
     <div class="screen">
-      <canvas id="track" width="${W}" height="${H}"></canvas>
+      <canvas id="track" width="${W}" height="${H}" role="img" aria-label="The track, seen from above, with the car driving on it"></canvas>
     </div>
     <div class="strip" id="strip"></div>
     <div class="graph" id="graphBox"><p id="graphStatus"></p><canvas id="graph" width="240" height="44" aria-hidden="true"></canvas></div>
   </section>
   <aside class="side">
-    <div id="garage" class="side">
+    <div id="garage" class="side" role="tabpanel" aria-labelledby="tab-garage">
       <div class="panel first" id="firstRun" data-fixed hidden>
         <h1 id="firstTitle">Build a car that wins gold</h1>
         <p id="firstLine">Gold is all ${RACE_COUNT} secret tracks in under ${GOLD_TIME} s. Your car trains itself in a minute or two, then races them.</p>
@@ -214,7 +214,7 @@ document.querySelector('#app')!.innerHTML = `
       </div>
       <button class="btn primary wide" id="toSkills">Next: Skill tree →</button>
     </div>
-    <div id="skills" class="side">
+    <div id="skills" class="side" role="tabpanel" aria-labelledby="tab-skills">
       <div class="panel" data-fixed>
         <h2>Skill tree<span class="aside" id="partCount"></span></h2>
         <p class="tip" style="margin-top:0">Every car has ${POINT_BUDGET} points to spend. Tap a node to read what it gives and what it costs, then fit it.</p>
@@ -228,7 +228,7 @@ document.querySelector('#app')!.innerHTML = `
         <div class="actions"><button class="btn" id="resetTree">Reset skill tree</button><button class="btn primary" id="toPractice" style="flex:1">Go to practice →</button></div>
       </div>
     </div>
-    <div id="practice" class="side">
+    <div id="practice" class="side" role="tabpanel" aria-labelledby="tab-practice">
       <div class="panel" data-fixed>
         <h2>Training<span class="aside" id="trainState">ready</span></h2>
         <div class="budget"><div class="bar"><i id="budgetBar" style="width:0%"></i></div>
@@ -236,7 +236,7 @@ document.querySelector('#app')!.innerHTML = `
         <div class="actions">
           <button class="btn primary" id="train">Start training</button>
           <button class="btn" id="keep">Keep training</button>
-          <button class="btn" id="shelveQuick">Save to shelf</button>
+          <button class="btn" id="shelveQuick">Save to My cars</button>
           <button class="btn" id="swapQuick" hidden>Back to previous car</button>
           <button class="btn" id="skip" hidden>Skip to the end</button>
         </div>
@@ -300,13 +300,13 @@ document.querySelector('#app')!.innerHTML = `
         <p class="msg" id="carMsg"></p>
       </div>
       <div class="panel">
-        <h2>Car shelf<span class="aside" id="shelfCount"></span></h2>
-        <p class="tip" style="margin-top:0">Keep up to ${maxSlots()} cars here, such as two trainings of the same setup, and use whichever races best. Using a shelf car puts your current car back under Switch to previous car.</p>
+        <h2>My cars<span class="aside" id="shelfCount"></span></h2>
+        <p class="tip" style="margin-top:0">Keep up to ${maxSlots()} cars here, such as two trainings of the same setup, and use whichever races best. Using a saved car puts your current car back under Switch to previous car.</p>
         <div class="shelf" id="shelf"></div>
-        <div class="actions"><button class="btn" id="shelve">Put your car on the shelf</button></div>
+        <div class="actions"><button class="btn" id="shelve">Save this car to My cars</button></div>
       </div>
     </div>
-    <div id="race" class="side" data-view="hub">
+    <div id="race" class="side" role="tabpanel" aria-labelledby="tab-race" data-view="hub">
       <div class="panel hub" id="raceHub" data-fixed>
         <button type="button" class="hubcard daily" id="hubDaily" hidden>
           <span class="hubtop"><span class="hubkind">Daily</span><em id="hubDailyEnds"></em></span>
@@ -428,7 +428,7 @@ document.querySelector('#app')!.innerHTML = `
       </div>
       <p class="tip" id="pb"></p>
     </div>
-    <div id="profile" class="side">
+    <div id="profile" class="side" role="tabpanel" aria-labelledby="tab-profile">
       <div class="panel" data-fixed id="profileBox"></div>
     </div>
   </aside>
@@ -754,7 +754,7 @@ function renderGarage() {
   $('paceOut').textContent = pct(b.reward.pace)
   $('safetyOut').textContent = pct(b.reward.safety)
   $('smoothOut').textContent = pct(b.reward.smooth)
-  $('pickCount').textContent = b.practice.length + ' of ' + maxPractice(b) + ' picked'
+  $('pickCount').textContent = b.practice.length + ' picked · up to ' + maxPractice(b)
   input('condNight').checked = !!b.cond?.night
   input('condIce').checked = !!b.cond?.ice
   weatherSel.value = b.weather === 'wet' ? 'wet' : 'dry'
@@ -1656,7 +1656,7 @@ function shelfRows(box: HTMLElement, training: boolean) {
         shelf.splice(i, 1)
         saveShelf()
         renderShelf()
-        carMsg('Removed ' + c.name + ' from the shelf.')
+        carMsg('Removed ' + c.name + ' from My cars.')
       })
       row.append(label, use, drop)
       return row
@@ -1666,12 +1666,12 @@ function shelfRows(box: HTMLElement, training: boolean) {
 function renderShelf() {
   const training = !!worker
   const full = shelf.length >= maxSlots()
-  const text = full ? 'Shelf is full' : 'Put your car on the shelf'
+  const text = full ? 'My cars is full' : 'Save this car to My cars'
   $('shelfCount').textContent = shelf.length + ' of ' + maxSlots()
   for (const id of ['shelve', 'spShelve', 'shelveQuick']) {
     const btn = $<HTMLButtonElement>(id)
     btn.disabled = !car || full
-    btn.textContent = id === 'shelveQuick' ? (full ? 'Shelf is full' : 'Save to shelf') : text
+    btn.textContent = id === 'shelveQuick' ? (full ? 'My cars is full' : 'Save to My cars') : text
   }
   shelfRows($('shelf'), training)
   shelfRows($('spShelf'), training)
@@ -1686,7 +1686,7 @@ const sameCar = (a: CarFile, c: CarFile) => JSON.stringify(a.genome) === JSON.st
 function shelveCar() {
   if (!car || shelf.length >= maxSlots()) return
   if (shelf.some((c) => sameCar(c, car!))) {
-    const text = car.name + ' is already on your shelf.'
+    const text = car.name + ' is already in My cars.'
     carMsg(text)
     $('spMsg').textContent = text
     $('trainMsg').textContent = text
@@ -1695,8 +1695,8 @@ function shelveCar() {
   shelf.push(clone(car))
   saveShelf()
   renderShelf()
-  carMsg('Put ' + car.name + ' on the shelf.')
-  $('spMsg').textContent = 'Put ' + car.name + ' on the shelf.'
+  carMsg('Saved ' + car.name + ' to My cars.')
+  $('spMsg').textContent = 'Saved ' + car.name + ' to My cars.'
   $('trainMsg').textContent = 'Saved ' + car.name + '. Get it back any time from My cars, top right, on any tab.'
 }
 $('shelve').addEventListener('click', shelveCar)

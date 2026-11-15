@@ -827,3 +827,22 @@ body.full .layout { grid-template-columns: minmax(0, 720px); justify-content: ce
 .dot.silver::after { content: 'S'; }
 .dot.bronze::after { content: 'B'; }
 .dot.none { border-style: dashed; }
+
+/* ---------- READABLE AND REACHABLE ---------- */
+/* a locked thing is dimmed through its picture and colours, never by fading its words below a readable contrast */
+.badge, .perk, .frame.locked, .part.locked { opacity: 1; }
+.badge:not(.got) b, .perk:not(.got) b, .frame.locked b { color: var(--muted); }
+.badge:not(.got) .bi { opacity: 0.45; }
+.perk:not(.got) .pd { color: var(--muted); }
+.part.locked b, .part.locked .does { color: var(--muted); }
+/* nothing a player reads is under 12px */
+.track .tt, .bhead, .tab small, .hubtop, .hubfacts small, .pnum small, .badge small, .cell .k, .look span, .pk, .road small, .frame small, .jobhead { font-size: 12px; }
+/* every control shows where the keyboard is */
+:where(button, select, input, summary, a, [role='button'], [tabindex]):focus-visible { outline: 2px solid var(--tele); outline-offset: 2px; }
+.tree .node:focus-visible .disc { stroke: var(--tele); stroke-width: 4; }
+.name input:focus-visible, .pnameinput:focus-visible { outline-offset: -1px; }
+/* reduced motion: the result squares appear without popping, and nothing glides */
+@media (prefers-reduced-motion: reduce) {
+  .sq { animation: none; }
+  *, *::before, *::after { transition-duration: 0.01ms !important; scroll-behavior: auto !important; }
+}

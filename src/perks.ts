@@ -9,7 +9,7 @@ const PAINT = 'crashlab.paint'
 export type Perk = { id: 'paint' | 'shelf' | 'glow' | 'nitro'; name: string; days: number; does: string }
 export const PERKS: Perk[] = [
   { id: 'paint', name: 'Paint shop', days: 2, does: 'Six colours for your car, on every screen.' },
-  { id: 'shelf', name: 'Bigger shelf', days: 3, does: 'Two more places on the car shelf, to keep more trainings.' },
+  { id: 'shelf', name: 'More saved cars', days: 3, does: 'Two more places in My cars, to keep more trainings.' },
   { id: 'glow', name: 'Neon glow', days: 5, does: 'Your car glows in its own colour on the track.' },
   { id: 'nitro', name: 'Hand-drive nitro', days: 7, does: 'A boost on Space when you drive a track yourself: four seconds a lap, so use it on the straights.' },
 ]
