@@ -370,7 +370,7 @@ document.querySelector('#app')!.innerHTML = `
         <div class="jobs" id="dailyJobs"></div>
         <p class="tip" style="color:var(--text);font-weight:600">Today</p>
         <ol class="rank" id="dailyRows"></ol>
-        <p class="tip" id="dailyEmpty" hidden>No entries today yet. Be the first.</p>
+        <p class="tip" id="dailyEmpty" hidden>First place is open today: the first car entered takes it.</p>
         <div id="dailyPast"></div>
       </div>
       <div class="panel" id="weeklyPanel" data-fixed hidden>
@@ -383,14 +383,14 @@ document.querySelector('#app')!.innerHTML = `
         <ol class="tower" id="weeklyTracks" hidden></ol>
         <p class="tip" id="weeklyBoardTitle" style="color:var(--text);font-weight:600">This week</p>
         <ol class="rank" id="weeklyRows"></ol>
-        <p class="tip" id="weeklyEmpty" hidden>No entries this week yet. Be the first.</p>
+        <p class="tip" id="weeklyEmpty" hidden>First place is open this week: the first car entered takes it.</p>
         <div id="weeklyPast"></div>
       </div>
       <div class="panel" id="boardOnline" hidden>
         <h2>Leaderboard</h2>
         <div class="roads slim" role="group" aria-label="Which leaderboard"><button type="button" class="road on" id="onlineDry" aria-pressed="true"><i aria-hidden="true">☀</i><b>Dry road</b></button><button type="button" class="road wetroad" id="onlineWet" aria-pressed="false"><i aria-hidden="true">🌧</i><b>Wet road</b></button></div>
         <ol class="rank" id="onlineRows"></ol>
-        <p class="tip" id="onlineEmpty" hidden>No cars on this board yet. Be the first.</p>
+        <p class="tip" id="onlineEmpty" hidden>First place is open: the first car entered takes it.</p>
         <p class="tip" style="margin-top:4px">Every car on these boards was trained by the game itself: one run, the same way for everyone. Only your setup counts, not how often you retrain. An entry shows up within about 30 minutes.</p>
         <p class="tip" id="onlineWho"></p>
         <div class="jobs" id="onlineJobs"></div>

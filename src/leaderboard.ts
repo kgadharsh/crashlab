@@ -599,7 +599,7 @@ export function createLeaderboard({ getCar, getShelf, getGpId, goRace, notify, r
         ...daily.past.map((p) => {
           const gp = dailyGp(p.day, p.seed)
           const box = document.createElement('div')
-          const head = Object.assign(document.createElement('p'), { className: 'tip', textContent: gp.name + ' · ' + twistOf(gp) + (p.podium.length ? '' : ' · nobody entered') })
+          const head = Object.assign(document.createElement('p'), { className: 'tip', textContent: gp.name + ' · ' + twistOf(gp) })
           head.style.cssText = 'color:var(--text);font-weight:600;margin-top:12px'
           const open = Object.assign(document.createElement('button'), { className: 'btn small', textContent: 'Race these tracks' })
           open.addEventListener('click', () => openWeek(gp))
@@ -701,7 +701,7 @@ export function createLeaderboard({ getCar, getShelf, getGpId, goRace, notify, r
       ...w.past.map((p) => {
         const gp = weeklyGp(p.week, p.seed)
         const box = document.createElement('div')
-        const head = Object.assign(document.createElement('p'), { className: 'tip', textContent: gp.name + (gp.wet ? ' · wet' : ' · dry') + (gp.night ? ' · night' : '') + (gp.ice ? ' · ice' : '') + (p.podium.length ? '' : ' · nobody entered') })
+        const head = Object.assign(document.createElement('p'), { className: 'tip', textContent: gp.name + (gp.wet ? ' · wet' : ' · dry') + (gp.night ? ' · night' : '') + (gp.ice ? ' · ice' : '') })
         head.style.cssText = 'color:var(--text);font-weight:600;margin-top:12px'
         const open = Object.assign(document.createElement('button'), { className: 'btn small', textContent: 'Open past week' })
         open.addEventListener('click', () => openWeek(gp))
