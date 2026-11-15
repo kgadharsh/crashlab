@@ -760,3 +760,9 @@ body.full .layout { grid-template-columns: minmax(0, 720px); justify-content: ce
 /* the credits sit at the bottom of the window on a short page, and below the game on a long one */
 #app { min-height: 100dvh; display: flex; flex-direction: column; }
 .layout { flex: 1 0 auto; width: 100%; align-content: start; }
+
+/* ---------- THE RESULT'S HEADLINE ---------- */
+/* how close it was and where it would place: the lines that bring a player back for another race */
+.resultbig { margin: 10px 0 0; font: 700 21px/1.2 var(--head); letter-spacing: 0.03em; color: var(--text); text-wrap: balance; }
+.resultbig + .resultbig { margin-top: 4px; font-size: 18px; color: var(--accent); }
+.resultbig:empty { display: none; }

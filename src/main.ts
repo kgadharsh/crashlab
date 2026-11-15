@@ -390,14 +390,15 @@ document.querySelector('#app')!.innerHTML = `
           <div class="sc-line" id="scLine"></div>
           <div class="sc-cta">Drives tracks it has never seen. Can yours beat it?</div>
         </div>
-        <p class="tip" id="resultLine" style="margin-top:4px"></p>
-        <p class="tip warn" id="advice"></p>
-        <div class="actions"><button class="btn small primary" id="resultGarage">Edit setup in Garage →</button><button class="btn small" id="resultPractice">Go to Practice →</button><button class="btn small primary hot" id="resultShare">⚔ Share this result</button></div>
+        <p class="resultbig" id="resultGap"></p>
+        <p class="resultbig" id="resultBoardPlace"></p>
+        <p class="tip" id="resultLine" style="margin-top:8px"></p>
+        <p class="tip" id="advice"></p>
+        <div class="actions"><button class="btn small" id="resultGarage">Edit setup in Garage →</button><button class="btn small" id="resultPractice">Go to Practice →</button><button class="btn small hot" id="resultShare">⚔ Share this result</button></div>
         <input id="resultLink" readonly hidden aria-label="Challenge link" style="width:100%;margin-top:6px" />
         <div id="resultBoard" hidden>
           <p class="tip" id="resultBoardAsk" style="margin-top:12px;color:var(--text);font-weight:600">Put this on the leaderboard?</p>
           <div class="actions" style="margin-top:4px"><button class="btn primary" id="resultBoardGo">Sign in with Google to enter</button></div>
-          <p class="tip" id="resultBoardPlace" style="margin-top:2px"></p>
           <p class="msg" id="resultBoardMsg"></p>
         </div>
         <p class="msg" id="resultMsg"></p>
@@ -2107,13 +2108,20 @@ const leaderboard = createLeaderboard({
     $('gpTitle').scrollIntoView({ behavior: 'smooth', block: 'center' })
   },
 })
+let resultSeen = ''
 raceView = createRaceView({ onResult: (gpId, r) => {
   leaderboard.showResult(gpId, r)
-  if (!r) return
+  // the race screen draws often and reports its result each time: what follows happens once per finished race
+  const key = r ? gpId + ':' + r.finished + ':' + r.totalTime : ''
+  const fresh = key !== resultSeen
+  resultSeen = key
+  if (!r || !fresh) return
   if (waitingNotice) showNotice(waitingNotice)
   announceParts()
+  // on a narrow window the result is far below the track: bring it into view
+  if (tab === 'race' && window.matchMedia('(max-width: 960px)').matches) $('resultPanel').scrollIntoView({ behavior: REDUCED_MOTION.matches ? 'auto' : 'smooth', block: 'start' })
   // a finished race is something to show off: ask then, once the player has had a moment with the result
-  if (r.finished > 0) setTimeout(() => tab === 'race' && showDare('raced', r), 2500)
+  if (r.finished > 0) setTimeout(() => tab === 'race' && resultSeen === key && showDare('raced', r), 4000)
 },  ctx, cam, getCar: () => car, isStale: carIsStale, getChallenge: () => challenge, getLook: () => look, goTo: setTab, hudText, setStrip })
 
 

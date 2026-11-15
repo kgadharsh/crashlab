@@ -5,7 +5,7 @@ import { genomeToBrain } from './genome'
 import { CHECKPOINTS, createCar, drive, type Brain, type Car } from './sim'
 import { brainShape, specOf, type CarSpec } from './setup'
 import {
-  CAUSE_LABEL, GRAND_PRIXES, RACE_COUNT, dayOf, isSecretGp, adviceFor, better, finishLap, gpTrack, lapIsOver, medalFor, medalRules, raceCar, summarise, versus,
+  BRONZE_FINISHES, CAUSE_LABEL, GRAND_PRIXES, RACE_COUNT, dayOf, isSecretGp, adviceFor, better, finishLap, gpTrack, lapIsOver, medalFor, medalRules, raceCar, summarise, versus,
   type GrandPrix, type Medal, type RaceResult, type TrackResult,
 } from './race'
 import { logEvent, recordChallenge } from './playLog'
@@ -351,6 +351,20 @@ export function createRaceView(d: RaceDeps) {
       $('resultLine').textContent = (watched ? 'That was ' + live!.car.name + "'s car: " : '') + s.finished + ' of ' + RACE_COUNT + ' finished · ' + s.totalTime.toFixed(1) + ' s total' + (gens && !watched ? ' · trained for ' + gens + ' rounds' : '')
       $('advice').textContent = watched ? 'Now build and train your own car in the Garage and Practice, then race it here to beat it.' : adviceFor(s, live!.gp, live!.car.build.weather === 'wet')
       $('resultShare').hidden = watched
+      // the one line that says how close this was: the gap to gold, or what the next medal takes
+      const left = RACE_COUNT - s.finished
+      const tracks = (n: number) => n + ' more ' + (n === 1 ? 'track' : 'tracks')
+      $('resultGap').textContent =
+        watched || isSecretGp(live!.gp)
+          ? ''
+          : medal === 'gold'
+            ? 'Gold with ' + Math.max(0, live!.gp.goldTime - s.totalTime).toFixed(1) + ' s to spare.'
+            : medal === 'silver'
+              ? Math.max(0.1, s.totalTime - live!.gp.goldTime).toFixed(1) + ' s from gold.'
+              : s.finished >= BRONZE_FINISHES
+                ? 'Finish ' + tracks(left) + ' for silver.'
+                : 'Finish ' + tracks(BRONZE_FINISHES - s.finished) + ' for bronze.'
+      $('advice').classList.toggle('warn', !watched && left > 0) // the red edge is for a car that crashed out, not for a clean run
       if (!watched) d.onResult?.(live!.gp.id, s)
       // the share card: one coloured square a track, green for a quick lap, amber for a slow one, dark for a crash
       const quick = live!.gp.goldTime / RACE_COUNT
