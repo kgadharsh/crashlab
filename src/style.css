@@ -613,32 +613,25 @@ body.full .layout { grid-template-columns: minmax(0, 720px); justify-content: ce
 #topChallenge { white-space: nowrap; flex: none; }
 
 /* ---------- FOOTER ---------- */
-/* a slim bar pinned to the bottom of the window, so the links are in view without scrolling */
-body { padding-bottom: 44px; }
+/* the credits close the page: the bottom of the window belongs to the game, not to links out of it */
 .made {
-  position: fixed;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  z-index: 6;
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   justify-content: center;
   gap: 8px 14px;
-  padding: 7px 16px;
+  padding: 14px 16px 20px;
   border-top: 1px solid var(--line);
-  background: rgba(11, 14, 18, .94);
-  backdrop-filter: blur(6px);
   color: var(--muted);
   font-size: 13px;
-  white-space: nowrap;
 }
 .made b { color: var(--text); font-weight: 600; }
 .made .soc {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  padding: 4px 11px;
+  min-height: 44px;
+  padding: 4px 14px;
   border: 1px solid var(--line);
   border-radius: 999px;
   background: var(--panel);
@@ -649,10 +642,8 @@ body { padding-bottom: 44px; }
 .made .soc:hover, .made .soc:focus-visible {
   color: var(--accent);
   border-color: var(--accent);
-  box-shadow: 0 0 12px rgba(255, 179, 26, .25);
-  outline: none;
 }
-@media (max-width: 420px) { .made > span:first-child { display: none; } }
+.made .soc:focus-visible { outline: 2px solid var(--tele); outline-offset: 2px; }
 
 /* ---------- THE RACE MENU ---------- */
 /* each section of the Race tab shows only its own panels */
@@ -766,3 +757,6 @@ body { padding-bottom: 44px; }
 .textbtn { justify-self: center; min-height: 44px; padding: 0 12px; background: none; border: 0; cursor: pointer; color: var(--muted); font: 600 14px var(--body); text-decoration: underline; text-underline-offset: 3px; }
 .textbtn:hover { color: var(--text); }
 .textbtn:focus-visible { outline: 2px solid var(--tele); outline-offset: 2px; border-radius: 3px; }
+/* the credits sit at the bottom of the window on a short page, and below the game on a long one */
+#app { min-height: 100dvh; display: flex; flex-direction: column; }
+.layout { flex: 1 0 auto; width: 100%; align-content: start; }
