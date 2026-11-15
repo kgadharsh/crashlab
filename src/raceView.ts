@@ -486,9 +486,13 @@ export function createRaceView(d: RaceDeps) {
     }
     d.setStrip([
       ['Track', Math.min(r.index + 1, RACE_COUNT) + '<small>/' + RACE_COUNT + '</small>'],
-      ['Lap', r.summary ? '–' : Math.round((100 * Math.min(lap.passed, CHECKPOINTS)) / CHECKPOINTS) + '<small>%</small>'],
       ['Finished', sum.finished + '<small>/' + r.results.length + '</small>'],
       ['Total time', sum.totalTime.toFixed(1) + '<small> s</small>'],
+      // something to race against on every track: how far the finished tracks are ahead of or behind the pace that wins gold
+      // (a Grand Prix with no gold line keeps the lap counter)
+      r.gp.goldTime > 0
+        ? ['Gold pace', sum.finished ? ((d) => (d > 0 ? '+' : '−') + Math.abs(d).toFixed(1) + '<small> s ' + (d > 0 ? 'behind' : 'ahead') + '</small>')(sum.totalTime - (r.gp.goldTime * sum.finished) / RACE_COUNT) : '–']
+        : ['Lap', r.summary ? '–' : Math.round((100 * Math.min(lap.passed, CHECKPOINTS)) / CHECKPOINTS) + '<small>%</small>'],
     ])
   }
 
