@@ -724,8 +724,13 @@ body.full .layout { grid-template-columns: minmax(0, 720px); justify-content: ce
 
 /* ---------- TRAINING ON A NARROW SCREEN ---------- */
 /* the explanation is folded away, so its summary has to be a full-size thing to press */
-#practice .more summary { display: flex; align-items: center; min-height: 44px; }
-#practice .more .tip:first-of-type { margin-top: 0; }
+.more summary { display: flex; align-items: center; gap: 6px; min-height: 44px; }
+.more summary::before { content: '+'; font: 600 14px var(--mono); color: var(--accent); }
+.more[open] summary::before { content: '−'; }
+.more summary::-webkit-details-marker { display: none; }
+.more summary:focus-visible { outline: 2px solid var(--tele); outline-offset: 2px; border-radius: 3px; }
+.more .tip:first-of-type { margin-top: 0; }
+.more { margin-top: 4px; }
 @media (max-width: 960px) {
   /* the button that starts a run is the widest, tallest thing in the panel */
   #practice .panel[data-fixed] .actions .btn { min-height: 44px; flex: 1 1 auto; }

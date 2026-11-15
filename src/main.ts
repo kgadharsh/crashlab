@@ -150,7 +150,10 @@ document.querySelector('#app')!.innerHTML = `
       <div class="panel" id="jobPanel">
         <h2>Your job</h2>
         <p class="tip" style="margin-top:0">Build a car, train its brain on practice tracks, then race it on ${RACE_COUNT} tracks it has never seen. Gold: all ${RACE_COUNT} in under ${GOLD_TIME} s.</p>
-        <p class="tip">Not sure where to start? The setup below is a fair starting point, not a winner: when the game trains it for the leaderboard, the same way it trains everyone's, it does not finish every track. Change one thing at a time in the next steps to see what it does. A car you have not touched is a car anyone can build.</p>
+        <details class="more">
+          <summary>Where to start</summary>
+          <p class="tip">Not sure where to start? The setup below is a fair starting point, not a winner: when the game trains it for the leaderboard, the same way it trains everyone's, it does not finish every track. Change one thing at a time in the next steps to see what it does. A car you have not touched is a car anyone can build.</p>
+        </details>
       </div>
       <div class="panel name">
         <label for="name" class="namelabel">Your car's name <span>tap the name to change it</span></label>
@@ -170,7 +173,11 @@ document.querySelector('#app')!.innerHTML = `
         <h2><span class="n">01</span>Sensors<span class="aside" id="weights"></span></h2>
         <label class="row"><span>Eyes (rays)</span><input type="range" id="count" min="${LIMITS.count[0]}" max="${LIMITS.count[1]}" step="1" /><output id="countOut"></output></label>
         <label class="row"><span>View width</span><input type="range" id="spread" min="${LIMITS.spread[0]}" max="${LIMITS.spread[1]}" step="5" /><output id="spreadOut"></output></label>
-        <p class="tip">Rays are the car's eyes: each one is a line that measures the distance to the road edge or a block. More rays show more, but the brain has more to learn, so training needs more rounds. View width is how wide the rays fan out: wide sees bends sooner, narrow sees straight ahead in more detail.</p>
+        <p class="tip" style="margin-top:0">More rays see more, but take more rounds to train. A wider view sees bends sooner.</p>
+        <details class="more">
+          <summary>How sensors work</summary>
+          <p class="tip">Rays are the car's eyes: each one is a line that measures the distance to the road edge or a block. More rays show more, but the brain has more to learn, so training needs more rounds. View width is how wide the rays fan out: wide sees bends sooner, narrow sees straight ahead in more detail.</p>
+        </details>
       </div>
       <div class="panel">
         <h2><span class="n">02</span>Car setup</h2>
@@ -179,14 +186,22 @@ document.querySelector('#app')!.innerHTML = `
           <div class="stat">Top speed<div class="bar amber"><i id="speedBar"></i></div><b id="speedOut"></b></div>
           <div class="stat">Cornering<div class="bar"><i id="gripBar"></i></div><b id="gripOut"></b></div>
         </div>
-        <p class="tip">Grip takes bends harder; speed is quicker on the straights. A fast car has to brake earlier, because the tyres start to slide at a lower speed in bends. In our tests a very fast car crashed too often to finish all ${RACE_COUNT} race tracks.</p>
+        <p class="tip" style="margin-top:0">Grip takes bends harder; speed is quicker on the straights.</p>
+        <details class="more">
+          <summary>What it costs</summary>
+          <p class="tip">A fast car has to brake earlier, because the tyres start to slide at a lower speed in bends. In our tests a very fast car crashed too often to finish all ${RACE_COUNT} race tracks.</p>
+        </details>
       </div>
       <div class="panel">
         <h2><span class="n">03</span>What to reward</h2>
         <label class="row"><span>Reward speed</span><input type="range" id="pace" min="0" max="100" step="5" /><output id="paceOut"></output></label>
         <label class="row"><span>Punish crashes</span><input type="range" id="safety" min="0" max="100" step="5" /><output id="safetyOut"></output></label>
         <label class="row"><span>Punish jerky steering</span><input type="range" id="smooth" min="0" max="100" step="5" /><output id="smoothOut"></output></label>
-        <p class="tip">Training always rewards getting round the track. These sliders add extras. Reward speed pushes the car to go faster and take more risks. Punish crashes makes it drive more carefully. Punish jerky steering makes it steer smoothly. In our tests the sliders did not clearly help or hurt, so zero is a fine start.</p>
+        <p class="tip" style="margin-top:0">Extras on top of getting round the track. Zero is a fine start.</p>
+        <details class="more">
+          <summary>What each one does</summary>
+          <p class="tip">Training always rewards getting round the track. These sliders add extras. Reward speed pushes the car to go faster and take more risks. Punish crashes makes it drive more carefully. Punish jerky steering makes it steer smoothly. In our tests the sliders did not clearly help or hurt, so zero is a fine start.</p>
+        </details>
       </div>
       <div class="panel">
         <h2><span class="n">04</span>Practice tracks<span class="aside" id="pickCount"></span></h2>
@@ -202,7 +217,11 @@ document.querySelector('#app')!.innerHTML = `
     <div id="skills" class="side">
       <div class="panel" data-fixed>
         <h2>Skill tree<span class="aside" id="partCount"></span></h2>
-        <p class="tip" style="margin-top:0">Every car has ${POINT_BUDGET} points to spend. Point at a node (or tap it) to read what it gives and what it costs you on the road, then fit it. Spend the points on what the tracks need. Racing, stars, the Weekly Challenge and driving by hand unlock more nodes. The lines between nodes only group related ones: there is no order, so fit any unlocked node at any time.</p>
+        <p class="tip" style="margin-top:0">Every car has ${POINT_BUDGET} points to spend. Tap a node to read what it gives and what it costs, then fit it.</p>
+        <details class="more">
+          <summary>How the tree works</summary>
+          <p class="tip">Spend the points on what the tracks need. Racing, stars, the Weekly Challenge and driving by hand unlock more nodes. The lines between nodes only group related ones: there is no order, so fit any unlocked node at any time.</p>
+        </details>
         <p class="tip legend" style="margin-top:6px">The number on a circle is the points it costs · a glowing circle is fitted · a padlock means you have not unlocked it yet.</p>
         <div id="treeSvg"></div>
         <div class="ncard" id="treeDetail"></div>
@@ -241,7 +260,11 @@ document.querySelector('#app')!.innerHTML = `
       </div>
       <div class="panel" id="handPanel">
         <h2>Drive it yourself<span class="aside" id="handCount"></span></h2>
-        <p class="tip" style="margin-top:0">Take the wheel and be the brain. Same car, same track: steering is gentle at first and snaps to full lock if you hold a key, so tap in bends and floor it on straights. Arrow keys or W A S D (Space for the boost, if you have earned it). Your own car runs beside you if you have trained one. Finish a lap on 2 tracks to open Steady steering and on 5 to open the Featherweight chassis in the skill tree.</p>
+        <p class="tip" style="margin-top:0">Take the wheel and be the brain. Same car, same track.</p>
+        <details class="more">
+          <summary>How to drive</summary>
+          <p class="tip">Steering is gentle at first and snaps to full lock if you hold a key, so tap in bends and floor it on straights. Arrow keys or W A S D (Space for the boost, if you have earned it). Your own car runs beside you if you have trained one. Finish a lap on 2 tracks to open Steady steering and on 5 to open the Featherweight chassis in the skill tree.</p>
+        </details>
         <div class="actions"><select id="handTrack" aria-label="Track to drive yourself"></select><button class="btn primary" id="handGo">Take the wheel</button></div>
         <div class="pad" id="pad" hidden>
           <button type="button" data-k="l" aria-label="Steer left">◀</button><button type="button" data-k="r" aria-label="Steer right">▶</button>
