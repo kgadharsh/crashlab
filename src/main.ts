@@ -8,6 +8,7 @@ import { PRACTICE, PRACTICE_COUNT, practiceOnRoad, practiceTrack, trackFeatures,
 import { genomeToBrain } from './genome'
 import { carFromJson, carToJson, type CarFile } from './carFile'
 import { API, createLeaderboard } from './leaderboard'
+import { fetchBoardEntries } from './boardData'
 import { reveal, setupFolds } from './fold'
 import { PERKS, PAINTS, drawMine, hasPerk, loadPaint, paintColour, nextPerk, savePaint, shelfSize, streak, visit } from './perks'
 import { renderProfile } from './profile'
@@ -140,7 +141,13 @@ document.querySelector('#app')!.innerHTML = `
   </section>
   <aside class="side">
     <div id="garage" class="side">
-      <div class="panel">
+      <div class="panel first" id="firstRun" data-fixed hidden>
+        <h1 id="firstTitle">Build a car that wins gold</h1>
+        <p id="firstLine">Gold is all ${RACE_COUNT} secret tracks in under ${GOLD_TIME} s. Your car trains itself in a minute or two, then races them.</p>
+        <button class="btn primary wide" id="firstTrain">Train this car</button>
+        <button class="textbtn" id="firstTune">Tune it first</button>
+      </div>
+      <div class="panel" id="jobPanel">
         <h2>Your job</h2>
         <p class="tip" style="margin-top:0">Build a car, train its brain on practice tracks, then race it on ${RACE_COUNT} tracks it has never seen. Gold: all ${RACE_COUNT} in under ${GOLD_TIME} s.</p>
         <p class="tip">Not sure where to start? The setup below is a fair starting point, not a winner: when the game trains it for the leaderboard, the same way it trains everyone's, it does not finish every track. Change one thing at a time in the next steps to see what it does. A car you have not touched is a car anyone can build.</p>
@@ -710,7 +717,34 @@ function changed() {
   renderPractice()
 }
 
+// ---------- FIRST VISIT ----------
+// Until a first car is trained, the Garage opens on one target and one button instead of the explanation.
+// The target is the car leading Grand Prix 1 when the board can be reached, and the gold line when it cannot.
+function renderFirstRun() {
+  $('firstRun').hidden = !!car
+  $('jobPanel').hidden = !car
+}
+$('firstTrain').addEventListener('click', () => {
+  document.querySelector<HTMLButtonElement>('.tab[data-tab="practice"]')!.click()
+  if (!worker) $('train').click()
+})
+$('firstTune').addEventListener('click', () => {
+  const name = document.querySelector<HTMLElement>('#garage .panel.name')!
+  name.scrollIntoView({ behavior: REDUCED_MOTION.matches ? 'auto' : 'smooth', block: 'start' })
+  $('name').focus({ preventScroll: true })
+})
+if (!car)
+  fetchBoardEntries<{ display: string; finished: number; totalTime: number }>(API + '/board?gp=gp1')
+    .then(([lead]) => {
+      if (!lead) return
+      $('firstTitle').textContent = 'Beat ' + lead.display
+      $('firstLine').textContent =
+        lead.display + ' leads Grand Prix 1 with ' + (lead.finished === RACE_COUNT ? 'all ' + RACE_COUNT + ' secret tracks in ' + lead.totalTime.toFixed(1) + ' s' : lead.finished + ' of ' + RACE_COUNT + ' secret tracks') + '. Your car trains itself in a minute or two, then races the same tracks.'
+    })
+    .catch(() => {}) // board not reachable: the gold line stays as the target
+
 function renderChip() {
+  renderFirstRun()
   const chip = $('chip')
   chip.classList.toggle('stale', carIsStale())
   if (!car) {

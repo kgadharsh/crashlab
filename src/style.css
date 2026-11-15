@@ -757,3 +757,12 @@ body { padding-bottom: 44px; }
   /* the round and the budget are on the track screen and in the panel below, so the four counters give up their room */
   body.trainview .strip { display: none; }
 }
+
+/* ---------- FIRST VISIT ---------- */
+.panel.first { display: grid; gap: 12px; padding: 18px 16px 12px; }
+.panel.first h1 { margin: 0; font: italic 800 34px/1 var(--head); letter-spacing: 0.03em; text-transform: uppercase; text-wrap: balance; overflow-wrap: anywhere; }
+.panel.first p { margin: 0; max-width: 46ch; font-size: 15px; line-height: 1.45; }
+.panel.first .btn.wide { min-height: 52px; font-size: 18px; }
+.textbtn { justify-self: center; min-height: 44px; padding: 0 12px; background: none; border: 0; cursor: pointer; color: var(--muted); font: 600 14px var(--body); text-decoration: underline; text-underline-offset: 3px; }
+.textbtn:hover { color: var(--text); }
+.textbtn:focus-visible { outline: 2px solid var(--tele); outline-offset: 2px; border-radius: 3px; }
