@@ -469,34 +469,55 @@ function showNudge(carName: string) {
   more.className = 'more'
   more.textContent = ' Race it on ' + RACE_COUNT + ' tracks it has never seen.'
   $('nudgeText').replaceChildren(carName + ' is trained.', more)
-  $('nudgeGo').hidden = false
+  const go = $('nudgeGo')
+  go.hidden = false
+  go.replaceChildren('Race', Object.assign(document.createElement('span'), { className: 'long', textContent: ' your car' }), ' →')
+  nudgeAction = null
+  noticeUp = false
   raceNudgeUp = true
   nudge.hidden = false
   document.body.classList.add('has-nudge') // keeps the bar from covering the last panel
 }
 // The same bar can carry other news, such as players who passed you on the board while you were away
-// While the bar is telling the player to race a new car, other news waits: one thing at a time. It is shown
-// once the bar is closed or the next race has a result.
+// While the bar is telling the player to race a new car, or already carries a piece of news, other news waits in
+// line: one thing at a time. The next piece shows when the bar is closed, and after the next race result.
+type Notice = { text: string; action?: { label: string; run: () => void } }
 let raceNudgeUp = false
-let waitingNotice: string | null = null
-function showNotice(text: string) {
-  if (raceNudgeUp) {
-    waitingNotice = text
+let noticeUp = false
+let nudgeAction: (() => void) | null = null
+const notices: Notice[] = []
+function showNotice(text: string, action?: Notice['action']) {
+  if (raceNudgeUp || noticeUp) {
+    notices.push({ text, action })
     return
   }
-  waitingNotice = null
+  noticeUp = true
   $('nudgeText').replaceChildren(text)
-  $('nudgeGo').hidden = true // news has no race to send the player to
+  const go = $('nudgeGo')
+  go.hidden = !action // plain news has nowhere to send the player
+  if (action) go.textContent = action.label
+  nudgeAction = action?.run ?? null
   nudge.hidden = false
   document.body.classList.add('has-nudge')
+}
+const nextNotice = () => {
+  const n = notices.shift()
+  if (n) showNotice(n.text, n.action)
 }
 function hideNudge(showWaiting = false) {
   nudge.hidden = true
   raceNudgeUp = false
+  noticeUp = false
+  nudgeAction = null
   document.body.classList.remove('has-nudge')
-  if (showWaiting && waitingNotice) showNotice(waitingNotice)
+  if (showWaiting) nextNotice()
 }
-$('nudgeGo').addEventListener('click', () => setTab('race'))
+$('nudgeGo').addEventListener('click', () => {
+  if (!nudgeAction) return setTab('race')
+  const run = nudgeAction
+  hideNudge(true)
+  run()
+})
 $('nudgeClose').addEventListener('click', () => hideNudge(true))
 
 // ---------- TABS ----------
@@ -1479,6 +1500,17 @@ function finishBoard(bd: Board) {
   const { gained } = recordLaps(bd.laps as Lap[], bd.car.build.weather === 'wet')
   const after = starCount()
   const unlocked = LOOKS.filter((l) => l.stars > before && l.stars <= after).map((l) => l.name)
+  // a new design is a reward: say so where it cannot be missed, with a button that puts it on the car
+  const newest = LOOKS.map((l, i) => ({ l, i })).filter(({ l }) => l.stars > before && l.stars <= after).pop()
+  if (newest)
+    showNotice('New car design unlocked: ' + newest.l.name + '.', {
+      label: 'Use it',
+      run: () => {
+        look = newest.i
+        saveLook(newest.i)
+        renderLooks()
+      },
+    })
   announceParts()
   boardMsg = unlocked.length ? 'New design unlocked: ' + unlocked.join(', ') + '. Pick it in the Garage.' : gained ? 'These laps earned ' + gained + ' more stars.' : ''
   boardVersion++
@@ -2145,8 +2177,8 @@ raceView = createRaceView({ onResult: (gpId, r) => {
   const fresh = key !== resultSeen
   resultSeen = key
   if (!r || !fresh) return
-  if (waitingNotice) showNotice(waitingNotice)
   announceParts()
+  if (nudge.hidden) nextNotice()
   // on a narrow window the result is far below the track: bring it into view
   if (tab === 'race' && window.matchMedia('(max-width: 960px)').matches) $('resultPanel').scrollIntoView({ behavior: REDUCED_MOTION.matches ? 'auto' : 'smooth', block: 'start' })
   // a finished race is something to show off: ask then, once the player has had a moment with the result

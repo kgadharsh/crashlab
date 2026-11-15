@@ -819,3 +819,11 @@ body.full .layout { grid-template-columns: minmax(0, 720px); justify-content: ce
   input[type='checkbox'] { width: 22px; height: 22px; accent-color: var(--accent); }
 }
 .tab:focus-visible { outline: 2px solid var(--tele); outline-offset: -2px; }
+
+/* ---------- MEDALS YOU CAN READ ---------- */
+/* a medal is a lettered badge, not a dot of colour alone */
+.dot { width: 18px; height: 18px; border-radius: 4px; display: inline-grid; place-items: center; font: 700 11px/1 var(--mono); color: var(--accent-ink); }
+.dot.gold::after { content: 'G'; }
+.dot.silver::after { content: 'S'; }
+.dot.bronze::after { content: 'B'; }
+.dot.none { border-style: dashed; }
