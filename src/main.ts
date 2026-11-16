@@ -2207,7 +2207,7 @@ function draw() {
     hudText(b.sensors.count + ' RAYS', 16, 38, 26)
     hudText(b.sensors.spread + '° VIEW · RANGE ' + p.spec.rayRange + ' PX', 16, 58, 14, COL.accent)
     hudText(TRACK_NAMES[focusTrack].toUpperCase() + ' · START LINE', 16, 76, 13, COL.muted)
-    hudText('PICK A TRACK BELOW TO SEE IT WHOLE', W - 16, H - 16, 13, COL.muted, 'right')
+    hudText('OPEN PRACTICE TRACKS AND PICK ONE TO SEE IT WHOLE', W - 16, H - 16, 13, COL.muted, 'right')
   } else {
     hudText(trackLine(focusTrack), W - 16, 30, 14, COL.muted, 'right')
     const picked = b.practice.includes(focusTrack)

@@ -114,8 +114,9 @@ a { color: inherit; text-underline-offset: 3px; }
 /* the track is a slab of asphalt that runs from the edge of the window; the panels sit on concrete beside it */
 .view { min-width: 0; display: flex; flex-direction: column; background: var(--ground); color: var(--on-asphalt); }
 .layout > .side { padding: 20px 20px 32px; }
-/* on a wide screen the slab stays in sight, as tall as the window, while the panels beside it scroll */
-@media (min-width: 961px) { .view { position: sticky; top: var(--top-h, 70px); align-self: start; min-height: calc(100dvh - var(--top-h, 70px)); } }
+/* on a wide screen the slab stays in sight while the panels beside it scroll. It is only as tall as what it shows:
+   stretched to the window it left a dead dark band under the track */
+@media (min-width: 961px) { .view { position: sticky; top: var(--top-h, 70px); align-self: start; } }
 .screen { position: relative; overflow: hidden; background: var(--ground); }
 .screen canvas { display: block; width: 100%; height: auto; max-height: calc(100dvh - var(--top-h, 70px) - 96px); object-fit: contain; }
 .screen .corner { position: absolute; top: 10px; right: 10px; display: flex; gap: 6px; }
