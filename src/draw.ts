@@ -27,7 +27,114 @@ export const COL = {
 }
 
 // ---------- TRACK SHAPES, BUILT ONCE PER TRACK ----------
-type Shapes = { road: Path2D; edges: Path2D; dashes: Path2D; kerbA: Path2D; kerbB: Path2D; blocks: Path2D; blockHoles: Path2D }
+type Shapes = { road: Path2D; edges: Path2D; dashes: Path2D; kerbA: Path2D; kerbB: Path2D; blocks: Path2D; blockHoles: Path2D; scenery: Scenery }
+// What stands around the road, so the ground is a place and not a blank: grass inside the loop with trees on it,
+// a paved run-off along both sides of the road, and a grandstand facing the start line. None of it touches the
+// driving: it is worked out from the track's own shape, the same every time, and only drawn.
+type Scenery = { infield: Path2D; trees: Path2D; treeTops: Path2D; stand: { x: number; y: number; angle: number } }
+const RUNOFF = 44 // world units of paved run-off outside each edge of the road
+const GRASS = '#22382a' // inside the circuit
+const MEADOW = '#1e3226' // everywhere outside it
+const PAVED = '#2b2f33'
+
+const areaOf = (pts: Point[]) => Math.abs(pts.reduce((sum, p, i) => sum + p.x * pts[(i + 1) % pts.length].y - pts[(i + 1) % pts.length].x * p.y, 0)) / 2
+function inside(pts: Point[], x: number, y: number): boolean {
+  let hit = false
+  for (let i = 0, j = pts.length - 1; i < pts.length; j = i++) {
+    const a = pts[i]
+    const b = pts[j]
+    if (a.y > y !== b.y > y && x < ((b.x - a.x) * (y - a.y)) / (b.y - a.y) + a.x) hit = !hit
+  }
+  return hit
+}
+
+function sceneryOf(track: Track): Scenery {
+  const leftIsInner = areaOf(track.leftWall) < areaOf(track.rightWall)
+  const inner = leftIsInner ? track.leftWall : track.rightWall
+  const outer = leftIsInner ? track.rightWall : track.leftWall
+  const infield = new Path2D()
+  loop(infield, inner)
+  // trees: a fixed scatter over the grass, kept clear of the run-off
+  const trees = new Path2D()
+  const treeTops = new Path2D()
+  const xs = inner.map((p) => p.x)
+  const ys = inner.map((p) => p.y)
+  const x0 = Math.min(...xs)
+  const y0 = Math.min(...ys)
+  const w = Math.max(...xs) - x0
+  const h = Math.max(...ys) - y0
+  let seed = Math.round(inner[0].x * 7 + inner[0].y * 13 + inner.length) || 1
+  const rand = () => ((seed = (seed * 16807) % 2147483647) - 1) / 2147483646
+  const clear = RUNOFF + 34
+  for (let tries = 0, placed = 0; tries < 420 && placed < 70; tries++) {
+    const x = x0 + rand() * w
+    const y = y0 + rand() * h
+    const r = 13 + rand() * 13
+    if (!inside(inner, x, y)) continue
+    if (inner.some((p, i) => i % 3 === 0 && Math.hypot(p.x - x, p.y - y) < clear + r)) continue
+    trees.moveTo(x + r, y)
+    trees.arc(x, y, r, 0, Math.PI * 2)
+    treeTops.moveTo(x - r * 0.25 + r * 0.55, y - r * 0.25)
+    treeTops.arc(x - r * 0.25, y - r * 0.25, r * 0.55, 0, Math.PI * 2)
+    placed++
+  }
+  // and trees over the rest of the world, outside the circuit
+  for (let tries = 0, placed = 0; tries < 900 && placed < 150; tries++) {
+    const x = -200 + rand() * (WORLD.w + 400)
+    const y = -200 + rand() * (WORLD.h + 400)
+    const r = 13 + rand() * 13
+    if (inside(outer, x, y)) continue
+    let nearest = Infinity
+    for (let i = 0; i < outer.length; i += 3) nearest = Math.min(nearest, Math.hypot(outer[i].x - x, outer[i].y - y))
+    if (nearest < clear + r) continue
+    trees.moveTo(x + r, y)
+    trees.arc(x, y, r, 0, Math.PI * 2)
+    treeTops.moveTo(x - r * 0.25 + r * 0.55, y - r * 0.25)
+    treeTops.arc(x - r * 0.25, y - r * 0.25, r * 0.55, 0, Math.PI * 2)
+    placed++
+  }
+  // the grandstand: outside the road, a little way back from the start line, facing it
+  const a = inner[0]
+  const b = outer[0]
+  const across = Math.hypot(b.x - a.x, b.y - a.y) || 1
+  const nx = (b.x - a.x) / across
+  const ny = (b.y - a.y) / across
+  const c0 = track.centerline[0]
+  const c1 = track.centerline[6 % track.centerline.length]
+  const along = Math.hypot(c1.x - c0.x, c1.y - c0.y) || 1
+  const tx = (c1.x - c0.x) / along
+  const ty = (c1.y - c0.y) / along
+  const stand = { x: b.x + nx * (RUNOFF + 52) - tx * 230, y: b.y + ny * (RUNOFF + 52) - ty * 230, angle: Math.atan2(ty, tx) }
+  return { infield, trees, treeTops, stand }
+}
+
+function drawScenery(g: CanvasRenderingContext2D, s: Shapes) {
+  const sc = s.scenery
+  g.fillStyle = GRASS
+  g.fill(sc.infield)
+  g.fillStyle = '#1a2d21'
+  g.fill(sc.trees)
+  g.fillStyle = '#2d4a37'
+  g.fill(sc.treeTops)
+  // the run-off: one wide paved band under the road, so it shows as a strip along both edges
+  g.strokeStyle = PAVED
+  g.lineWidth = (HALF_WIDTH + RUNOFF) * 2
+  g.lineJoin = 'round'
+  g.stroke(s.dashes)
+  g.lineJoin = 'miter'
+  // the grandstand: a roof, then rows of seats in the kerb's red and white
+  g.save()
+  g.translate(sc.stand.x, sc.stand.y)
+  g.rotate(sc.stand.angle)
+  g.fillStyle = '#101214'
+  g.fillRect(-130, -34, 260, 68)
+  for (let row = 0; row < 4; row++)
+    for (let seat = 0; seat < 20; seat++) {
+      g.fillStyle = (seat * 7 + row * 3) % 5 === 0 ? '#d8261c' : (seat * 7 + row * 3) % 5 === 2 ? '#e9ebe8' : '#6c7278'
+      g.fillRect(-122 + seat * 12.2, -26 + row * 13.5, 9, 9)
+    }
+  g.restore()
+}
 const shapes = new WeakMap<Track, Shapes>()
 
 function loop(path: Path2D, pts: Point[]) {
@@ -74,7 +181,7 @@ function shapesOf(track: Track): Shapes {
     blocks.rect(k.x - BLOCK_HALF, k.y - BLOCK_HALF, BLOCK_HALF * 2, BLOCK_HALF * 2)
     blockHoles.rect(k.x - BLOCK_HALF + 4, k.y - BLOCK_HALF + 4, BLOCK_HALF * 2 - 8, BLOCK_HALF * 2 - 8)
   }
-  const s = { road, edges, dashes, kerbA, kerbB, blocks, blockHoles }
+  const s = { road, edges, dashes, kerbA, kerbB, blocks, blockHoles, scenery: sceneryOf(track) }
   shapes.set(track, s)
   return s
 }
@@ -83,6 +190,7 @@ function shapesOf(track: Track): Shapes {
 export function drawTrack(g: CanvasRenderingContext2D, track: Track, detail = true) {
   const s = shapesOf(track)
   const wet = track.grip !== undefined && track.grip < 1
+  if (detail) drawScenery(g, s)
   g.fillStyle = wet ? COL.roadWet : COL.road
   g.fill(s.road, 'evenodd')
   if (wet) {
@@ -152,9 +260,12 @@ function drawStartLine(g: CanvasRenderingContext2D, track: Track) {
   g.restore()
 }
 
-// A faint grid on the ground, so movement can be seen even on a long straight
+// The ground the track lies on: grass as far as the camera sees, with a faint grid of dots on it so movement
+// can be seen even on a long straight
 function drawGround(g: CanvasRenderingContext2D, cam: Camera) {
   const half = { w: W / 2 / cam.zoom, h: H / 2 / cam.zoom }
+  g.fillStyle = MEADOW
+  g.fillRect(cam.x - half.w - 2, cam.y - half.h - 2, half.w * 2 + 4, half.h * 2 + 4)
   const STEP = 80
   g.fillStyle = 'rgba(255,255,255,0.045)'
   const x0 = Math.floor((cam.x - half.w) / STEP) * STEP
@@ -243,8 +354,9 @@ export function withCamera(g: CanvasRenderingContext2D, cam: Camera, paint: () =
   g.restore()
 }
 
+// Every screen starts as grass, so a screen that is only words is still part of the same place
 export function clear(g: CanvasRenderingContext2D) {
-  g.fillStyle = COL.ground
+  g.fillStyle = MEADOW
   g.fillRect(0, 0, W, H)
 }
 
@@ -585,17 +697,23 @@ export function drawCrash(g: CanvasRenderingContext2D, x: number, y: number) {
 // A small picture of a whole track for the practice-track picker
 export function drawThumb(canvas: HTMLCanvasElement, track: Track) {
   const g = canvas.getContext('2d')!
-  g.fillStyle = '#25282b'
+  g.fillStyle = MEADOW
   g.fillRect(0, 0, canvas.width, canvas.height)
   g.save()
   const k = Math.min(canvas.width / WORLD.w, canvas.height / WORLD.h)
   g.translate((canvas.width - WORLD.w * k) / 2, (canvas.height - WORLD.h * k) / 2)
   g.scale(k, k)
   // at this size the road would be a hairline, so it is drawn as one thick bright line
+  const sh = shapesOf(track)
+  g.fillStyle = GRASS
+  g.fill(sh.scenery.infield)
+  g.lineJoin = 'round'
+  g.strokeStyle = PAVED
+  g.lineWidth = 2 * HALF_WIDTH * 3.4
+  g.stroke(sh.dashes)
   g.strokeStyle = COL.wall
   g.lineWidth = 2 * HALF_WIDTH * 1.6
-  g.lineJoin = 'round'
-  g.stroke(shapesOf(track).dashes)
+  g.stroke(sh.dashes)
   g.fillStyle = COL.accent
   for (const p of track.blocks) g.fillRect(p.x - 40, p.y - 40, 80, 80)
   g.restore()

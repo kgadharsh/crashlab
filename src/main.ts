@@ -144,7 +144,6 @@ document.querySelector('#app')!.innerHTML = `
   </section>
   <aside class="side">
     <div id="garage" class="side" role="tabpanel" aria-labelledby="tab-garage">
-      <div class="bay"><canvas id="bayCar" width="760" height="300" role="img" aria-label="Your car, seen from above"></canvas><div class="baytag"><b id="bayName"></b><small id="bayLine"></small></div></div>
       <div class="panel first" id="firstRun" data-fixed hidden>
         <h1 id="firstTitle">Build a car that wins gold</h1>
         <p id="firstLine">Gold is all ${RACE_COUNT} secret tracks in under ${GOLD_TIME} s. Your car trains itself in a minute or two, then races them.</p>
@@ -168,7 +167,8 @@ document.querySelector('#app')!.innerHTML = `
         <div class="looks" id="looks"></div>
         <p class="tip" id="lookTip"></p>
         <div class="paints" id="paints"></div>
-        <h3 class="sub">Chassis</h3>
+        <h3 class="sub">Car type</h3>
+        <p class="tip" style="margin-top:0">How the car is built to drive. Each type is better at one thing and worse at another.</p>
         <div class="chassis" id="chassis"></div>
         <p class="tip" id="chassisTip"></p>
         <p class="tip" id="streakLine"></p>
@@ -267,7 +267,7 @@ document.querySelector('#app')!.innerHTML = `
         <p class="tip" style="margin-top:0">Take the wheel and be the brain. Same car, same track.</p>
         <details class="more">
           <summary>How to drive</summary>
-          <p class="tip">Steering is gentle at first and snaps to full lock if you hold a key, so tap in bends and floor it on straights. Arrow keys or W A S D (Space for the boost, if you have earned it). Your own car runs beside you if you have trained one. Finish a lap on 2 tracks to open Steady steering and on 5 to open the Featherweight chassis in the skill tree.</p>
+          <p class="tip">Steering is gentle at first and snaps to full lock if you hold a key, so tap in bends and floor it on straights. Arrow keys or W A S D (Space for the boost, if you have earned it). Your own car runs beside you if you have trained one. Finish a lap on 2 tracks to open Steady steering and on 5 to open the Featherweight body in the skill tree.</p>
         </details>
         <div class="actions"><select id="handTrack" aria-label="Track to drive yourself"></select><button class="btn primary" id="handGo">Take the wheel</button></div>
         <div class="pad" id="pad" hidden>
@@ -647,10 +647,7 @@ function setName(value: string) {
   changed()
   raceView?.render()
 }
-nameInput.addEventListener('input', () => {
-  setName(nameInput.value)
-  renderBay()
-})
+nameInput.addEventListener('input', () => setName(nameInput.value))
 
 const b = draft.build
 function bindSlider(id: string, get: () => number, set: (v: number) => void, scale = 1) {
@@ -773,7 +770,6 @@ function renderGarage() {
   renderParts()
   renderChassis()
   renderPit()
-  renderBay()
   trackGrid.querySelectorAll<HTMLButtonElement>('.track').forEach((btn) => {
     const id = Number(btn.dataset.id)
     const on = b.practice.includes(id)
@@ -824,42 +820,37 @@ $('garage').addEventListener('click', () => requestAnimationFrame(renderPit))
 $('garage').addEventListener('keyup', () => requestAnimationFrame(renderPit))
 
 // ---------- THE CAR IN ITS BOX ----------
-// The car drawn large at the top of the Garage, standing on its grid slot, in the chosen design and paint
-const bayCanvas = $<HTMLCanvasElement>('bayCar')
-function renderBay() {
-  const g = bayCanvas.getContext('2d')!
-  const w = bayCanvas.width
-  const h = bayCanvas.height
-  g.fillStyle = '#2b2e31'
-  g.fillRect(0, 0, w, h)
+// While the Car design box is open, the track screen shows the car itself, drawn large on its grid slot in the
+// chosen design and paint. Every other box shows the car on the track, where its sensors can be read.
+const designPanel = $('looks').closest<HTMLElement>('.panel')!
+const designOpen = () => tab === 'garage' && !designPanel.classList.contains('folded')
+function drawBay() {
+  ctx.fillStyle = '#2b2e31'
+  ctx.fillRect(0, 0, W, H)
   // tyre marks running in from behind the car
-  g.fillStyle = 'rgba(0,0,0,0.2)'
-  g.fillRect(0, h * 0.5 - 70, w * 0.42, 18)
-  g.fillRect(0, h * 0.5 + 60, w * 0.42, 18)
-  // the slot painted on the ground: a bracket ahead of the nose and the next slot behind
-  g.strokeStyle = 'rgba(255,255,255,0.85)'
-  g.lineWidth = 7
-  g.beginPath()
-  g.moveTo(w - 150, 34)
-  g.lineTo(w - 96, 34)
-  g.lineTo(w - 96, h - 74)
-  g.lineTo(w - 150, h - 74)
-  g.stroke()
-  g.strokeStyle = 'rgba(255,255,255,0.3)'
-  g.beginPath()
-  g.moveTo(70, 34)
-  g.lineTo(124, 34)
-  g.moveTo(70, h - 34)
-  g.lineTo(124, h - 34)
-  g.stroke()
-  // the kerb along the far edge
-  for (let x = 0; x < w; x += 40) {
-    g.fillStyle = (x / 40) % 2 ? '#ffffff' : COL.kerbB
-    g.fillRect(x, 0, 40, 10)
-  }
-  drawCar(g, { x: w * 0.5 - 6, y: h * 0.5 + 4, angle: 0 }, 330, 175, paintColour(), look)
-  $('bayName').textContent = nameInput.value.trim() || 'Your car'
-  $('bayLine').textContent = LOOKS[look].name + ' · ' + b.sensors.count + ' rays'
+  ctx.fillStyle = 'rgba(0,0,0,0.2)'
+  ctx.fillRect(0, H / 2 - 112, W * 0.4, 28)
+  ctx.fillRect(0, H / 2 + 94, W * 0.4, 28)
+  // the slot painted on the ground: a bracket ahead of the nose, and the marks of the slot behind
+  ctx.lineWidth = 9
+  ctx.strokeStyle = 'rgba(255,255,255,0.85)'
+  ctx.beginPath()
+  ctx.moveTo(W - 150, 96)
+  ctx.lineTo(W - 84, 96)
+  ctx.lineTo(W - 84, H - 76)
+  ctx.lineTo(W - 150, H - 76)
+  ctx.stroke()
+  ctx.strokeStyle = 'rgba(255,255,255,0.3)'
+  ctx.beginPath()
+  ctx.moveTo(40, 96)
+  ctx.lineTo(106, 96)
+  ctx.moveTo(40, H - 76)
+  ctx.lineTo(106, H - 76)
+  ctx.stroke()
+  drawCar(ctx, { x: W / 2 - 16, y: H / 2 + 12, angle: 0 }, 500, 265, paintColour(), look)
+  hudText((nameInput.value.trim() || 'Your car').toUpperCase(), 16, 38, 26)
+  hudText(LOOKS[look].name.toUpperCase() + ' DESIGN', 16, 58, 14, COL.accent)
+  hudText('OPEN ANOTHER BOX TO SEE THE CAR ON THE TRACK', W - 16, H - 16, 13, COL.muted, 'right')
 }
 
 function changed() {
@@ -1531,7 +1522,7 @@ const effectsOf = (c: { top: number; grip: number; accel: number; turn: number; 
     .join(' · ')
 function renderChassis() {
   const stars = starCount()
-  const choices = [{ id: undefined, name: 'Classic', blurb: 'No strengths and no weaknesses.', stars: 0, fx: 'the baseline' }, ...CHASSIS.map((c) => ({ id: c.id as string | undefined, name: c.name, blurb: c.blurb, stars: c.stars, fx: effectsOf(c) }))]
+  const choices = [{ id: undefined, name: 'Standard', blurb: 'No strengths and no weaknesses.', stars: 0, fx: 'No strengths, no weaknesses' }, ...CHASSIS.map((c) => ({ id: c.id as string | undefined, name: c.name, blurb: c.blurb, stars: c.stars, fx: effectsOf(c) }))]
   $('chassis').replaceChildren(
     ...choices.map((c) => {
       const open = stars >= c.stars
@@ -1541,11 +1532,13 @@ function renderChassis() {
       btn.className = 'frame' + (on ? ' on' : '') + (open ? '' : ' locked')
       btn.setAttribute('aria-pressed', String(on))
       const name = Object.assign(document.createElement('b'), { textContent: c.name })
-      const fx = Object.assign(document.createElement('small'), { textContent: open ? c.fx : '★ ' + c.stars + ' to unlock' })
+      // what it changes is always shown, so a locked type is something to aim for, not a mystery
+      const fx = Object.assign(document.createElement('small'), { textContent: c.blurb })
       btn.append(name, fx)
+      if (!open) btn.append(Object.assign(document.createElement('small'), { className: 'need', textContent: '★ ' + c.stars + ' stars to unlock' }))
       btn.addEventListener('click', () => {
         if (!open) {
-          $('chassisTip').textContent = c.name + ' unlocks at ' + c.stars + ' stars. ' + c.blurb
+          $('chassisTip').textContent = c.name + ' unlocks at ' + c.stars + ' stars. In numbers: ' + c.fx + '.'
           return
         }
         if (c.id) b.chassis = c.id as typeof b.chassis
@@ -1556,7 +1549,7 @@ function renderChassis() {
     }),
   )
   const cur = CHASSIS.find((c) => c.id === b.chassis)
-  $('chassisTip').textContent = cur ? cur.name + ': ' + cur.blurb + ' A frame is a different car to drive, not a stronger one.' : 'Frames change how the car drives. Each has a strength and a weakness, so pick the one that suits your tracks.'
+  $('chassisTip').textContent = cur ? cur.name + ' in numbers: ' + effectsOf(cur) + '. A car type drives differently; none is simply stronger.' : 'Pick the type that suits your tracks. Tap a locked one to read about it.'
 }
 
 type Board = { car: CarFile; brain: Brain; laps: (Lap | null)[]; next: number }
@@ -2022,6 +2015,23 @@ function updateTip() {
 
 // Training with nothing to replay (replays are off, or the first one is not ready yet): a progress
 // screen, so it is clear that training is running and how far it has got.
+// The picture behind the training screen is painted once for a track and kept, so a run that is using every
+// processor core is not also redrawing a whole track sixty times a second.
+let backdrop: { track: Track; picture: HTMLCanvasElement } | null = null
+function trainBackdrop(track: Track): HTMLCanvasElement {
+  if (backdrop?.track === track) return backdrop.picture
+  const picture = Object.assign(document.createElement('canvas'), { width: W, height: H })
+  const g = picture.getContext('2d')!
+  const view = newCamera()
+  fitTrack(view, track, true)
+  clear(g)
+  withCamera(g, view, () => drawTrack(g, track))
+  g.fillStyle = 'rgba(16,18,20,0.66)'
+  g.fillRect(0, 0, W, H)
+  backdrop = { track, picture }
+  return picture
+}
+
 function drawTrainingScreen(r: Run) {
   const gen = r.history.length
   const last = r.history[gen - 1]
@@ -2178,9 +2188,12 @@ function draw() {
     return
   }
   if (run && tab === 'practice') {
+    // the practice track lies behind the words, dimmed, so the screen is a place while the numbers count up
+    ctx.drawImage(trainBackdrop(parked().track), 0, 0)
     drawTrainingScreen(run)
     return
   }
+  if (designOpen()) return drawBay()
   // the garage and idle practice: this setup's car on the start line, with its sensors zoomed in on
   // (garage) or the whole track
   const p = parked()

@@ -68,7 +68,7 @@ Keyboard focus on every control (blue ring on the page, white on asphalt), 44px 
 ## Added 16 Nov, second pass
 
 - **The track is a slab.** The track screen is asphalt from the edge of the window to the panels, as tall as the window on a wide screen. Its counters and the training graph sit on the same asphalt.
-- **The car in its box.** The Garage opens on the car drawn large on its grid slot, in the chosen design and paint (`renderBay` in `src/main.ts`).
+- **The car in its box.** While the Car design box is open, the track screen shows the car drawn large on its grid slot, in the chosen design and paint (`drawBay` in `src/main.ts`). Every other box shows the car on the track. There is one view, and it follows the open box.
 - **Icons.** One hand-drawn set in `src/icons.ts`: a 24 by 24 grid, a 2px round line, coloured by the text beside it. No emoji in the interface. The text that is copied when a result is shared still uses emoji squares and medals, because it is pasted into chats.
 - **One box at a time.** On a wide screen the pit lane is where a box is opened, so the column shows only the open box.
 - **Driving it yourself on a phone.** The track is held under the top bar and the pad sits just above the tabs.

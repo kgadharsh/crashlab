@@ -201,13 +201,12 @@ input[type='checkbox'] { accent-color: var(--accent); }
   cursor: pointer;
   overflow: hidden;
 }
-.track canvas { display: block; width: 100%; height: auto; opacity: 0.55; }
+.track canvas { display: block; width: 100%; height: auto; }
 .track .tn { display: block; padding: 5px 6px 0; font: 800 12px/1.15 var(--head); text-transform: uppercase; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .track .tt { display: block; padding: 0 6px; font: 500 12px var(--body); color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.track:hover canvas { opacity: 0.8; }
 .track.on { border-color: var(--text); box-shadow: inset 0 0 0 1px var(--text); }
-.track.on canvas { opacity: 1; }
-.track.on::after {
+/* every tile keeps its full colour. Picked or not is said by the box in its corner: empty, or a yellow tick */
+.track::after {
   content: '';
   position: absolute;
   top: 5px;
@@ -215,6 +214,12 @@ input[type='checkbox'] { accent-color: var(--accent); }
   width: 20px;
   height: 20px;
   border-radius: 3px;
+  border: 2px solid #fff;
+  background: rgba(22, 24, 26, 0.45);
+}
+.track:hover { border-color: var(--text); }
+.track.on::after {
+  border: 0;
   background: var(--flag) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20'%3E%3Cpath d='M5 10.5l3.2 3.2L15 6.8' fill='none' stroke='%2316181a' stroke-width='2.6'/%3E%3C/svg%3E") center / 100% no-repeat;
 }
 
@@ -411,14 +416,6 @@ select, .actions > input, #shareLink, #resultLink, #dareLink {
 .ico { width: 1em; height: 1em; flex: none; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; vertical-align: -0.14em; }
 .btn .ico { font-size: 1.25em; }
 .tower .st .ico { font-size: 16px; }
-
-/* ---------- THE CAR IN ITS BOX ---------- */
-/* the Garage opens on the car itself, drawn large on its grid slot in the design and paint you have chosen */
-.bay { position: relative; border-radius: 6px; overflow: hidden; background: var(--asphalt); color: var(--on-asphalt); }
-.bay canvas { display: block; width: 100%; height: auto; }
-.baytag { position: absolute; left: 14px; bottom: 8px; right: 14px; display: flex; align-items: baseline; justify-content: space-between; gap: 10px; }
-.baytag b { font: 800 17px/1.1 var(--head); font-stretch: 125%; text-transform: uppercase; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.baytag small { font-size: 13px; color: var(--on-asphalt-muted); white-space: nowrap; }
 
 /* ---------- THE GARAGE IS A PIT LANE ---------- */
 /* each setting is a pit box painted on asphalt, with its number on the ground. The open box is outlined in
@@ -693,13 +690,14 @@ body.full .layout { grid-template-columns: minmax(0, 760px); justify-content: ce
 
 /* chassis */
 .sub { margin: 14px 0 6px; font: 800 12px var(--head); text-transform: uppercase; color: var(--muted); }
-.chassis { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 6px; }
+.chassis { display: grid; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); gap: 6px; }
 .frame { text-align: left; padding: 8px 10px; background: var(--panel-2); border: 1px solid var(--line-2); border-radius: 5px; color: var(--text); cursor: pointer; }
 .frame b { display: block; font: 800 13px var(--head); text-transform: uppercase; }
 .frame small { display: block; color: var(--muted); font-size: 12px; line-height: 1.3; margin-top: 2px; }
 .frame.on { border-color: var(--text); box-shadow: inset 0 0 0 1px var(--text); }
 .frame.on small { color: var(--text); }
 .frame.locked { cursor: help; }
+.frame .need { color: var(--text); font-weight: 600; margin-top: 4px; }
 
 /* profile: leaderboard standing */
 .lbrow { align-items: center; }
