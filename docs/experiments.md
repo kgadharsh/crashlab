@@ -376,3 +376,24 @@ default build was trained with 2% to 100% of the budget (seeds 1 and 2), and the
 - Rally tyres gave 8/8 in 142.9 s and 143.5 s, and 7/8 twice. The Drifter gave 8/8 in 146.3 s and 2/8.
 - The ladder (`src/rivalCars.ts`, written by the script): 0/8, 3/8, 5/8, 6/8, 7/8, then 196.8, 175.0, 150.4, 146.3 and
   142.9 s. `npx tsx scripts/rivalCars.ts check` confirms each stored result; run it after any sim or track change.
+
+## 16 Nov 2026: three new nodes (Pace notes, Narrow body, Test day)
+
+`scripts/nodeCheck.ts`, variants `notes`, `narrow`, `testday`, seeds 1 to 3, each on the default build with dry practice.
+Tracks finished of 8 per seed, then the mean; dry also shows clean runs and their mean time.
+
+| Build | Dry | Wet | Night | Ice |
+|---|---|---|---|---|
+| No nodes (from the combinations test) | 7.7 (2 clean, 149 s) | 3.0 | 3.0 | 2.0 |
+| Pace notes | 3, 8, 8 = 6.3 (2 clean, 148 s) | 2.3 | 4.0 | 2.0 |
+| Narrow body | 7, 8, 8 = 7.7 (2 clean, 153 s) | 4.3 | 2.7 | 4.0 |
+| Test day | 2, 8, 8 = 6.0 (2 clean, 153 s) | 2.7 | 6.0 | 2.0 |
+
+- **Narrow body: kept, 2 points.** As reliable as no nodes on a dry road and 4 s slower over a clean run, and it
+  finished more tracks in the wet and on ice, where a sliding car needs the room.
+- **Test day: kept, 2 points.** Twice as many night tracks finished (4, 7, 7), with no night practice. On a dry road
+  it was slower and had one bad seed, so it is a trade and not an upgrade. Why it helps at night is not known.
+- **Pace notes: not offered.** No quicker and no more reliable than no nodes on any road; like nitro, the brain does
+  not learn to use the input in the budget. The engine still accepts it (`notes`), as with intermediate tyres. Things
+  to try if revisited: a nearer window than 2 to 5 checkpoints ahead, or two inputs (near and far).
+- Three seeds each, so the means are rough: the spread between seeds is as large as the differences.

@@ -24,7 +24,7 @@ export const WEATHERS: Weather[] = ['dry', 'wet', 'both']
 // POINT_BUDGET, so playing more opens new choices but never makes a car stronger, and each node also costs something
 // on the road. A player who fakes an unlock gains nothing unfair, and the server rejects a car that spends too much.
 // A node is on at level 1 (true in saved cars). Levels above 1 are allowed by the format, but no wave-1 node has them.
-export type NodeId = 'range' | 'focus' | 'lens' | 'wide' | 'lights' | 'launch' | 'quick' | 'brakes' | 'turbo' | 'feather' | 'wing' | 'steady' | 'tyres' | 'inters' | 'studs' | 'brain' | 'lean' | 'huge' | 'grip' | 'slot' | 'slot2' | 'rally' | 'bumper' | 'spotter' | 'aids' | 'traction'
+export type NodeId = 'range' | 'focus' | 'lens' | 'wide' | 'lights' | 'launch' | 'quick' | 'brakes' | 'turbo' | 'feather' | 'wing' | 'steady' | 'tyres' | 'inters' | 'studs' | 'brain' | 'lean' | 'huge' | 'grip' | 'slot' | 'slot2' | 'rally' | 'bumper' | 'spotter' | 'aids' | 'traction' | 'notes' | 'narrow' | 'testday'
 export const NODES: { id: NodeId; max: number; cost: number }[] = [
   { id: 'range', max: 1, cost: 2 }, // long rays: RANGE_STEP further and 3% slower (levels of 40 were tried: one or two bought nothing, scripts/nodeCheck.ts)
   { id: 'focus', max: 1, cost: 1 }, // rays bunch towards the front: more detail ahead, less to the sides
@@ -38,6 +38,9 @@ export const NODES: { id: NodeId; max: number; cost: number }[] = [
   { id: 'slot2', max: 1, cost: 1 }, // a second extra practice track
   { id: 'rally', max: 1, cost: 2 }, // rally tyres: slide sooner, but turning fades gently above the limit
   { id: 'bumper', max: 1, cost: 2 }, // bumper: survive one hit a track, stopping dead
+  { id: 'notes', max: 1, cost: 2 }, // pace notes: the brain is told which way the road bends beyond what the rays reach
+  { id: 'narrow', max: 1, cost: 2 }, // narrow body: more room past walls and blocks, tyres let go sooner
+  { id: 'testday', max: 1, cost: 2 }, // test day: every round of practice adds one track never driven before
   { id: 'spotter', max: 1, cost: 1 }, // ice spotter: the brain is told an ice patch is coming
   { id: 'aids', max: 1, cost: 2 }, // driver aids: the car brakes itself for a wall right ahead
   { id: 'traction', max: 1, cost: 2 }, // traction control: no power while steering hard above the grip limit
@@ -158,6 +161,8 @@ export const LIGHTS_TOP_SPEED = 0.98
 export const GRIP_TOP_SPEED = 0.97 // so does grip sense: without a cost it beat no parts on every road (scripts/partsCheck.ts, 6 Nov 2026)
 export const WET_TYRE_GRIP = 1.45 // wet tyres multiply a wet road's grip by this (never above dry grip)
 export const WET_TYRE_DRY_SPEED = 0.92 // and cost this share of top speed on a dry road
+export const NARROW_RADIUS = 8 // a narrow body touches a wall at 8 from its middle instead of 12
+export const NARROW_GRIP = 0.94 // and, being less planted, starts to skid at this share of the usual speed
 export const OUTPUTS = 2 // steering, throttle
 export type Shape = { inputs: number; hidden: number; outputs: number }
 // rays + speed; with nitro also the charge left, and a boost output
@@ -166,7 +171,7 @@ export const shapeOf = (s: Sensors, nitro = false): Shape => ({ inputs: s.count 
 export const brainShape = (b: Build): Shape => {
   const base = shapeOf(b.sensors, !!b.perks?.nitro)
   const hidden = b.parts?.huge ? HUGE_HIDDEN : b.parts?.brain ? BIG_HIDDEN : b.parts?.lean ? LEAN_HIDDEN : HIDDEN
-  return { inputs: base.inputs + (b.parts?.grip ? 1 : 0) + (b.parts?.spotter ? 1 : 0), hidden, outputs: base.outputs }
+  return { inputs: base.inputs + (b.parts?.grip ? 1 : 0) + (b.parts?.spotter ? 1 : 0) + (b.parts?.notes ? 1 : 0), hidden, outputs: base.outputs }
 }
 export const genomeLength = (sh: Shape) => sh.hidden * sh.inputs + sh.hidden + sh.outputs * sh.hidden + sh.outputs
 
@@ -183,6 +188,8 @@ export type CarSpec = {
   gripPower?: number // how sharply turning fades above the grip speed (rally tyres)
   bumper?: boolean // survives one hit a track
   spotter?: boolean // one more input: an ice patch ahead
+  notes?: boolean // one more input: which way the road bends ahead, and how sharply (pace notes)
+  radius?: number // how far from its middle the car touches a wall (left out: CAR_RADIUS in sim.ts)
   aidRay?: number // driver aids: the ray that looks straight ahead
   traction?: boolean // traction control
   wetGrip?: number // what tyres multiply a wet road's grip by (wet tyres or intermediates)
@@ -233,6 +240,7 @@ export function specOf(b: Build): CarSpec {
   if (on('feather')) gripSpeed *= FEATHER_GRIP
   if (on('steady')) gripSpeed *= STEADY_GRIP
   if (on('rally')) gripSpeed *= RALLY_GRIP
+  if (on('narrow')) gripSpeed *= NARROW_GRIP
   // nodes that change acceleration or steering rate stack, and a car with none of them gets exactly what it always had
   let accel = 1
   if (on('launch')) accel *= LAUNCH_ACCEL
@@ -265,6 +273,8 @@ export function specOf(b: Build): CarSpec {
     ...(on('rally') ? { gripPower: RALLY_POWER } : {}),
     ...(on('bumper') ? { bumper: true } : {}),
     ...(on('spotter') ? { spotter: true } : {}),
+    ...(on('notes') ? { notes: true } : {}),
+    ...(on('narrow') ? { radius: NARROW_RADIUS } : {}),
     ...(on('aids') ? { aidRay: middleRay(rayAngles(b.sensors, on('focus'))) } : {}),
     ...(on('traction') ? { traction: true } : {}),
     ...(on('grip') ? { gripSense: true } : {}),

@@ -5,7 +5,7 @@ import { createEvolution, scorePopulation, DEFAULT_SETTINGS, type Drive, type Ge
 import { genomeToBrain } from './genome'
 import { makeRng } from './random'
 import { runBrain } from './sim'
-import { practiceTrack, moveBlocks, trackVariants, wetTrack, withConditions, type Track } from './track'
+import { CORE_PRACTICE, PRACTICE, makeStyledTrack, practiceTrack, moveBlocks, trackVariants, wetTrack, withConditions, type Track } from './track'
 import { specOf, brainShape, genomeLength, TRAINING_BUDGET, POPULATION, type Build } from './setup'
 
 // Each generation drives every chosen practice track, with its blocks moved to new spots,
@@ -37,7 +37,16 @@ export function createTraining(build: Build, seed: number, budget = TRAINING_BUD
   const layouts = (tracks: Track[], count: number) => Array.from({ length: count }, () => tracks.map((t) => moveBlocks(t, trackRng))).flat()
   const drive = driverFor(build)
   const settings = { ...DEFAULT_SETTINGS, populationSize: POPULATION, genomeLength: genomeLength(shape) }
-  const evolution = createEvolution(makeRng(seed), settings, drive, () => layouts(practice, 1), start)
+  // Test day (a skill-tree node): every round also drives one track made that moment, in the style of one of the
+  // original practice tracks and on the road the build practises on. It is never driven twice, so it cannot be learned.
+  const fresh = (): Track[] => {
+    const styles = PRACTICE.slice(1, CORE_PRACTICE)
+    const style = styles[Math.floor(trackRng() * styles.length)].style!
+    const seed = Math.floor(trackRng() * 1e6)
+    const made = withConditions(makeStyledTrack(seed, style), build.cond, seed)
+    return build.weather === 'wet' ? [wetTrack(made)] : [made]
+  }
+  const evolution = createEvolution(makeRng(seed), settings, drive, () => (build.parts?.testday ? [...layouts(practice, 1), ...fresh()] : layouts(practice, 1)), start)
   let spent = 0
   let generations = 0
   const advance = (report: GenerationReport): TrainingStep => {

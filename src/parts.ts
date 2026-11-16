@@ -17,6 +17,8 @@ const node = (id: PartId, rest: Omit<Part, 'id' | 'max' | 'points'>): Part => ({
 
 // Intermediate tyres stay valid in setup.ts so cars that fitted them still load and race, but they are no longer offered:
 // they lost badly to no tyre node twice (docs/experiments.md, 7 and 8 Nov 2026).
+// Pace notes are valid in setup.ts too but not offered: over three seeds the brain did not learn to use them
+// (docs/experiments.md, 16 Nov 2026).
 export const PARTS: Part[] = [
   // Eyes
   node('range', { branch: 'Eyes', name: 'Long rays', does: "The car's sight lines (rays) reach 320 instead of the usual 200, so bends and blocks show up much sooner. Walls right next to the car look the same as before.", cost: 'Top speed 3% lower, and the brain has to learn to use the longer view.', unlock: 'Available from the start', open: () => true }),
@@ -46,9 +48,11 @@ export const PARTS: Part[] = [
   // Body
   node('bumper', { branch: 'Body', name: 'Bumper', does: 'Once per track the car survives hitting a wall or a block: it stops dead and has to pull away again.', cost: 'Heavy: top speed 8% lower, and the stop costs time.', unlock: 'Earn 26 stars', open: (p) => p.stars >= 26 }),
   node('aids', { branch: 'Body', parent: 'bumper', name: 'Driver aids', does: 'The car brakes hard by itself when a wall is right ahead and it is going too fast to turn away.', cost: 'It also brakes for gentle bends the brain would have taken at full speed, so laps are slower.', unlock: 'Earn 17 stars', open: (p) => p.stars >= 17 }),
+  node('narrow', { branch: 'Body', parent: 'bumper', name: 'Narrow body', does: 'A slimmer car: a third more room past walls and blocks before it touches.', cost: 'Less planted: it starts to skid in bends at a 6% lower speed.', unlock: 'Earn 19 stars', open: (p) => p.stars >= 19 }),
   // Practice
   node('slot', { branch: 'Practice', name: 'Extra practice track', does: 'Practise on up to 7 tracks instead of 6.', cost: 'It costs only the point. But more tracks to practise on means each round takes longer, so you get fewer rounds.', unlock: 'Win a gold medal in any Grand Prix', open: (p) => p.gpMedals.includes('gold') }),
   node('slot2', { branch: 'Practice', parent: 'slot', name: 'Second extra track', does: 'Practise on up to 8 tracks.', cost: 'Even fewer rounds: each one takes longer again.', unlock: 'Win gold in both Grand Prix', open: (p) => p.gpMedals.filter((m) => m === 'gold').length >= 2 }),
+  node('testday', { branch: 'Practice', parent: 'slot', name: 'Test day', does: 'Every round of practice adds one track the car has never driven, made on the spot, so it learns to cope with the unknown.', cost: 'One more track every round, so you get fewer rounds on the tracks you picked.', unlock: 'Win a silver or gold medal in any Grand Prix', open: (p) => p.gpMedals.some((m) => m === 'silver' || m === 'gold') }),
 ]
 
 const SEEN_KEY = 'crashlab.partsSeen'

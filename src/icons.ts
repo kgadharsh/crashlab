@@ -39,6 +39,8 @@ export const ICONS = {
   stop: '<path d="M8 3h8l5 5v8l-5 5H8l-5-5V8zM8 12h8"/>',
   wind: '<path d="M3 8h10a3 3 0 1 0-3-3M3 12h15a3 3 0 1 1-3 3M3 16h7"/>',
   drop: '<path d="M12 3c4 5 6 8 6 11a6 6 0 0 1-12 0c0-3 2-6 6-11z"/>',
+  notes: '<path d="M5 21V11a6 6 0 0 1 6-6h8M15 1l4 4-4 4"/>',
+  narrow: '<path d="M9 3v18M15 3v18M2 12h5M4 9l3 3-3 3M22 12h-5M20 9l-3 3 3 3"/>',
   leaf: '<path d="M5 19c0-9 5-14 15-14 0 10-5 15-14 15M5 19l8-8"/>',
   // badges
   medal: '<circle cx="12" cy="15" r="5"/><path d="M8 3l4 7 4-7"/>',

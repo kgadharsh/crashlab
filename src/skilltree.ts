@@ -22,7 +22,7 @@ const ICON: Record<PartId, IconName> = {
   launch: 'rocket', quick: 'zap', feather: 'feather', wing: 'wing',
   tyres: 'rain', steady: 'compass', studs: 'snow',
   brain: 'chip', grip: 'magnet', slot: 'flag',
-  wide: 'wide', rally: 'mountain', bumper: 'shield', spotter: 'warning', aids: 'buoy', traction: 'cog', brakes: 'stop', turbo: 'wind', inters: 'drop', lean: 'leaf', huge: 'bigchip', slot2: 'flags',
+  wide: 'wide', rally: 'mountain', bumper: 'shield', spotter: 'warning', aids: 'buoy', traction: 'cog', brakes: 'stop', turbo: 'wind', inters: 'drop', lean: 'leaf', huge: 'bigchip', slot2: 'flags', notes: 'notes', narrow: 'narrow', testday: 'flask',
 }
 const R0 = 126
 const RSTEP = 48

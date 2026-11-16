@@ -213,6 +213,7 @@ function updateRays(car: Car, near: Float64Array = nearbyWalls(car)) {
 
 // Is the car touching any of these walls? (the distance from the car's middle to the wall segment)
 function hitsWall(walls: Float64Array, car: Car): boolean {
+  const radius = car.spec.radius ?? CAR_RADIUS // a narrow body has more room
   for (let k = 0; k < walls.length; k += 4) {
     const ax = walls[k]
     const ay = walls[k + 1]
@@ -223,8 +224,8 @@ function hitsWall(walls: Float64Array, car: Car): boolean {
     t = Math.max(0, Math.min(1, t))
     const rx = car.x - (ax + t * dx)
     const ry = car.y - (ay + t * dy)
-    const s = side(rx, ry, CAR_RADIUS)
-    if (s < 0 || (s === 0 && Math.hypot(rx, ry) < CAR_RADIUS)) return true
+    const s = side(rx, ry, radius)
+    if (s < 0 || (s === 0 && Math.hypot(rx, ry) < radius)) return true
   }
   return false
 }
@@ -301,12 +302,39 @@ function iceAhead(car: Car): boolean {
   })
 }
 
+// Pace notes: how far the road turns between NOTES_FROM and NOTES_TO checkpoints ahead, which starts about where the
+// ordinary rays stop seeing. -1 is a quarter turn or more to the left, 1 the same to the right, 0 straight on.
+// Worked out once for each track.
+const NOTES_FROM = 2
+const NOTES_TO = 5
+const notesOf = new WeakMap<Track, Float64Array>()
+function bendAhead(car: Car): number {
+  let notes = notesOf.get(car.track)
+  if (!notes) {
+    const c = car.track.centerline
+    const heading = (k: number) => {
+      const a = c[(k * CHECKPOINT_STRIDE) % c.length]
+      const b = c[(k * CHECKPOINT_STRIDE + 1) % c.length]
+      return Math.atan2(b.y - a.y, b.x - a.x)
+    }
+    notes = Float64Array.from({ length: CHECKPOINTS }, (_, k) => {
+      let turn = heading(k + NOTES_TO) - heading(k + NOTES_FROM)
+      while (turn > Math.PI) turn -= 2 * Math.PI
+      while (turn < -Math.PI) turn += 2 * Math.PI
+      return Math.max(-1, Math.min(1, turn / (Math.PI / 2)))
+    })
+    notesOf.set(car.track, notes)
+  }
+  return notes[car.passed % CHECKPOINTS]
+}
+
 // What the brain sees: each ray distance (0 to 1) and the speed, then with grip sense how near the tyres are to letting go
 export function getInputs(car: Car): number[] {
   const scale = car.spec.rayScale ?? car.spec.rayRange
   const inputs = [...car.rays.map((d) => d / scale), car.speed / car.spec.maxSpeed]
   if (car.spec.gripSense) inputs.push(Math.min(2, Math.max(0, car.speed) / gripSpeedOf(car)) / 2) // 0.5 is the limit
   if (car.spec.spotter) inputs.push(iceAhead(car) ? 1 : 0) // ice spotter: an ice patch in the next two stretches
+  if (car.spec.notes) inputs.push(bendAhead(car)) // pace notes: the bend past the reach of the rays
   if (car.spec.nitro) inputs.push(car.boost / NITRO_STEPS) // how much charge is left
   return inputs
 }

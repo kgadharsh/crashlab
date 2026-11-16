@@ -44,6 +44,10 @@ const VARIANTS: Record<string, Build> = {
   'night-lights': { ...DEFAULT_BUILD, cond: { night: true }, parts: { lights: true } },
   'ice-none': { ...DEFAULT_BUILD, cond: { ice: true } },
   'ice-studs': { ...DEFAULT_BUILD, cond: { ice: true }, parts: { studs: true } },
+  // 16 Nov 2026: three new nodes
+  notes: { ...DEFAULT_BUILD, parts: { notes: true } },
+  narrow: { ...DEFAULT_BUILD, parts: { narrow: true } },
+  testday: { ...DEFAULT_BUILD, parts: { testday: true } },
 }
 
 const cell = (r: Result) => r.finished + '/8' + (r.finished === 8 ? ' ' + r.totalTime.toFixed(0) + 's' : '')
