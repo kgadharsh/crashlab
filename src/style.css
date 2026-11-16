@@ -537,31 +537,35 @@ select, .actions > input, #shareLink, #resultLink, #dareLink {
 .tree { width: 100%; height: auto; display: block; user-select: none; }
 /* phones: draw the tree at full size and let it scroll sideways, so a node is big enough to hit */
 @media (max-width: 699px) { #treeSvg { overflow-x: auto; } .tree { width: 560px; max-width: none; } }
-.tree .link { stroke: #4a5056; stroke-width: 3; stroke-linecap: round; }
-.tree .link.lit { stroke-width: 4; stroke-dasharray: 6 8; animation: flow 1.2s linear infinite; }
+.tree .sector { opacity: 0.09; }
+.tree .orbit { stroke: rgba(255, 255, 255, 0.07); stroke-width: 1.5; }
+.tree .link { stroke: color-mix(in srgb, var(--nc, #4a5056) 45%, #33373b); stroke-width: 4; stroke-linecap: round; }
+.tree .link.lit { stroke-width: 5; stroke-dasharray: 6 8; animation: flow 1.2s linear infinite; }
 .tree .cross { stroke: #40454a; stroke-width: 1.5; stroke-dasharray: 2 6; }
 .tree .hub { fill: #1b1d20; stroke: #4a5056; stroke-width: 2; }
-.tree .hub-track { stroke: #3a3e42; stroke-width: 7; }
-.tree .hub-ring { stroke: var(--flag); stroke-width: 7; stroke-linecap: round; transition: stroke-dashoffset 0.35s ease; }
+.tree .hub-track { stroke: #3a3e42; stroke-width: 9; }
+.tree .hub-ring { stroke: var(--flag); stroke-width: 9; stroke-linecap: round; transition: stroke-dashoffset 0.35s ease; }
 .tree .hub-ring.full { stroke: #2fcb73; }
 .tree .hub-t { fill: #fff; font: 800 28px var(--head); text-anchor: middle; }
 .tree .hub-s { fill: var(--on-asphalt-muted); font: 600 8px var(--body); letter-spacing: 0.08em; text-anchor: middle; }
-.tree .branch-t { font: 800 9px var(--head); letter-spacing: 0.06em; text-anchor: middle; paint-order: stroke; stroke: var(--asphalt); stroke-width: 4px; }
+.tree .branch-t { font: 800 11px var(--head); letter-spacing: 0.06em; text-anchor: middle; paint-order: stroke; stroke: var(--asphalt); stroke-width: 4px; }
 .tree .node { cursor: pointer; outline: none; }
 .tree .node .halo { opacity: 0; transition: opacity 0.2s; }
-.tree .node .disc { fill: #1f2225; stroke-width: 2; transition: fill 0.2s; }
-.tree .node .icon, .tree .node .lockmark { fill: none; stroke: #fff; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; overflow: visible; }
+.tree .node .disc { fill: color-mix(in srgb, var(--nc) 16%, #1f2225); stroke-width: 2.5; transition: fill 0.2s; }
+.tree .node .icon, .tree .node .lockmark { fill: none; stroke: var(--nc); stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; overflow: visible; }
 .tree .node .lockmark { stroke: var(--flag); stroke-width: 2.6; }
 .tree .node .ptbg { fill: #16181a; stroke: #5a6066; stroke-width: 1.5; }
 .tree .node .pts { fill: #fff; font: 700 10px var(--body); text-anchor: middle; }
-.tree .node:hover .disc, .tree .node:focus-visible .disc { fill: #3a3e42; }
+.tree .node:hover .disc, .tree .node:focus-visible .disc { fill: color-mix(in srgb, var(--nc) 34%, #1f2225); }
 .tree .node.on .halo { opacity: 0.4; animation: pulse 2.4s ease-in-out infinite; }
-.tree .node.on .disc { fill: color-mix(in srgb, var(--nc) 38%, #1f2225); stroke-width: 4; }
-.tree .node.locked .disc { stroke: #5a6066; stroke-dasharray: 3 4; }
-.tree .node.locked .icon { opacity: 0.4; }
+/* a fitted node is a solid disc of its branch colour with the icon cut out of it in ink */
+.tree .node.on .disc { fill: var(--nc); stroke-width: 4; }
+.tree .node.on .icon { stroke: #16181a; stroke-width: 2.4; }
+.tree .node.locked .disc { fill: #1f2225; stroke: #5a6066; stroke-dasharray: 3 4; }
+.tree .node.locked .icon { stroke: #8b9096; opacity: 0.6; }
 .tree .node.locked .pts, .tree .node.locked .ptbg { opacity: 0.45; }
 .tree .node.short .disc { stroke-dasharray: 5 3; }
-.tree .node.sel .disc { stroke-width: 5; fill: #454a4f; }
+.tree .node.sel .disc { stroke: #fff; stroke-width: 4; }
 .tree .node:focus-visible .disc { stroke: #fff; stroke-width: 4; }
 @keyframes flow { to { stroke-dashoffset: -28; } }
 @keyframes pulse { 50% { opacity: 0.12; } }

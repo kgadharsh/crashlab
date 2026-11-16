@@ -285,7 +285,7 @@ document.querySelector('#app')!.innerHTML = `
       <div class="panel">
         <h2>Your car</h2>
         <p class="tip" id="carState" style="margin-top:0"></p>
-        <p class="tip">While you watch it drive, the box in the corner shows what the car sees (its rays), thinks (its neurons) and does (steering and gas).</p>
+        <p class="tip">While you watch it drive, the box in the corner shows what the car sees (one bar for each ray: a short red bar means a wall is close) and what it does (steering and gas).</p>
         <div class="actions"><button class="btn primary hot" id="shareCar">${icon('swords')} Challenge a friend</button></div>
         <p class="tip" style="margin-top:4px">Copies a link. Your friend opens it, races your car on the same secret tracks, and tries to beat it.</p>
         <select id="driveTrack" aria-label="Track to watch the car on" hidden></select>
@@ -2168,7 +2168,7 @@ function draw() {
     if (t.crashFrames === 0 && carBrain) {
       const inputs = getInputs(t.car)
       const thought = think(carBrain, inputs)
-      drawBrain(ctx, { inputs, hidden: thought.hidden, outputs: thought.outputs, rays: t.car.spec.rayAngles.length }, W - 296, 12, 284, 132)
+      drawBrain(ctx, { inputs, hidden: thought.hidden, outputs: thought.outputs, rays: t.car.spec.rayAngles.length }, W - 228, 12, 216, 132)
     }
     hudText(time(t.car.steps / 60), 16, 50, 46)
     hudText('LAST ' + time(t.lastLap) + '    BEST ' + time(t.bestLap), 16, 74, 16, COL.muted)
@@ -2266,7 +2266,10 @@ const leaderboard = createLeaderboard({
       raceView!.selectGpId(gp)
     } else openPastIn(gp)
     setTab('race')
-    $('challengePanel').scrollIntoView({ behavior: 'smooth', block: 'center' })
+    // the race against that car starts straight away, with its ghost on the track beside yours
+    raceView!.startNow()
+    reveal($('tower'))
+    window.scrollTo({ top: 0, behavior: REDUCED_MOTION.matches ? 'auto' : 'smooth' })
   },
   openWeek: (gp) => {
     openPastIn(gp)

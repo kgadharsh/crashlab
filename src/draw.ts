@@ -520,8 +520,8 @@ export function drawCar(g: CanvasRenderingContext2D, c: { x: number; y: number; 
   g.restore()
 }
 
-// What a car sees, thinks and does, drawn small: the rays as bars (short means something is close), the hidden
-// neurons as dots (amber is positive, cyan negative, brighter is stronger) and the two outputs as bars.
+// What a car sees and does, drawn small: the rays as bars (short means something is close) and the two outputs
+// as bars. The hidden neurons between them are not drawn: dots with no explanation told a player nothing.
 export type Thought = { inputs: number[]; hidden: number[]; outputs: number[]; rays?: number } // rays: how many inputs are rays (the next is speed)
 export function drawBrain(g: CanvasRenderingContext2D, t: Thought, x: number, y: number, w: number, h: number) {
   g.save()
@@ -533,9 +533,9 @@ export function drawBrain(g: CanvasRenderingContext2D, t: Thought, x: number, y:
   g.font = '700 11px "Archivo Narrow", sans-serif'
   g.textBaseline = 'alphabetic'
   g.fillStyle = COL.muted
-  const colW = (w - 24) / 3
-  const cols = [x + 8, x + 8 + colW + 4, x + 8 + 2 * (colW + 4)]
-  ;['SEES', 'THINKS', 'DOES'].forEach((label, i) => g.fillText(label, cols[i], y + 15))
+  const colW = (w - 28) / 2
+  const cols = [x + 8, x + 8 + colW + 12]
+  ;['SEES', 'DOES'].forEach((label, i) => g.fillText(label, cols[i], y + 15))
   const top = y + 24
   const bottom = y + h - 8
   // sees: one bar per ray, then the car's own speed
@@ -549,25 +549,16 @@ export function drawBrain(g: CanvasRenderingContext2D, t: Thought, x: number, y:
   })
   g.fillStyle = COL.accent
   g.fillRect(cols[0], top + rays.length * rowH, Math.max(2, colW * Math.min(1, t.inputs[nRays])), rowH - 3)
-  // thinks: one dot per hidden neuron
-  const step = (bottom - top) / t.hidden.length
-  t.hidden.forEach((a, i) => {
-    const cy = top + step * (i + 0.5)
-    g.fillStyle = a >= 0 ? `rgba(255,210,31,${0.2 + 0.8 * Math.abs(a)})` : `rgba(111,176,255,${0.2 + 0.8 * Math.abs(a)})`
-    g.beginPath()
-    g.arc(cols[1] + colW / 2, cy, Math.min(7, step * 0.38), 0, Math.PI * 2)
-    g.fill()
-  })
   // does: steering (left or right of the middle) and throttle (from the left)
   const bar = (label: string, value: number, row: number, centred: boolean) => {
     const by = top + row * 30
     g.fillStyle = COL.muted
-    g.fillText(label, cols[2], by + 8)
+    g.fillText(label, cols[1], by + 8)
     g.fillStyle = COL.road
-    g.fillRect(cols[2], by + 12, colW, 8)
+    g.fillRect(cols[1], by + 12, colW, 8)
     g.fillStyle = COL.accent
-    if (centred) g.fillRect(cols[2] + colW / 2 + Math.min(0, value) * (colW / 2), by + 12, Math.abs(value) * (colW / 2), 8)
-    else g.fillRect(cols[2], by + 12, Math.max(0, value) * colW, 8)
+    if (centred) g.fillRect(cols[1] + colW / 2 + Math.min(0, value) * (colW / 2), by + 12, Math.abs(value) * (colW / 2), 8)
+    else g.fillRect(cols[1], by + 12, Math.max(0, value) * colW, 8)
   }
   bar('STEER', t.outputs[0] ?? 0, 0, true)
   bar('GAS', t.outputs[1] ?? 0, 1, false)

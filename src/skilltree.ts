@@ -87,6 +87,19 @@ export function createSkillTree(d: TreeDeps) {
   }
 
   // the picture is built once and then only repainted, so a tap never makes the tree jump
+  // behind everything: each branch's slice of the circle in a wash of its own colour, and the three rings the
+  // nodes sit on, so the tree reads as six coloured territories round the car rather than dots on a blank sheet
+  const back = el('g', {}, svg)
+  for (const br of BRANCHES) {
+    const a0 = br.angle - 28
+    const a1 = br.angle + 28
+    const p1 = polar(a0, 76)
+    const p2 = polar(a0, 262)
+    const p3 = polar(a1, 262)
+    const p4 = polar(a1, 76)
+    el('path', { d: `M${p1.x} ${p1.y}L${p2.x} ${p2.y}A262 262 0 0 1 ${p3.x} ${p3.y}L${p4.x} ${p4.y}A76 76 0 0 0 ${p1.x} ${p1.y}Z`, class: 'sector', fill: br.colour }, back)
+  }
+  for (const depth of [0, 1, 2]) el('circle', { cx: CX, cy: CY, r: R0 + RSTEP * depth, class: 'orbit', fill: 'none' }, back)
   const links = el('g', {}, svg)
   const ring = el('circle', { cx: CX, cy: CY, r: 60, class: 'hub-ring', fill: 'none' }, svg)
   ring.setAttribute('transform', `rotate(-90 ${CX} ${CY})`)
@@ -101,6 +114,7 @@ export function createSkillTree(d: TreeDeps) {
     const from = part.parent ? pos.get(part.parent)! : { x: CX, y: CY }
     const to = pos.get(part.id)!
     const line = el('line', { x1: from.x, y1: from.y, x2: to.x, y2: to.y, class: 'link' }, links)
+    line.style.setProperty('--nc', to.branch.colour)
     linkEls.push({ line, b: part.id, branch: to.branch })
   }
   BRANCHES.forEach((br, i) => {

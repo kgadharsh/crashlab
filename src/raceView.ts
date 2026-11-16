@@ -570,5 +570,11 @@ export function createRaceView(d: RaceDeps) {
     if (ch && !('error' in ch)) return duelText(live.car.name, ch.car.name, live.gp, s, rivalResult(ch, live.gp), link)
     return cardText(live.car.name, live.gp, s, link)
   }
-  return { tick, draw, render, gpId: () => gp().id, selectGpId, showPastWeek, clearPast, setIdle, shareText }
+  // Start a race now unless one is under way: used when a car is picked from a board to race against, so the race
+  // against its ghost runs at once and the last result is not left on screen as if it were the answer
+  const startNow = () => {
+    if (live && !live.summary) return
+    start()
+  }
+  return { tick, draw, render, gpId: () => gp().id, selectGpId, showPastWeek, clearPast, setIdle, shareText, startNow }
 }
