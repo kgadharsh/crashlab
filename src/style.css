@@ -533,12 +533,14 @@ select, .actions > input, #shareLink, #resultLink, #dareLink {
 .roads.slim .road i { font-size: 18px; grid-row: auto; }
 
 /* ---------- the skill tree ---------- */
-/* the tree is drawn in the track's colours, so it sits on a sheet of asphalt */
-#treeSvg { margin: 8px 0 0; background: var(--asphalt); border-radius: 6px; overflow: hidden; }
+/* the tree is drawn in the track's colours, so it sits on a round sheet of asphalt, drawn inside the picture */
+#treeSvg { margin: 8px 0 0; }
 .tree { width: 100%; height: auto; display: block; user-select: none; }
 /* phones: draw the tree at full size and let it scroll sideways, so a node is big enough to hit */
 @media (max-width: 699px) { #treeSvg { overflow-x: auto; } .tree { width: 560px; max-width: none; } }
 .tree .sector { opacity: 0.17; stroke: var(--asphalt); stroke-width: 2; }
+.tree .sheet { fill: var(--asphalt); }
+.tree .rim { stroke: var(--ground); stroke-width: 4; }
 .tree .orbit { stroke: rgba(255, 255, 255, 0.07); stroke-width: 1.5; }
 .tree .link { stroke: color-mix(in srgb, var(--nc, #4a5056) 45%, #33373b); stroke-width: 4; stroke-linecap: round; }
 .tree .link.lit { stroke-width: 5; stroke-dasharray: 6 8; animation: flow 1.2s linear infinite; }

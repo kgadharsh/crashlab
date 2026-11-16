@@ -422,13 +422,13 @@ document.querySelector('#app')!.innerHTML = `
         <p class="tip" id="resultLine" style="margin-top:8px"></p>
         <p class="tip" id="advice"></p>
         <div class="actions"><button class="btn small" id="resultGarage">Edit setup in Garage →</button><button class="btn small" id="resultPractice">Go to Practice →</button><button class="btn small hot" id="resultShare">${icon('swords')} Share this result</button></div>
+        <p class="msg good" id="resultMsg" role="status"></p>
         <input id="resultLink" readonly hidden aria-label="Challenge link" style="width:100%;margin-top:6px" />
         <div id="resultBoard" hidden>
           <p class="tip" id="resultBoardAsk" style="margin-top:12px;color:var(--text);font-weight:600">Put this on the leaderboard?</p>
           <div class="actions" style="margin-top:4px"><button class="btn primary" id="resultBoardGo">Sign in with Google to enter</button></div>
           <p class="msg" id="resultBoardMsg"></p>
         </div>
-        <p class="msg" id="resultMsg"></p>
       </div>
       <p class="tip" id="pb"></p>
     </div>
@@ -2376,7 +2376,15 @@ async function shareCar(say: (text: string) => void, box: HTMLInputElement, afte
   }
 }
 $('shareCar').addEventListener('click', () => shareCar(carMsg, $<HTMLInputElement>('shareLink')))
-$('resultShare').addEventListener('click', () => shareCar((text) => ($('resultMsg').textContent = text), $<HTMLInputElement>('resultLink'), true))
+// the button itself says it worked, since that is where the player is looking; the line under it says what was copied
+$('resultShare').addEventListener('click', async () => {
+  const btn = $<HTMLButtonElement>('resultShare')
+  const label = btn.innerHTML
+  await shareCar((text) => ($('resultMsg').textContent = text), $<HTMLInputElement>('resultLink'), true)
+  if (!$('resultLink').hidden) return // it could not copy: the text is shown to copy by hand
+  btn.innerHTML = icon('check') + ' Copied to clipboard'
+  setTimeout(() => (btn.innerHTML = label), 2200)
+})
 // Playtest notes: what happened in this browser, copied to paste into the feedback form. Nothing is sent anywhere.
 $('notes').addEventListener('click', async () => {
   const text = playtestNotes(car?.build ?? null, car?.name ?? null)
