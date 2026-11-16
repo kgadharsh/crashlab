@@ -1,5 +1,6 @@
 import './style.css'
 import { GOLD_TIME, GRAND_PRIXES, RACE_COUNT, medalFor, raceCar, type GrandPrix } from './race'
+import { ladderList, ladderRaced, nextRival } from './rivals'
 import { SHORT_PREFIX, carFromChallenge, carFromShort, challengeCode, shortCode } from './challenge'
 import { DEFAULT_BUILD, CHASSIS, KEEP_TRAINING_SHARE, LIMITS, POPULATION, REPLAY_EVERY, TRAINING_BUDGET, buildProblem, cleanBuild, genomeLength, brainShape, specOf, levelOf, maxPractice, maxRays, maxSpread, rivalOf, pointsUsed, POINT_BUDGET, type Build, type Parts } from './setup'
 import { CHECKPOINTS, NITRO_STEPS, STALL_STEPS, createCar, drive, getInputs, step, type Brain, type Car } from './sim'
@@ -353,6 +354,11 @@ document.querySelector('#app')!.innerHTML = `
         <p class="msg" id="raceMsg"></p>
         <p class="tip" style="margin-top:8px">Your car drives 8 tracks it has never seen, once each. Most tracks finished wins, then the lowest total time. Grand Prix 2 is the same tracks on a wet road.</p>
         <p class="tip" id="medalRules"></p>
+      </div>
+      <div class="panel" id="ladderPanel" data-fixed hidden>
+        <h2>Rivals<span class="aside" id="ladderCount"></span></h2>
+        <p class="tip" id="ladderLine" style="margin-top:0;color:var(--text);font-weight:600"></p>
+        <ol class="ladder" id="ladderList"></ol>
       </div>
       <div class="panel" id="dailyPanel" data-fixed hidden>
         <h2>Daily Challenge<span class="aside" id="dailyEnds"></span></h2>
@@ -2270,7 +2276,7 @@ raceView = createRaceView({ onResult: (gpId, r) => {
   if (tab === 'race' && window.matchMedia('(max-width: 960px)').matches) $('resultPanel').scrollIntoView({ behavior: REDUCED_MOTION.matches ? 'auto' : 'smooth', block: 'start' })
   // a finished race is something to show off: ask then, once the player has had a moment with the result
   if (r.finished > 0) setTimeout(() => tab === 'race' && resultSeen === key && showDare('raced', r), 4000)
-},  ctx, cam, getCar: () => car, isStale: carIsStale, getChallenge: () => challenge, getLook: () => look, goTo: setTab, hudText, setStrip })
+},  ctx, cam, getCar: () => car, isStale: carIsStale, getChallenge: () => challenge, ladder: { next: nextRival, raced: ladderRaced, list: ladderList }, getLook: () => look, goTo: setTab, hudText, setStrip })
 
 
 // ---------- DARE A FRIEND ----------

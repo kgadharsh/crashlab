@@ -736,6 +736,18 @@ body.full .layout { grid-template-columns: minmax(0, 760px); justify-content: ce
 #race[data-view='daily'] #gp0, #race[data-view='daily'] #gp1, #race[data-view='weekly'] #gp0, #race[data-view='weekly'] #gp1 { display: none; }
 #race[data-view='daily'] .roads, #race[data-view='weekly'] .roads { grid-template-columns: 1fr; }
 #race[data-view='hub'] > #raceBar { display: none !important; }
+#race:not([data-view='gp']) > #ladderPanel { display: none !important; }
+
+/* the rival ladder: a short timing list of ready-made cars, the next one to beat picked out in flag yellow */
+.ladder { list-style: none; margin: 8px 0 0; padding: 0; display: grid; gap: 3px; }
+.ladder li { display: grid; grid-template-columns: 22px 1fr auto; align-items: center; gap: 8px; padding: 7px 8px; background: var(--panel-2); border: 1px solid var(--line); border-radius: 4px; font: 500 14px var(--body); color: var(--muted); }
+.ladder li b { font-weight: 700; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ladder li .t { font: 500 13px var(--mono); }
+.ladder li .st { text-align: center; font: 700 13px var(--mono); }
+.ladder li .st.ok { color: var(--good); }
+.ladder li .st .ico { font-size: 16px; }
+.ladder li.beaten b { color: var(--text); }
+.ladder li.next { background: var(--flag); border-color: var(--flag); color: var(--text); }
 
 .hub { display: grid; gap: 10px; padding: 12px; }
 /* each race is a board: a band of flag colour across the top says which kind it is */

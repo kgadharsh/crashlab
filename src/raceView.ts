@@ -24,6 +24,8 @@ export type RaceDeps = {
   getCar: () => CarFile | null
   isStale: () => boolean
   getChallenge: () => Challenge | null
+  // the rival ladder (rivals.ts): the next ready-made car to beat in Grand Prix 1, and what to do when it is beaten
+  ladder: { next: () => { car: CarFile; index: number } | null; raced: (result: RaceResult) => void; list: () => { name: string; score: string; beaten: boolean }[] }
   getLook: () => number
   goTo: (tab: 'garage' | 'practice') => void
   hudText: (text: string, x: number, y: number, size: number, colour?: string, align?: CanvasTextAlign) => void
@@ -45,8 +47,11 @@ type Live = {
   ghost: Ghost | null // a friend's car from a challenge link, driving the same track beside yours
   wait: number // steps spent waiting at the end of a track for the ghost to finish
   lights: number // steps left in the start lights: they come on one at a time, then go out and the race starts
+  opp: Opponent | null // the car this race is against, fixed when the race starts: beating a rival moves the ladder on
   watching: boolean // no car of your own: the friend's car is the one racing, and nothing is recorded
 }
+// The car a race is run against: a friend's from a challenge link, or else the next rival on the ladder (rung: which one)
+type Opponent = { car: CarFile; results: RaceResult[]; rung?: number }
 type Ghost = { car: CarFile; brain: Brain; spec: CarSpec; lap: Car; done: boolean }
 const GHOST_WAIT = 240 // at most 4 more seconds at the end of a track for the ghost to finish its lap
 
@@ -126,7 +131,7 @@ export function createRaceView(d: RaceDeps) {
   const rivalRuns = new WeakMap<CarFile, Map<string, RaceResult>>()
   function rivalResult(ch: { car: CarFile; results: RaceResult[] }, g: GrandPrix): RaceResult {
     const i = GRAND_PRIXES.indexOf(g)
-    if (i >= 0) return ch.results[i]
+    if (i >= 0 && ch.results[i]) return ch.results[i]
     let runs = rivalRuns.get(ch.car)
     if (!runs) rivalRuns.set(ch.car, (runs = new Map()))
     let r = runs.get(g.id)
@@ -169,11 +174,20 @@ export function createRaceView(d: RaceDeps) {
     render()
   }
 
-  // the friend's car from a challenge link, if there is one that could be read
-  const rivalCar = () => {
+  // Who a race in this Grand Prix is against: a friend's car from a challenge link comes first; otherwise, in
+  // Grand Prix 1, the next rival on the ladder. A rival's result is worked out the first time it is needed.
+  const ladderOpps = new Map<number, Opponent>()
+  function opponent(g: GrandPrix = gp()): Opponent | null {
     const ch = d.getChallenge()
-    return ch && !('error' in ch) ? ch.car : null
+    if (ch && !('error' in ch)) return ch
+    if (ch || g !== GRAND_PRIXES[0]) return null
+    const next = d.ladder.next()
+    if (!next) return null
+    let o = ladderOpps.get(next.index)
+    if (!o) ladderOpps.set(next.index, (o = { car: next.car, results: [], rung: next.index }))
+    return o
   }
+  const rivalCar = () => opponent()?.car ?? null
   function makeGhost(rival: CarFile, track: ReturnType<typeof gpTrack>): Ghost {
     const spec = specOf(rival.build)
     return { car: rival, brain: genomeToBrain(rival.genome, brainShape(rival.build)), spec, lap: createCar(track, spec), done: false }
@@ -192,7 +206,8 @@ export function createRaceView(d: RaceDeps) {
 
   function start() {
     const own = d.getCar()
-    const rival = rivalCar()
+    const opp = opponent()
+    const rival = opp?.car ?? null
     // with no car of your own, a challenge link's car can still be watched
     const car = own ?? rival
     if (!car) return
@@ -210,6 +225,7 @@ export function createRaceView(d: RaceDeps) {
       newBest: false,
       ghost: own && rival ? makeGhost(rival, gpTrack(gp(), 0)) : null,
       wait: 0,
+      opp,
       lights: REDUCED.matches ? 0 : LIGHTS,
       watching: !own,
     }
@@ -238,8 +254,10 @@ export function createRaceView(d: RaceDeps) {
     // watching a friend's car records nothing: it is not your race
     if (r.watching) return render()
     // a race against a friend's car from a challenge link counts as won or lost
-    const ch = d.getChallenge()
-    if (ch && !('error' in ch)) recordChallenge(better(r.summary, rivalResult(ch, r.gp)))
+    // and one against a ladder rival moves the ladder past every rival this result beats
+    const won = !!r.opp && better(r.summary, rivalResult(r.opp, r.gp))
+    if (r.opp && r.opp.rung === undefined) recordChallenge(won)
+    else if (r.opp) d.ladder.raced(r.summary)
     logEvent({ k: 'race', gp: r.gp.name, finished: r.summary.finished, time: r.summary.totalTime, medal: medalFor(r.summary, r.gp), of: RACE_COUNT })
     const medal = medalFor(r.summary, r.gp)
     if (medal && r.car.generations) recordFewest(r.gp.id, medal, r.car.generations)
@@ -391,8 +409,8 @@ export function createRaceView(d: RaceDeps) {
       const quick = live!.gp.goldTime / RACE_COUNT
       const squares = (res: RaceResult) => res.tracks.map((t) => Object.assign(document.createElement('i'), { className: 'sq ' + (t.time === null ? 'bad' : t.time <= quick ? 'fast' : 'ok') }))
       $('scGp').textContent = live!.gp.name.toUpperCase()
-      const chNow = d.getChallenge()
-      const duel = chNow && !('error' in chNow) && !watched ? { name: chNow.car.name, res: rivalResult(chNow, live!.gp) } : null
+      const oppNow = live!.opp
+      const duel = oppNow && !watched ? { name: oppNow.car.name, res: rivalResult(oppNow, live!.gp) } : null
       $('scGrid').classList.toggle('duel', !!duel)
       if (duel) {
         // head to head: a row of squares for each car, and who won by how much
@@ -435,6 +453,34 @@ export function createRaceView(d: RaceDeps) {
         (car ? ' Race your car on the same tracks: its car drives beside yours as a ghost.' : ' Watch it race now, then train a car in Practice to beat it.')
       $('challengeVs').textContent = live?.summary ? versus(live.summary, rival, ch.car.name) : ''
     }
+    // the rival ladder: Grand Prix 1 only, and out of the way while a friend's challenge is loaded
+    const rungs = d.ladder.list()
+    const next = d.ladder.next()
+    $('ladderPanel').hidden = !!ch || gp() !== GRAND_PRIXES[0]
+    $('ladderCount').textContent = rungs.filter((r) => r.beaten).length + ' of ' + rungs.length + ' beaten'
+    $('ladderList').replaceChildren(
+      ...rungs.map((r, i) => {
+        const li = document.createElement('li')
+        const isNext = !!next && next.index === i && !r.beaten
+        li.className = r.beaten ? 'beaten' : isNext ? 'next' : ''
+        const mark = Object.assign(document.createElement('span'), { className: 'st' + (r.beaten ? ' ok' : '') })
+        if (r.beaten) mark.innerHTML = icon('check')
+        else mark.textContent = String(i + 1)
+        li.append(mark, Object.assign(document.createElement('b'), { textContent: r.name }), Object.assign(document.createElement('span'), { className: 't', textContent: r.score }))
+        return li
+      }),
+    )
+    const lastOpp = live?.summary && !live.watching ? live.opp : null
+    $('ladderLine').textContent =
+      lastOpp && lastOpp.rung !== undefined
+        ? versus(live!.summary!, rivalResult(lastOpp, live!.gp), lastOpp.car.name) + (rungs[lastOpp.rung].beaten && next && next.index !== lastOpp.rung ? ' Next rival: ' + next.car.name + '.' : '')
+        : !next
+          ? ''
+          : rungs.every((r) => r.beaten)
+            ? 'Every rival beaten. ' + next.car.name + ' still drives beside you as a ghost.'
+            : car
+              ? next.car.name + ' drives beside your car as a ghost. Beat its result to move up.'
+              : 'Watch ' + next.car.name + ' race now, then train a car in Practice to beat it.'
     const fewest = loadFewest(gp().id)
     const fewestText = (['gold', 'silver', 'bronze'] as const).filter((m) => fewest[m] !== undefined).map((m) => m + ' in ' + fewest[m]).join(' · ')
     $('pb').textContent =
@@ -489,8 +535,7 @@ export function createRaceView(d: RaceDeps) {
       hudText(medal ? medal.toUpperCase() : headline(r.summary, r.gp), W / 2, H / 2 - 16, 64, medal ? MEDAL_COLOUR[medal] : isSecretGp(r.gp) ? COL.text : COL.muted, 'center')
       hudText(r.summary.finished + ' / ' + RACE_COUNT + ' FINISHED  ·  ' + r.summary.totalTime.toFixed(1) + ' S', W / 2, H / 2 + 22, 22, COL.text, 'center')
       if (r.newBest) hudText('NEW PERSONAL BEST', W / 2, H / 2 + 54, 18, COL.accent, 'center')
-      const ch = d.getChallenge()
-      if (ch && !('error' in ch)) hudText(versus(r.summary, rivalResult(ch, r.gp), ch.car.name).toUpperCase(), W / 2, H / 2 + 86, 18, COL.text, 'center')
+      if (r.opp && !r.watching) hudText(versus(r.summary, rivalResult(r.opp, r.gp), r.opp.car.name).toUpperCase(), W / 2, H / 2 + 86, 18, COL.text, 'center')
     } else {
       hudText('TRACK ' + (r.index + 1) + ' / ' + RACE_COUNT, 16, 42, 34)
       const road = [r.gp.wet ? 'WET ROAD' : '', r.gp.night ? 'NIGHT' : '', r.gp.ice ? 'ICE PATCHES' : ''].filter(Boolean).join(' · ')
@@ -566,8 +611,9 @@ export function createRaceView(d: RaceDeps) {
   function shareText(link: string): string | null {
     const s = live?.summary
     if (!s || !live || live.watching) return null
-    const ch = d.getChallenge()
-    if (ch && !('error' in ch)) return duelText(live.car.name, ch.car.name, live.gp, s, rivalResult(ch, live.gp), link)
+    // a friend knows the car they sent, so the words are about the duel; a ladder rival means nothing to them
+    const o = live.opp
+    if (o && o.rung === undefined) return duelText(live.car.name, o.car.name, live.gp, s, rivalResult(o, live.gp), link)
     return cardText(live.car.name, live.gp, s, link)
   }
   // Start a race now unless one is under way: used when a car is picked from a board to race against, so the race

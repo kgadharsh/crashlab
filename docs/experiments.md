@@ -363,3 +363,16 @@ this shows direction only. Lap time is the mean over the 5 tracks all ten cars f
 - Not done: more than one seed per row. The weights in `sim.ts` are unchanged.
 - **Verdict: the What to reward panel was removed from the Garage.** New cars train with no extras. Saved cars keep the
   weights they were built with, at the shipped strength.
+
+## 16 Nov 2026: cars for the rival ladder
+
+`scripts/rivalCars.ts`. 21 cars, each raced on Grand Prix 1; candidates are kept in `scripts/rival-candidates.json`. The
+default build was trained with 2% to 100% of the budget (seeds 1 and 2), and the full budget on rally tyres (seeds 1 to
+4) and on the Drifter with quick steering (seeds 1 and 2).
+
+- Budget against result is not smooth: 7% (seed 1) finished all 8 in 196.8 s, while 60% finished 7 of 8 on both seeds.
+- The default build at full budget finished all 8 in 150.4 s, just outside gold (149 s). A typical player's first car
+  lands at 143 to 156 s, so a ladder of default cars alone would be cleared in one or two races.
+- Rally tyres gave 8/8 in 142.9 s and 143.5 s, and 7/8 twice. The Drifter gave 8/8 in 146.3 s and 2/8.
+- The ladder (`src/rivalCars.ts`, written by the script): 0/8, 3/8, 5/8, 6/8, 7/8, then 196.8, 175.0, 150.4, 146.3 and
+  142.9 s. `npx tsx scripts/rivalCars.ts check` confirms each stored result; run it after any sim or track change.
