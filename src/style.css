@@ -781,6 +781,9 @@ body.buildview .gantry { display: none; }
 .hubnow { margin-top: 2px; padding-top: 8px; border-top: 1px dashed var(--line-2); font: 500 13px/1.3 var(--body); color: var(--muted); }
 .hubgo { position: absolute; right: 16px; top: 55%; translate: 0 -50%; font: 800 22px/1 var(--head); color: var(--muted); transition: transform 0.12s ease, color 0.12s ease; }
 .hubcard:hover .hubgo { transform: translateX(3px); color: var(--accent); }
+/* the next rival on the Grand Prix card: a result to beat, so it reads as one */
+#hubGpNow { color: var(--text); font-weight: 700; }
+.hubnow:empty { display: none; }
 @media (max-width: 520px) { .hubname { font-size: 21px; } .hubfacts > span { font-size: 13px; } }
 
 /* the back arrow above a section */

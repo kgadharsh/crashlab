@@ -331,6 +331,7 @@ document.querySelector('#app')!.innerHTML = `
           <span class="hubtop"><span class="hubkind">Always open</span></span>
           <b class="hubname">Grand Prix</b>
           <span class="hubpitch">The fixed tracks, dry and wet. Race for gold, silver and bronze.</span>
+          <span class="hubnow" id="hubGpNow"></span>
           <span class="hubgo" aria-hidden="true">→</span>
         </button>
         <button type="button" class="hubcard gp" id="hubBuild">
@@ -605,6 +606,17 @@ const SECTION_IDLE: Record<'daily' | 'weekly', { title: string; sub: string }> =
   weekly: { title: 'WEEKLY CHALLENGE', sub: "THIS WEEK'S TRACKS ARE SECRET · ENTER BELOW, OR RACE A PAST WEEK" },
 }
 let raceSection: RaceSection = 'hub'
+// The Grand Prix card on the Race menu says who is next on the rival ladder, so the ladder is seen before it is opened
+function renderHubRival() {
+  const rungs = ladderList()
+  const beaten = rungs.filter((r) => r.beaten).length
+  const next = nextRival()
+  $('hubGpNow').textContent = !next
+    ? ''
+    : beaten === rungs.length
+      ? 'All ' + rungs.length + ' rivals beaten.'
+      : 'Next rival: ' + next.car.name + ' (' + rungs[next.index].score + ') · ' + beaten + ' of ' + rungs.length + ' beaten' + (car ? '' : '. Watch it race now.')
+}
 function setRaceSection(v: RaceSection) {
   if (v !== raceSection) {
     raceView?.clearPast() // a past day or week belongs to its own section
@@ -616,9 +628,10 @@ function setRaceSection(v: RaceSection) {
   $('race').dataset.view = v
   $('raceBarTitle').textContent = SECTION_TITLE[v]
   $('raceBar').dataset.kind = v
-  raceView?.setIdle(v === 'hub' ? { title: 'PICK A RACE', sub: 'DAILY · WEEKLY · GRAND PRIX' } : v === 'gp' || v === 'build' ? null : SECTION_IDLE[v])
+  raceView?.setIdle(v === 'hub' ? { title: 'PICK A RACE', sub: 'DAILY · WEEKLY · GRAND PRIX · BUILD A TRACK' } : v === 'gp' || v === 'build' ? null : SECTION_IDLE[v])
   raceView?.render()
   builder?.render()
+  renderHubRival()
 }
 // A finished day's or week's tracks were opened: show them in their own section, with the race screen
 function openPastIn(gp: GrandPrix) {
