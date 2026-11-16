@@ -8,7 +8,7 @@ The game looks like a circuit in daylight. The page is painted concrete. Anythin
 
 Two layouts carry the idea:
 
-- **Garage is a pit lane.** The five settings are numbered pit boxes painted on asphalt. On a wide screen they also run across the top of the page and end at a green pit exit that leads to Practice. On a phone they stack down the page.
+- **Garage is a pit lane.** The four settings are numbered pit boxes painted on asphalt. On a wide screen they also run across the top of the page and end at a green pit exit that leads to Practice. On a phone they stack down the page.
 - **Race starts under the lights.** Five start lights sit over the race screen. They come on one at a time, go out, and the race starts.
 
 ## Colour

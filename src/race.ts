@@ -195,9 +195,9 @@ export const medalRules = (gp: GrandPrix = GRAND_PRIXES[0]) =>
 const ADVICE: Record<Cause, string> = {
   block: 'Blocks caught your car. A wider view sees them sooner, and Block Alley is good practice.',
   'tight bend': 'Tight bends caught your car. More grip helps, and so does practice on Hairpin Valley or Chicanes.',
-  wall: 'Your car left the road on open bends. Punishing crashes more teaches it to take bends carefully.',
-  stuck: 'Your car stopped or turned round. Rewarding speed pushes training to keep cars moving.',
-  'too slow': 'Your car was too slow to finish in time. Rewarding speed or a faster setup helps.',
+  wall: 'Your car left the road on open bends. More grip helps it hold the road.',
+  stuck: 'Your car stopped or turned round. Training has luck in it, so training again often fixes this, and more practice tracks help.',
+  'too slow': 'Your car was too slow to finish in time. A faster setup helps.',
 }
 export const CAUSE_LABEL: Record<Cause, string> = {
   block: 'hit a block',
@@ -213,7 +213,7 @@ export function adviceFor(result: RaceResult, gp: GrandPrix = GRAND_PRIXES[0], p
   const counts = new Map<Cause, number>()
   for (const t of result.tracks) if (t.cause) counts.set(t.cause, (counts.get(t.cause) ?? 0) + 1)
   const top = [...counts.entries()].sort((a, b) => b[1] - a[1])[0]
-  if (!top) return 'Every track finished. Now chase time: a faster setup or rewarding speed, but watch for new crashes. Keep training in Practice can also shave a little off the time.'
+  if (!top) return 'Every track finished. Now chase time: try a faster setup, but watch for new crashes. Keep training in Practice can also shave a little off the time.'
   const again = ' Then press Keep training in Practice to improve this car without starting over.'
   // on a wet road the tyres give up turning power sooner, whatever the track did to the car
   if (gp.wet && !practisedWet) return 'The wet road caught your car: the tyres lose grip at lower speeds. Set Road to Wet in the Garage so training practises on wet tracks.' + again

@@ -16,7 +16,7 @@ A racing game HUD: dark, bold and fast. Big lap timers, sector splits, telemetry
 
 1. **Sensor package.** The number of rays and how wide they spread. More rays mean a bigger brain, which needs more of the budget to train. Ray range is fixed: a longer ray cost nothing, so it was not a real choice.
 2. **Car setup.** Top speed against grip and acceleration. A fast car is harder to keep on the road.
-3. **Driving style.** Reward sliders for raw pace, staying alive and smooth lines. Training optimises whatever you choose.
+3. **Driving style.** Removed from the Garage on 16 Nov 2026: no weight was found at which a reward slider helped (see `docs/experiments.md`). The engine still accepts reward weights, and saved cars keep theirs.
 4. **Practice tracks.** Pick 1 to 6 of 12 tracks, each with its own character (tight bends, long straights, wide sweepers, lots of blocks), tagged with features measured from the track. The last four have the feel of famous circuits (a very long straight, narrow twisty streets, flowing esses, a big fast loop); the track generator draws loops, so they are not copies. Choose them to get ready for unknown race tracks. The Grand Prix is built from the first eight only (`CORE_PRACTICE`), so adding practice tracks never changes its tracks or medals.
 5. **Road.** Dry or wet. Wet practice tracks lower the car's grip speed to 75%, so the tyres lose turning power sooner. Grand Prix 2 is wet, and a car practised only on dry roads finishes few of its tracks (see `docs/experiments.md`).
 

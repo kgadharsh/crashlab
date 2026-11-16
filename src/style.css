@@ -451,13 +451,13 @@ select, .actions > input, #shareLink, #resultLink, #dareLink {
 #garage > .panel.fold:not(.folded) > h2 .n { opacity: 0.9; color: var(--flag); }
 #garage > .panel.fold > h2 .aside { color: var(--on-asphalt-muted); }
 
-/* on a wide screen the five boxes also run across the page as the pit lane itself, ending at the pit exit */
+/* on a wide screen the four boxes also run across the page as the pit lane itself, ending at the pit exit */
 .pitlane { display: none; }
 @media (min-width: 961px) {
   body[data-tab='garage'] .pitlane {
     grid-column: 1 / -1;
     display: grid;
-    grid-template-columns: repeat(5, minmax(0, 1fr)) minmax(150px, 0.9fr);
+    grid-template-columns: repeat(4, minmax(0, 1fr)) minmax(150px, 0.9fr);
     gap: 10px;
     padding: 22px 20px 16px;
     background:

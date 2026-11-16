@@ -133,7 +133,7 @@ document.querySelector('#app')!.innerHTML = `
   </div>
 </header>
 <main class="layout">
-  <nav class="pitlane" id="pitlane" aria-label="The five settings of your car, then the way to Practice"></nav>
+  <nav class="pitlane" id="pitlane" aria-label="The four settings of your car, then the way to Practice"></nav>
   <section class="view">
     <div class="screen">
       <canvas id="track" width="${W}" height="${H}" role="img" aria-label="The track, seen from above, with the car driving on it"></canvas>
@@ -197,18 +197,7 @@ document.querySelector('#app')!.innerHTML = `
         </details>
       </div>
       <div class="panel">
-        <h2><span class="n">4</span>What to reward</h2>
-        <label class="row"><span>Reward speed</span><input type="range" id="pace" min="0" max="100" step="5" /><output id="paceOut"></output></label>
-        <label class="row"><span>Punish crashes</span><input type="range" id="safety" min="0" max="100" step="5" /><output id="safetyOut"></output></label>
-        <label class="row"><span>Punish jerky steering</span><input type="range" id="smooth" min="0" max="100" step="5" /><output id="smoothOut"></output></label>
-        <p class="tip" style="margin-top:0">Extras on top of getting round the track. Zero is a fine start.</p>
-        <details class="more">
-          <summary>What each one does</summary>
-          <p class="tip">Training always rewards getting round the track. These sliders add extras. Reward speed pushes the car to go faster and take more risks. Punish crashes makes it drive more carefully. Punish jerky steering makes it steer smoothly. In our tests the sliders did not clearly help or hurt, so zero is a fine start.</p>
-        </details>
-      </div>
-      <div class="panel">
-        <h2><span class="n">5</span>Practice tracks<span class="aside" id="pickCount"></span></h2>
+        <h2><span class="n">4</span>Practice tracks<span class="aside" id="pickCount"></span></h2>
         <div class="roads" role="group" aria-label="Road the practice tracks are driven on"><button type="button" class="road" data-road="dry" aria-pressed="true"><i aria-hidden="true">${icon('sun')}</i><b>Dry road</b><small>Grand Prix 1</small></button><button type="button" class="road wetroad" data-road="wet" aria-pressed="false"><i aria-hidden="true">${icon('rain')}</i><b>Wet road</b><small>Grand Prix 2: tyres lose grip sooner</small></button></div>
         <select id="weather" aria-label="Road the practice tracks are driven on" hidden><option value="dry">Dry</option><option value="wet">Wet</option></select>
         <div class="actions" style="margin-top:2px"><label class="check"><input type="checkbox" id="condNight" /> Night</label><label class="check"><input type="checkbox" id="condIce" /> Ice patches</label></div>
@@ -634,7 +623,6 @@ const cam = newCamera()
 const input = (id: string) => $<HTMLInputElement>(id)
 // speeds are shown in km/h everywhere: the sim's units are 40 km/h each
 const kmh = (v: number) => Math.round(v * 40) + ' km/h'
-const pct = (v: number) => Math.round(v * 100) + '%'
 const nameInput = input('name')
 nameInput.value = draft.name
 // A car's name can be changed here or on the Profile. The trained car takes the new name too, so it never shows an old one.
@@ -662,9 +650,6 @@ bindSlider('count', () => b.sensors.count, (v) => (b.sensors.count = v))
 bindSlider('spread', () => b.sensors.spread, (v) => (b.sensors.spread = v))
 for (const id of ['count', 'spread']) input(id).addEventListener('input', () => (garageView = 'car'))
 bindSlider('balance', () => b.balance, (v) => (b.balance = v), 100)
-bindSlider('pace', () => b.reward.pace, (v) => (b.reward.pace = v), 100)
-bindSlider('safety', () => b.reward.safety, (v) => (b.reward.safety = v), 100)
-bindSlider('smooth', () => b.reward.smooth, (v) => (b.reward.smooth = v), 100)
 // The road the practice tracks are driven on (a wet road is what Grand Prix 2 is raced on)
 const weatherSel = $<HTMLSelectElement>('weather')
 // Practice conditions: the Weekly Grand Prix can be raced at night or with ice patches, so a car can practise in them
@@ -756,9 +741,6 @@ function renderGarage() {
   $('gripOut').textContent = kmh(spec.gripSpeed)
   $('speedBar').style.width = ((spec.maxSpeed - 4.5) / 3) * 100 + '%'
   $('gripBar').style.width = ((spec.gripSpeed - 2) / 2) * 100 + '%'
-  $('paceOut').textContent = pct(b.reward.pace)
-  $('safetyOut').textContent = pct(b.reward.safety)
-  $('smoothOut').textContent = pct(b.reward.smooth)
   $('pickCount').textContent = b.practice.length + ' picked · up to ' + maxPractice(b)
   input('condNight').checked = !!b.cond?.night
   input('condIce').checked = !!b.cond?.ice
@@ -780,13 +762,12 @@ function renderGarage() {
 }
 
 // ---------- THE PIT LANE ----------
-// On a wide screen the Garage's five settings also run across the page as pit boxes, each showing what it is set
+// On a wide screen the Garage's four settings also run across the page as pit boxes, each showing what it is set
 // to, and the lane ends at the pit exit, which leads to Practice. A box opens its panel in the column beside it.
 const PIT_BOXES: { name: string; holds: string; value: () => string }[] = [
   { name: 'Car design', holds: 'looks', value: () => LOOKS[look].name },
   { name: 'Sensors', holds: 'count', value: () => b.sensors.count + ' rays · ' + b.sensors.spread + '°' },
   { name: 'Car setup', holds: 'balance', value: () => 'Top speed ' + kmh(specOf(b).maxSpeed) },
-  { name: 'What to reward', holds: 'pace', value: () => (b.reward.pace || b.reward.safety || b.reward.smooth ? 'Speed ' + pct(b.reward.pace) + ' · care ' + pct(b.reward.safety) : 'No extras') },
   { name: 'Practice tracks', holds: 'tracks', value: () => b.practice.length + ' picked · ' + (b.weather === 'wet' ? 'wet' : 'dry') },
 ]
 const pitButtons = PIT_BOXES.map((box, i) => {
@@ -925,7 +906,6 @@ const TIPS = [
   'A wide view sees bends sooner. A narrow view sees straight ahead in more detail.',
   'More rays see more, but the brain has more to learn, so training needs more rounds.',
   'A fast car has to brake earlier, because the tyres start to slide at a lower speed in bends.',
-  'Rewarding speed keeps cars moving. Punishing crashes teaches them to take bends carefully.',
   'Blocks catch cars that see them too late. More rays, or a wider view, spot them sooner.',
   'Training has luck in it: the same setup can give a better or a worse car, so it can be worth training it twice.',
   'Race day counts tracks finished first, then total time. Gold needs all ' + RACE_COUNT + ' tracks in under ' + GOLD_TIME + ' seconds.',
@@ -1839,7 +1819,7 @@ function renderPractice() {
     ? 'Keep training carries on from a car, so train one first.'
     : !canKeepTraining()
       ? 'Your car has a different number of rays from the garage, so it cannot be carried on. Train a new car instead.'
-      : 'Keep training carries on from your car in about a third of the time. Add practice tracks or change what you reward first, then press it. If the result is worse, press Back to previous car.'
+      : 'Keep training carries on from your car in about a third of the time. Add practice tracks first, then press it. If the result is worse, press Back to previous car.'
   $('swapCar').hidden = !previousCar
   $<HTMLButtonElement>('swapCar').disabled = training
   $('swapQuick').hidden = !previousCar
@@ -1852,7 +1832,6 @@ function renderPractice() {
     ['Sensors', b.sensors.count + ' rays over a ' + b.sensors.spread + '° view'],
     ['Brain', genomeLength(brainShape(b)) + ' connections'],
     ['Top speed · cornering', kmh(spec.maxSpeed) + ' · ' + kmh(spec.gripSpeed)],
-    ['Pace · crash · smooth', pct(b.reward.pace) + ' · ' + pct(b.reward.safety) + ' · ' + pct(b.reward.smooth)],
     ['Practice', b.practice.map((id) => TRACK_NAMES[id]).join(', ')],
     ['Road', (b.weather === 'wet' ? 'Wet' : 'Dry') + (b.cond?.night ? ' · night' : '') + (b.cond?.ice ? ' · ice patches' : '')],
     ['Skill tree', PARTS.filter((p) => levelOf(b.parts, p.id)).map((p) => p.name + (p.max > 1 ? ' ' + levelOf(b.parts, p.id) : '')).join(', ') || 'Nothing fitted'],

@@ -332,3 +332,34 @@ Grip ×0.875 and fade power 1.25 (between the too-strong 0.9 / 1 and the slightl
 
 A mild edge on dry roads (6 s quicker, as reliable) and a little better wet and at night, weaker on ice, for 2 points. Kept.
 With wet practice it is worse than wet practice alone everywhere but ice.
+
+## 16 Nov 2026: can the reward sliders be made to matter?
+
+`scripts/rewardCheck.ts`. The app's exact training flow with one slider at full, then the car drives 40 dry tracks it has
+never seen (Grand Prix 1 and 32 more). Strength multiplies the slider's weight in `sim.ts`. One car per row, seed 1, so
+this shows direction only. Lap time is the mean over the 5 tracks all ten cars finished.
+
+| Car, sliders | Finished of 40 | Crashed | Avg speed, % of top | Steering change per step | Lap s |
+|---|---|---|---|---|---|
+| Default car, all zero | 37 | 0 | 80 | 0.038 | 15.5 |
+| Speed ×3 | 40 | 0 | 82 | 0.037 | 15.5 |
+| Speed ×6 | 10 | 29 | 85 | 0.039 | 15.4 |
+| Crashes ×5 | 35 | 0 | 78 | 0.037 | 15.5 |
+| Jerky steering ×10 | 38 | 2 | 83 | 0.038 | 15.5 |
+| Jerky steering ×30 | 8 | 29 | 79 | 0.024 | 15.8 |
+| Speed ×6 with crashes ×5 | 35 | 0 | 73 | 0.033 | 17.0 |
+| Fast car (top-speed setup), all zero | 37 | 0 | 59 | 0.034 | 17.5 |
+| Fast car, crashes ×5 | 29 | 1 | 58 | 0.027 | 16.2 |
+| Fast car, speed ×3 | 5 | 22 | 54 | 0.028 | 15.1 |
+
+- **As shipped the sliders are too small to act.** An attempt is worth about 130 checkpoints of progress. At full, speed
+  adds about 8, a crash costs 15, and jerky steering costs under 1.
+- **Stronger weights go from no effect to a wrecked car, with no useful middle found.** Speed ×3 did nothing on the
+  default car and ruined the fast car; ×6 ruined the default car. Jerky steering did nothing at ×10 and at ×30 the car
+  stopped turning enough.
+- **Lap time on finished laps did not improve at any weight.** Progress already rewards speed, so the bonus buys crashes.
+- **The crash slider has nothing to fix.** Cars trained with no extras did not crash on unseen tracks, on either setup.
+  Their failures are getting stuck or running out of time.
+- Not done: more than one seed per row. The weights in `sim.ts` are unchanged.
+- **Verdict: the What to reward panel was removed from the Garage.** New cars train with no extras. Saved cars keep the
+  weights they were built with, at the shipped strength.

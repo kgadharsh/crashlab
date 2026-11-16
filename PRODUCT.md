@@ -16,7 +16,7 @@ CrashLab is a competitive build-a-car game. A player sets up a car, trains its b
 
 ## Positioning
 
-The player never drives. They win by engineering choices: how the car sees, how it is set up, what it is rewarded for and which tracks it practises on. The car then drives by itself on secret tracks, and every result is recomputed by a deterministic simulation, so two cars can be compared fairly.
+The player never drives. They win by engineering choices: how the car sees, how it is set up and which tracks it practises on. The car then drives by itself on secret tracks, and every result is recomputed by a deterministic simulation, so two cars can be compared fairly.
 
 ## Operating Context
 
