@@ -377,7 +377,8 @@ select, .actions > input, #shareLink, #resultLink, #dareLink {
 .rank .who { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .rank .res { color: var(--muted); text-align: right; }
 .rank li .btn.small { padding: 3px 8px; font-size: 12px; }
-.rank .troph { color: var(--text); font-family: system-ui, sans-serif; white-space: nowrap; }
+.rank .troph { display: inline-flex; align-items: center; gap: 3px; margin-left: 8px; vertical-align: -3px; font-size: 12px; font-weight: 700; color: var(--muted); white-space: nowrap; }
+.rank .troph .dot { width: 17px; height: 17px; font-size: 10px; border-width: 1.5px; }
 
 /* parts */
 .parts { display: grid; gap: 8px; }
@@ -533,11 +534,11 @@ select, .actions > input, #shareLink, #resultLink, #dareLink {
 
 /* ---------- the skill tree ---------- */
 /* the tree is drawn in the track's colours, so it sits on a sheet of asphalt */
-#treeSvg { margin: 8px 0 0; background: var(--asphalt); border-radius: 6px; padding: 6px; }
+#treeSvg { margin: 8px 0 0; background: var(--asphalt); border-radius: 6px; overflow: hidden; }
 .tree { width: 100%; height: auto; display: block; user-select: none; }
 /* phones: draw the tree at full size and let it scroll sideways, so a node is big enough to hit */
 @media (max-width: 699px) { #treeSvg { overflow-x: auto; } .tree { width: 560px; max-width: none; } }
-.tree .sector { opacity: 0.09; }
+.tree .sector { opacity: 0.17; stroke: var(--asphalt); stroke-width: 2; }
 .tree .orbit { stroke: rgba(255, 255, 255, 0.07); stroke-width: 1.5; }
 .tree .link { stroke: color-mix(in srgb, var(--nc, #4a5056) 45%, #33373b); stroke-width: 4; stroke-linecap: round; }
 .tree .link.lit { stroke-width: 5; stroke-dasharray: 6 8; animation: flow 1.2s linear infinite; }

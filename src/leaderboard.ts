@@ -653,7 +653,17 @@ export function createLeaderboard({ getCar, getShelf, getGpId, goRace, notify, r
   function whoCell(e: { display: string; trophies?: number[] }) {
     const who = Object.assign(document.createElement('span'), { className: 'who', textContent: e.display })
     const t = trophyText(e.trophies)
-    if (t) who.append(Object.assign(document.createElement('span'), { className: 'troph', textContent: ' ' + t, title: 'Weekly Challenge trophies' }))
+    if (t) {
+      // trophies are medal badges set apart from the name, so they cannot be read as part of it
+      const troph = Object.assign(document.createElement('span'), { className: 'troph', title: 'Weekly Challenge trophies: ' + t })
+      troph.setAttribute('aria-label', ', Weekly Challenge trophies: ' + t)
+      ;(e.trophies ?? []).forEach((n, i) => {
+        if (!n) return
+        troph.append(Object.assign(document.createElement('i'), { className: 'dot ' + TROPHY[i] }))
+        if (n > 1) troph.append('×' + n)
+      })
+      who.append(troph)
+    }
     return who
   }
   function renderWeekly() {
