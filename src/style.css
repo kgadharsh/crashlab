@@ -737,6 +737,12 @@ body.full .layout { grid-template-columns: minmax(0, 760px); justify-content: ce
 #race[data-view='daily'] .roads, #race[data-view='weekly'] .roads { grid-template-columns: 1fr; }
 #race[data-view='hub'] > #raceBar { display: none !important; }
 #race:not([data-view='gp']) > #ladderPanel { display: none !important; }
+/* Build a track: its own panel and nothing else, and the track screen takes drags instead of scrolling the page */
+#race:not([data-view='build']) > #buildPanel { display: none !important; }
+#race[data-view='build'] > :not(#raceBar):not(#buildPanel) { display: none !important; }
+body.buildview #track { touch-action: none; cursor: grab; }
+body.buildview .gantry { display: none; }
+#buildResult { margin: 10px 0 4px; }
 
 /* the rival ladder: a short timing list of ready-made cars, the next one to beat picked out in flag yellow */
 .ladder { list-style: none; margin: 8px 0 0; padding: 0; display: grid; gap: 3px; }

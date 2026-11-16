@@ -430,3 +430,41 @@ export function trackVariants(track: Track): Track[] {
   variantCache.set(track, variants)
   return variants
 }
+
+// ---------- A TRACK DRAWN BY HAND (trackBuilder.ts) ----------
+// The player drags a ring of points and the road is a smooth closed curve through them (Catmull-Rom), cut into POINTS
+// evenly spaced points like every other track, so it drives, scores and draws the same. problem is why it cannot be
+// driven, in the words trackProblem uses, or null. A hand-drawn track is never part of a build, a Grand Prix or a board.
+export const BUILDER_BLOCKS = 4
+export function trackFromPoints(control: Point[], blocks = BUILDER_BLOCKS): { track: Track; problem: string | null } {
+  const n = control.length
+  const PER = 80
+  const fine: Point[] = []
+  for (let i = 0; i < n; i++) {
+    const p0 = control[(i + n - 1) % n]
+    const p1 = control[i]
+    const p2 = control[(i + 1) % n]
+    const p3 = control[(i + 2) % n]
+    for (let s = 0; s < PER; s++) {
+      const t = s / PER
+      const at = (a: number, b: number, c: number, d: number) => 0.5 * (2 * b + (c - a) * t + (2 * a - 5 * b + 4 * c - d) * t * t + (3 * b - a - 3 * c + d) * t * t * t)
+      fine.push({ x: at(p0.x, p1.x, p2.x, p3.x), y: at(p0.y, p1.y, p2.y, p3.y) })
+    }
+  }
+  const cum = [0]
+  for (let i = 1; i <= fine.length; i++) cum.push(cum[i - 1] + Math.hypot(fine[i % fine.length].x - fine[i - 1].x, fine[i % fine.length].y - fine[i - 1].y))
+  const total = cum[fine.length]
+  const pts: Point[] = []
+  let j = 0
+  for (let i = 0; i < POINTS; i++) {
+    const target = (i / POINTS) * total
+    while (cum[j + 1] < target) j++
+    const f = (target - cum[j]) / (cum[j + 1] - cum[j] || 1)
+    const a = fine[j]
+    const b = fine[(j + 1) % fine.length]
+    pts.push({ x: a.x + (b.x - a.x) * f, y: a.y + (b.y - a.y) * f })
+  }
+  const track = buildTrack(pts)
+  const problem = trackProblem(track)
+  return { track: problem ? track : addBlocks(track, gentlestPoints(track, blocks)), problem }
+}

@@ -1,6 +1,7 @@
 import './style.css'
 import { GOLD_TIME, GRAND_PRIXES, RACE_COUNT, medalFor, raceCar, type GrandPrix } from './race'
 import { ladderList, ladderRaced, nextRival } from './rivals'
+import { TRACK_PREFIX, createTrackBuilder } from './trackBuilder'
 import { SHORT_PREFIX, carFromChallenge, carFromShort, challengeCode, shortCode } from './challenge'
 import { DEFAULT_BUILD, CHASSIS, KEEP_TRAINING_SHARE, LIMITS, POPULATION, REPLAY_EVERY, TRAINING_BUDGET, buildProblem, cleanBuild, genomeLength, brainShape, specOf, levelOf, maxPractice, maxRays, maxSpread, rivalOf, pointsUsed, POINT_BUDGET, type Build, type Parts } from './setup'
 import { CHECKPOINTS, NITRO_STEPS, STALL_STEPS, createCar, drive, getInputs, step, type Brain, type Car } from './sim'
@@ -332,10 +333,28 @@ document.querySelector('#app')!.innerHTML = `
           <span class="hubpitch">The fixed tracks, dry and wet. Race for gold, silver and bronze.</span>
           <span class="hubgo" aria-hidden="true">→</span>
         </button>
+        <button type="button" class="hubcard gp" id="hubBuild">
+          <span class="hubtop"><span class="hubkind">For fun</span></span>
+          <b class="hubname">Build a track</b>
+          <span class="hubpitch">Draw your own circuit, race your car on it, and dare a friend to beat your lap.</span>
+          <span class="hubgo" aria-hidden="true">→</span>
+        </button>
       </div>
       <div class="panel rbar" id="raceBar" data-fixed>
         <button type="button" class="back" id="raceBack" aria-label="Back to all races"><span aria-hidden="true">←</span> All races</button>
         <b id="raceBarTitle"></b>
+      </div>
+      <div class="panel" id="buildPanel" data-fixed>
+        <h2>Build a track<span class="aside" id="buildAside"></span></h2>
+        <p class="tip" id="buildRival" style="margin-top:0;color:var(--text);font-weight:600" hidden></p>
+        <p class="msg" id="buildStatus" role="status"></p>
+        <div class="actions"><button class="btn primary wide" id="buildGo">Race your car on it</button></div>
+        <p class="resultbig" id="buildResult" hidden></p>
+        <div class="actions"><button class="btn small" id="buildMore">Add a point</button><button class="btn small" id="buildLess">Remove a point</button><button class="btn small" id="buildReset">Start again</button></div>
+        <div class="actions"><button class="btn small hot" id="buildShare">Share this track</button></div>
+        <p class="msg good" id="buildMsg" role="status"></p>
+        <input id="buildLink" readonly hidden aria-label="Track link" style="width:100%;margin-top:6px" />
+        <p class="tip">Drag the white points on the track to bend the road. The yellow point is the start line. A track you build is for fun and for friends: it does not count for medals or the leaderboards, which use tracks nobody has seen.</p>
       </div>
       <div class="panel" id="challengePanel" data-fixed hidden>
         <h2>Challenge<span class="aside"><button class="btn small" id="challengeClear">Dismiss</button></span></h2>
@@ -555,6 +574,7 @@ function setTab(t: Tab) {
   })
   document.body.classList.toggle('full', t === 'skills' || t === 'profile') // these two have no use for the track screen
   document.body.classList.toggle('hubview', t === 'race' && raceSection === 'hub') // the race menu needs no track screen above it on a narrow window
+  document.body.classList.toggle('buildview', t === 'race' && raceSection === 'build')
   $('garage').hidden = t !== 'garage'
   $('skills').hidden = t !== 'skills'
   $('profile').hidden = t !== 'profile'
@@ -578,8 +598,8 @@ document.querySelectorAll<HTMLButtonElement>('.tab[data-tab]').forEach((btn) => 
 // ---------- THE RACE TAB'S SECTIONS ----------
 // The Race tab opens on a menu: the Daily Challenge, the Weekly Challenge and the fixed Grand Prix. Each opens the same race
 // screen with its own tracks, and the back arrow returns to the menu.
-type RaceSection = 'hub' | 'gp' | 'daily' | 'weekly'
-const SECTION_TITLE: Record<RaceSection, string> = { hub: '', gp: 'Grand Prix', daily: 'Daily Challenge', weekly: 'Weekly Challenge' }
+type RaceSection = 'hub' | 'gp' | 'daily' | 'weekly' | 'build'
+const SECTION_TITLE: Record<RaceSection, string> = { hub: '', gp: 'Grand Prix', daily: 'Daily Challenge', weekly: 'Weekly Challenge', build: 'Build a track' }
 const SECTION_IDLE: Record<'daily' | 'weekly', { title: string; sub: string }> = {
   daily: { title: 'DAILY CHALLENGE', sub: "TODAY'S TRACKS ARE OPEN · RACE THEM, THEN ENTER BELOW" },
   weekly: { title: 'WEEKLY CHALLENGE', sub: "THIS WEEK'S TRACKS ARE SECRET · ENTER BELOW, OR RACE A PAST WEEK" },
@@ -592,11 +612,13 @@ function setRaceSection(v: RaceSection) {
   }
   raceSection = v
   document.body.classList.toggle('hubview', tab === 'race' && v === 'hub')
+  document.body.classList.toggle('buildview', tab === 'race' && v === 'build') // the track screen takes drags there
   $('race').dataset.view = v
   $('raceBarTitle').textContent = SECTION_TITLE[v]
   $('raceBar').dataset.kind = v
-  raceView?.setIdle(v === 'hub' ? { title: 'PICK A RACE', sub: 'DAILY · WEEKLY · GRAND PRIX' } : v === 'gp' ? null : SECTION_IDLE[v])
+  raceView?.setIdle(v === 'hub' ? { title: 'PICK A RACE', sub: 'DAILY · WEEKLY · GRAND PRIX' } : v === 'gp' || v === 'build' ? null : SECTION_IDLE[v])
   raceView?.render()
+  builder?.render()
 }
 // A finished day's or week's tracks were opened: show them in their own section, with the race screen
 function openPastIn(gp: GrandPrix) {
@@ -612,6 +634,7 @@ $('hubDaily').addEventListener('click', () => {
 })
 $('hubWeekly').addEventListener('click', () => setRaceSection('weekly'))
 $('hubGp').addEventListener('click', () => setRaceSection('gp'))
+$('hubBuild').addEventListener('click', () => setRaceSection('build'))
 $('raceBack').addEventListener('click', () => setRaceSection('hub'))
 $('toPractice').addEventListener('click', () => setTab('practice'))
 $('toSkills').addEventListener('click', () => setTab('skills'))
@@ -620,6 +643,7 @@ $('toGarage').addEventListener('click', () => setTab('garage'))
 
 // ---------- RACE DAY (raceView.ts) ----------
 let raceView: ReturnType<typeof createRaceView> | null = null
+let builder: ReturnType<typeof createTrackBuilder> | null = null
 
 // ---------- CAMERA ----------
 // The camera never rotates. It shows the whole track in the garage, and follows a car when one drives.
@@ -2048,6 +2072,7 @@ function drawTrainingScreen(r: Run) {
 }
 
 function draw() {
+  if (tab === 'race' && raceSection === 'build' && builder) return builder.draw()
   if (tab === 'race' && raceView) return raceView.draw()
   clear(ctx)
   const target = focusCar()
@@ -2219,7 +2244,7 @@ function loop(now: number) {
   while (owed >= STEP) {
     tickTestDrive()
     tickHand()
-    if (tab === 'race') raceView?.tick()
+    if (tab === 'race') raceSection === 'build' ? builder?.tick() : raceView?.tick()
     owed -= STEP
   }
   updateTip()
@@ -2313,6 +2338,38 @@ $('dareGo').addEventListener('click', async () => {
   $('dareGo').textContent = 'Copied ✓'
   setTimeout(() => dareDialog.open && dareDialog.close(), 1400)
 })
+// ---------- BUILD A TRACK ----------
+// Copy the track's link (with the lap to beat, once one is set) and say so on the button and under it
+async function shareTrack() {
+  const made = builder?.share(location.origin + location.pathname)
+  if (!made) return
+  const btn = $<HTMLButtonElement>('buildShare')
+  const box = $<HTMLInputElement>('buildLink')
+  try {
+    await navigator.clipboard.writeText(made.text)
+    box.hidden = true
+    $('buildMsg').textContent = 'Copied: a message with a link to your track. Paste it into a chat. Anyone who opens it can race their own car on your track.'
+    const label = btn.innerHTML
+    btn.innerHTML = icon('check') + ' Copied to clipboard'
+    setTimeout(() => (btn.innerHTML = label), 2200)
+  } catch {
+    box.value = made.link // the browser would not copy for us: show the link to copy by hand
+    box.hidden = false
+    box.select()
+    $('buildMsg').textContent = 'Copy this link and send it. Anyone who opens it can race their own car on your track.'
+  }
+}
+builder = createTrackBuilder({ ctx, canvas, cam, getCar: () => car, getLook: () => look, isOpen: () => tab === 'race' && raceSection === 'build', hudText, setStrip, onShare: shareTrack })
+// A friend's track from a link opens straight in the builder
+function takeTrack() {
+  if (!location.hash.startsWith(TRACK_PREFIX)) return
+  const ok = builder!.load(location.hash)
+  history.replaceState(null, '', location.pathname + location.search)
+  setTab('race')
+  setRaceSection('build')
+  if (!ok) $('buildMsg').textContent = 'That track link could not be read. Ask your friend to send it again.'
+}
+
 // the challenge buttons glow until the first share
 function refreshHot() {
   const hot = counts().shares === 0
@@ -2437,6 +2494,8 @@ const cameSection = (() => {
 // the Race tab starts on its menu (with no board server there is only the Grand Prix); after Use reloads the page it returns to where it was
 setRaceSection(API ? (cameSection === 'daily' || cameSection === 'weekly' ? 'hub' : cameSection ?? 'hub') : 'gp')
 takeChallenge()
+takeTrack()
+window.addEventListener('hashchange', takeTrack) // a track link pasted into a page that is already open
 const today = visit()
 refreshHot()
 raceView.render()
