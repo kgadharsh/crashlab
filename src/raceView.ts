@@ -8,7 +8,8 @@ import {
   BRONZE_FINISHES, CAUSE_LABEL, GRAND_PRIXES, RACE_COUNT, dayOf, isSecretGp, adviceFor, better, finishLap, gpTrack, lapIsOver, medalFor, medalRules, raceCar, summarise, versus,
   type GrandPrix, type Medal, type RaceResult, type TrackResult,
 } from './race'
-import { logEvent, recordChallenge } from './playLog'
+import { hasRaced, logEvent, recordChallenge } from './playLog'
+import * as sound from './sound'
 import { loadFewest, recordFewest } from './board'
 import { drawMine } from './perks'
 import { icon } from './icons'
@@ -62,7 +63,8 @@ const GHOST_WAIT = 240 // at most 4 more seconds at the end of a track for the g
 
 const bestKey = (gp: GrandPrix) => 'crashlab.best.' + gp.id // the first Grand Prix keeps the key it always had
 const GP_KEY = 'crashlab.gp'
-const SPEEDS = [1, 4, 16]
+const SPEEDS = [1, 4, 8, 16]
+const SPEED_KEY = 'crashlab.speed'
 const HOLD = 90 // 1.5 seconds on each finished lap
 const MEDAL_COLOUR: Record<Exclude<Medal, null>, string> = { gold: '#ffcc33', silver: '#c7ced8', bronze: '#cd8a4f' }
 
@@ -126,7 +128,17 @@ export function cardText(carName: string, gp: GrandPrix, s: RaceResult, link: st
 
 export function createRaceView(d: RaceDeps) {
   let live: Live | null = null
-  let speed = 4
+  // How fast a race is shown: the player's last choice; otherwise 4× for a first race and 8× once they have raced,
+  // because the tenth race of a build should not take as long to watch as the first
+  let speed = (() => {
+    try {
+      const n = Number(localStorage.getItem(SPEED_KEY))
+      if (SPEEDS.includes(n)) return n
+    } catch {
+      /* storage blocked: the usual speed */
+    }
+    return hasRaced() ? 8 : 4
+  })()
   let gpIndex = loadGpIndex()
   // a finished week's Grand Prix, opened from the Weekly panel: the third choice, while it is loaded
   let pastWeek: GrandPrix | null = null
@@ -248,6 +260,9 @@ export function createRaceView(d: RaceDeps) {
 
   function endLap(r: Live) {
     r.results.push(finishLap(r.lap))
+    sound.engine(null)
+    if (r.results[r.results.length - 1].time === null) sound.crash()
+    else sound.lapDone()
     r.hold = HOLD
     render()
   }
@@ -318,6 +333,8 @@ export function createRaceView(d: RaceDeps) {
     if (!r || r.summary) return
     if (r.lights > 0) {
       r.lights--
+      if (r.lights === 0) sound.lightsOut()
+      else if ((LIGHTS - r.lights) % 12 === 1 && LIGHTS - r.lights <= 49) sound.lightOn() // as each of the five lamps comes on
       showLights(r)
       return
     }
@@ -330,8 +347,10 @@ export function createRaceView(d: RaceDeps) {
     if (r.hold > 0) {
       for (let k = 0; k < speed; k++) stepGhost()
       if (--r.hold > 0) return
-      // the ghost gets a little longer to finish its lap, so you see who was quicker
-      if (r.ghost && !r.ghost.done && r.wait < GHOST_WAIT) {
+      // the ghost gets a little longer to finish its lap, so you see who was quicker. Not when your own car crashed:
+      // that track is over for you, and waiting for the ghost only holds up the next one. (A ghost that crashes
+      // changes nothing: your car drives on.)
+      if (r.ghost && !r.ghost.done && r.wait < GHOST_WAIT && r.results[r.index]?.time !== null) {
         r.hold = 1
         r.wait += speed
         return
@@ -343,6 +362,7 @@ export function createRaceView(d: RaceDeps) {
       stepGhost()
       if (lapIsOver(r.lap)) return endLap(r)
     }
+    sound.engine(r.lap.speed)
   }
 
   // ---------- THE SIDE PANEL ----------
@@ -360,6 +380,8 @@ export function createRaceView(d: RaceDeps) {
     $<HTMLButtonElement>('raceSkip').disabled = !racing
     choices().forEach((_, i) => ($<HTMLButtonElement>('gp' + i).disabled = racing)) // the Grand Prix cannot change mid-race
     $('raceSpeed').textContent = 'Speed ' + speed + '×'
+    $('raceSound').textContent = sound.soundOn() ? 'Sound on' : 'Sound off'
+    $('raceSound').setAttribute('aria-pressed', String(sound.soundOn()))
     $('raceMsg').textContent = loan
       ? lentOver()
         ? 'That was a starter car. Build your own in the Garage and come back to beat ' + loan.rival.name + '.'
@@ -495,7 +517,7 @@ export function createRaceView(d: RaceDeps) {
     // the rival ladder: Grand Prix 1 only, and out of the way while a friend's challenge is loaded
     const rungs = d.ladder.list()
     const next = d.ladder.next()
-    $('ladderPanel').hidden = !!ch || gp() !== GRAND_PRIXES[0]
+    $('ladderPanel').hidden = !!ch || gp() !== GRAND_PRIXES[0] || !car // the ladder is for a car of your own: the starter car is not on it
     $('ladderCount').textContent = rungs.filter((r) => r.beaten).length + ' of ' + rungs.length + ' beaten'
     $('ladderList').replaceChildren(
       ...rungs.map((r, i) => {
@@ -598,7 +620,7 @@ export function createRaceView(d: RaceDeps) {
       ['Total time', sum.totalTime.toFixed(1) + '<small> s</small>'],
       // something to race against on every track: how far the finished tracks are ahead of or behind the time that wins the gold medal
       // (a Grand Prix with no gold line keeps the lap counter)
-      r.gp.goldTime > 0
+      r.gp.goldTime > 0 && !r.loan // the starter car's short race has no medal to chase
         ? ['Gold medal', sum.finished ? goldGap(sum.totalTime - (r.gp.goldTime * sum.finished) / RACE_COUNT) : '–']
         : ['Lap', r.summary ? '–' : Math.round((100 * Math.min(lap.passed, CHECKPOINTS)) / CHECKPOINTS) + '<small>%</small>'],
     ])
@@ -617,8 +639,17 @@ export function createRaceView(d: RaceDeps) {
   $('resultGarage').addEventListener('click', () => d.goTo('garage'))
   $('resultPractice').addEventListener('click', () => d.goTo('practice'))
   $('raceSkip').addEventListener('click', skip)
+  $('raceSound').addEventListener('click', () => {
+    sound.setSound(!sound.soundOn())
+    render()
+  })
   $('raceSpeed').addEventListener('click', () => {
     speed = SPEEDS[(SPEEDS.indexOf(speed) + 1) % SPEEDS.length]
+    try {
+      localStorage.setItem(SPEED_KEY, String(speed))
+    } catch {
+      /* storage blocked: the choice only lasts this visit */
+    }
     render()
   })
 

@@ -902,7 +902,7 @@ body:not([data-tab='race']) .gantry { display: none; }
   /* the five tabs are a bar of asphalt along the bottom of the window, each one a full-size thing to press */
   .tabs {
     position: fixed; left: 0; right: 0; bottom: 0; z-index: 7;
-    display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 0;
+    display: grid; grid-template-columns: repeat(var(--tabs, 5), minmax(0, 1fr)); gap: 0;
     background: var(--asphalt); padding: 0 4px 4px;
   }
   .tab, .tab.profile {
@@ -977,3 +977,7 @@ body:not([data-tab='race']) .gantry { display: none; }
 .startscreen .btn.primary { margin-top: 10px; min-height: 56px; font-size: 20px; }
 .startscreen .ss-note { font-size: 13px; }
 .startscreen .textbtn { color: var(--on-asphalt); min-height: 44px; padding: 0; }
+
+/* until the first medal the Race menu shows the Grand Prix only (main.ts renderUnlocks) */
+#raceHub[data-early] .hubcard.daily, #raceHub[data-early] .hubcard.weekly, #raceHub[data-early] #hubBuild { display: none; }
+.textbtn.inline { display: inline; min-height: 0; padding: 0; font: inherit; font-weight: 600; }

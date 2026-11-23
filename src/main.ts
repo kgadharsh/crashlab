@@ -22,6 +22,7 @@ import { bestOn, driveLap, lapMedal, legacyStars, loadMedals, parFor, recordLaps
 import { PARTS, newlyUnlocked, type PartId, type Progress } from './parts'
 import { LOOKS, isUnlocked, loadLook, nextLook, saveLook } from './looks'
 import { counts, hasRaced, logEvent, playtestNotes } from './playLog'
+import { countVisit, step as countStep } from './steps'
 import { COL, H, W, clear, drawBrain, drawCar, drawCrash, drawMinimap, drawRays, drawSensorFan, drawThumb, drawTrack, fanFrame, fitTrack, follow, lookAt, newCamera, withCamera } from './draw'
 
 // ---------- SAVED STATE ----------
@@ -154,10 +155,10 @@ document.querySelector('#app')!.innerHTML = `
       </div>
       <div class="panel" id="jobPanel" data-fixed>
         <h2>Your job</h2>
-        <p class="tip" style="margin-top:0">Build a car, train its brain on practice tracks, then race it on ${RACE_COUNT} tracks it has never seen. Gold: all ${RACE_COUNT} in under ${GOLD_TIME} s.</p>
+        <p class="tip" style="margin-top:0">Build, train, then race ${RACE_COUNT} tracks the car has never seen. Gold: all ${RACE_COUNT} in under ${GOLD_TIME} s.</p>
         <details class="more">
           <summary>Where to start</summary>
-          <p class="tip">Not sure where to start? The setup below is a fair starting point, not a winner: when the game trains it for the leaderboard, the same way it trains everyone's, it does not finish every track. Change one thing at a time in the next steps to see what it does. A car you have not touched is a car anyone can build.</p>
+          <p class="tip">The setup below is a fair start, not a winner: trained as it is, it does not finish every track. Change one thing at a time to see what it does.</p>
         </details>
       </div>
       <div class="panel name">
@@ -170,7 +171,6 @@ document.querySelector('#app')!.innerHTML = `
         <p class="tip" id="lookTip"></p>
         <div class="paints" id="paints"></div>
         <h3 class="sub">Car type</h3>
-        <p class="tip" style="margin-top:0">How the car is built to drive. Each type is better at one thing and worse at another.</p>
         <div class="chassis" id="chassis"></div>
         <p class="tip" id="chassisTip"></p>
         <p class="tip" id="streakLine"></p>
@@ -203,23 +203,23 @@ document.querySelector('#app')!.innerHTML = `
         <div class="roads" role="group" aria-label="Road the practice tracks are driven on"><button type="button" class="road" data-road="dry" aria-pressed="true"><i aria-hidden="true">${icon('sun')}</i><b>Dry road</b><small>Grand Prix 1</small></button><button type="button" class="road wetroad" data-road="wet" aria-pressed="false"><i aria-hidden="true">${icon('rain')}</i><b>Wet road</b><small>Grand Prix 2: tyres lose grip sooner</small></button></div>
         <select id="weather" aria-label="Road the practice tracks are driven on" hidden><option value="dry">Dry</option><option value="wet">Wet</option></select>
         <div class="actions" style="margin-top:2px"><label class="check"><input type="checkbox" id="condNight" /> Night</label><label class="check"><input type="checkbox" id="condIce" /> Ice patches</label></div>
-        <p class="tip" style="margin-top:2px">Grand Prix 2 is raced on a wet road. A car practised only on dry roads loses most of its grip there, so practise on wet roads to prepare for it.</p>
+        <p class="tip" style="margin-top:2px">Grand Prix 2 is wet: practise on a wet road for it.</p>
         <div class="tracks" id="tracks"></div>
         <p class="tip" id="ownTip"></p>
         <div class="actions"><button type="button" class="btn small" id="drawOwn">Draw your own track →</button></div>
-        <p class="tip">Race day uses tracks you have never seen. More practice tracks prepare the car better, but each round uses more of the run's practice budget, so you get fewer rounds.</p>
+        <p class="tip">More tracks prepare the car better, but leave fewer rounds of training.</p>
       </div>
       <button class="btn primary wide" id="toSkills">Next: Skill tree →</button>
     </div>
     <div id="skills" class="side" role="tabpanel" aria-labelledby="tab-skills">
       <div class="panel" data-fixed>
         <h2>Skill tree<span class="aside" id="partCount"></span></h2>
-        <p class="tip" style="margin-top:0">Every car has ${POINT_BUDGET} points to spend. Tap a node to read what it gives and what it costs, then fit it.</p>
+        <p class="tip" style="margin-top:0">${POINT_BUDGET} points to spend. Tap a node to see what it gives and costs.</p>
         <details class="more">
           <summary>How the tree works</summary>
+          <p class="tip">The number on a circle is the points it costs. A glowing circle is fitted. A padlock means you have not unlocked it yet.</p>
           <p class="tip">Spend the points on what the tracks need. Racing, stars, the Weekly Challenge and driving by hand unlock more nodes. The lines between nodes only group related ones: there is no order, so fit any unlocked node at any time.</p>
         </details>
-        <p class="tip legend" style="margin-top:6px">The number on a circle is the points it costs · a glowing circle is fitted · a padlock means you have not unlocked it yet.</p>
         <div id="treeSvg"></div>
         <div class="ncard" id="treeDetail"></div>
         <div class="actions"><button class="btn" id="resetTree">Reset skill tree</button><button class="btn primary" id="toPractice" style="flex:1">Go to practice →</button></div>
@@ -278,14 +278,13 @@ document.querySelector('#app')!.innerHTML = `
       <div class="panel">
         <h2>Your car</h2>
         <p class="tip" id="carState" style="margin-top:0"></p>
-        <p class="tip">While you watch it drive, the box in the corner shows what the car sees (one bar for each ray: a short red bar means a wall is close) and what it does (steering and gas).</p>
         <div class="actions"><button class="btn primary hot" id="shareCar">${icon('swords')} Challenge a friend</button></div>
-        <p class="tip" style="margin-top:4px">Copies a link. Your friend opens it, races your car on the same secret tracks, and tries to beat it.</p>
+        <p class="tip" style="margin-top:4px">Copies a link a friend can race against.</p>
         <select id="driveTrack" aria-label="Track to watch the car on" hidden></select>
         <div class="actions"><button class="btn small" id="testDrive">Watch it drive</button><button class="btn small" id="swapCar" hidden>Switch to previous car</button></div>
-        <p class="tip" style="margin-top:4px">To watch it on a particular track, tap that track on the Track board.</p>
         <details class="more">
           <summary>More: save, load, playtest notes</summary>
+          <p class="tip">To watch the car on a particular track, tap that track on the Track board. The box in the corner shows what the car sees (one bar for each ray: a short red bar means a wall is close) and what it does (steering and gas).</p>
           <div class="actions">
             <button class="btn" id="saveCar">Save car to a file</button>
             <button class="btn" id="loadCar">Load car from a file</button>
@@ -298,7 +297,7 @@ document.querySelector('#app')!.innerHTML = `
       </div>
       <div class="panel">
         <h2>My cars<span class="aside" id="shelfCount"></span></h2>
-        <p class="tip" style="margin-top:0">Keep up to ${maxSlots()} cars here, such as two trainings of the same setup, and use whichever races best. Using a saved car puts your current car back under Switch to previous car.</p>
+        <p class="tip" style="margin-top:0">Keep up to ${maxSlots()} cars and use whichever races best.</p>
         <div class="shelf" id="shelf"></div>
         <div class="actions"><button class="btn" id="shelve">Save this car to My cars</button></div>
       </div>
@@ -308,7 +307,7 @@ document.querySelector('#app')!.innerHTML = `
         <button type="button" class="hubcard daily" id="hubDaily" hidden>
           <span class="hubtop"><span class="hubkind">Daily</span><em id="hubDailyEnds"></em></span>
           <b class="hubname">Daily Challenge</b>
-          <span class="hubpitch">One track style, one twist, eight open tracks everyone races. One entry a day.</span>
+          <span class="hubpitch">Eight open tracks, the same for everyone. One entry a day.</span>
           <span class="hubfacts">
             <span><small>Tracks</small>8</span>
             <span><small>Entries</small><i id="hubDailyLimit">2 a day</i></span>
@@ -320,7 +319,7 @@ document.querySelector('#app')!.innerHTML = `
         <button type="button" class="hubcard weekly" id="hubWeekly" hidden>
           <span class="hubtop"><span class="hubkind">Weekly</span><em id="hubWeeklyEnds"></em></span>
           <b class="hubname">Weekly Challenge</b>
-          <span class="hubpitch">The big one: mixed track styles and harder conditions, all week.</span>
+          <span class="hubpitch">Mixed styles and harder conditions, all week.</span>
           <span class="hubfacts">
             <span><small>Tracks</small>8</span>
             <span><small>Entries</small><i id="hubWeeklyLimit">3 a week</i></span>
@@ -332,16 +331,17 @@ document.querySelector('#app')!.innerHTML = `
         <button type="button" class="hubcard gp" id="hubGp">
           <span class="hubtop"><span class="hubkind">Always open</span></span>
           <b class="hubname">Grand Prix</b>
-          <span class="hubpitch">The fixed tracks, dry and wet. Race for gold, silver and bronze.</span>
+          <span class="hubpitch">Fixed tracks, dry and wet. Race for medals.</span>
           <span class="hubnow" id="hubGpNow"></span>
           <span class="hubgo" aria-hidden="true">→</span>
         </button>
         <button type="button" class="hubcard gp" id="hubBuild">
           <span class="hubtop"><span class="hubkind">For fun</span></span>
           <b class="hubname">Build a track</b>
-          <span class="hubpitch">Draw your own circuit, race your car on it, and dare a friend to beat your lap.</span>
+          <span class="hubpitch">Draw a circuit, race it, and dare a friend to beat your lap.</span>
           <span class="hubgo" aria-hidden="true">→</span>
         </button>
+        <p class="tip" id="hubMore" hidden>More races open after your first medal. <button type="button" class="textbtn inline" id="hubShowAll">Show them now</button></p>
       </div>
       <div class="panel rbar" id="raceBar" data-fixed>
         <button type="button" class="back" id="raceBack" aria-label="Back to all races"><span aria-hidden="true">←</span> All races</button>
@@ -357,7 +357,7 @@ document.querySelector('#app')!.innerHTML = `
         <div class="actions"><button class="btn small hot" id="buildShare">Share this track</button><button class="btn small" id="buildPractise">Practise on this track →</button></div>
         <p class="msg good" id="buildMsg" role="status"></p>
         <input id="buildLink" readonly hidden aria-label="Track link" style="width:100%;margin-top:6px" />
-        <p class="tip">Drag the white points on the track to bend the road. The yellow point is the start line. A track you build is for fun and for friends: it does not count for medals or the leaderboards, which use tracks nobody has seen.</p>
+        <p class="tip">Drag the white points to bend the road. Yellow is the start line. A track you draw earns no medals and is on no leaderboard.</p>
       </div>
       <div class="panel" id="challengePanel" data-fixed hidden>
         <h2>Challenge<span class="aside"><button class="btn small" id="challengeClear">Dismiss</button></span></h2>
@@ -371,11 +371,15 @@ document.querySelector('#app')!.innerHTML = `
           <button class="btn primary wide" id="raceGo">Race your car</button>
           <button class="btn" id="raceSpeed">Speed 4×</button>
           <button class="btn" id="raceSkip">Skip to results</button>
+          <button class="btn" id="raceSound" aria-pressed="true">Sound on</button>
           <button class="btn" id="raceCars" title="Race a different saved car">Change car</button>
         </div>
         <p class="msg" id="raceMsg"></p>
-        <p class="tip" style="margin-top:8px">Your car drives 8 tracks it has never seen, once each. Most tracks finished wins, then the lowest total time. Grand Prix 2 is the same tracks on a wet road.</p>
-        <p class="tip" id="medalRules"></p>
+        <details class="more">
+          <summary>Rules and medals</summary>
+          <p class="tip">Your car drives 8 tracks it has never seen, once each. Most tracks finished wins, then the lowest total time. Grand Prix 2 is the same tracks on a wet road.</p>
+          <p class="tip" id="medalRules"></p>
+        </details>
       </div>
       <div class="panel" id="ladderPanel" data-fixed hidden>
         <h2>Rivals<span class="aside" id="ladderCount"></span></h2>
@@ -385,7 +389,7 @@ document.querySelector('#app')!.innerHTML = `
       <div class="panel" id="dailyPanel" data-fixed hidden>
         <h2>Daily Challenge<span class="aside" id="dailyEnds"></span></h2>
         <p class="tip" id="dailyLine" style="margin-top:0"></p>
-        <p class="tip">Entering submits this car's setup, not its trained brain. The server trains each setup once under the same conditions; your official result may differ from your local race.</p>
+        <p class="tip">Entering submits the setup, not the trained brain. The server trains it once, so the official result can differ from your race.</p>
         <div class="actions"><label class="entry-car" for="dailyCar">Car to enter <select id="dailyCar" aria-label="Car to enter in the Daily Challenge"></select></label><button class="btn primary" id="dailyGo">Submit selected setup</button></div>
         <p class="msg" id="dailyMsg"></p>
         <div class="jobs" id="dailyJobs"></div>
@@ -397,7 +401,7 @@ document.querySelector('#app')!.innerHTML = `
       <div class="panel" id="weeklyPanel" data-fixed hidden>
         <h2>Weekly Challenge<span class="aside" id="weeklyEnds"></span></h2>
         <p class="tip" id="weeklyLine" style="margin-top:0"></p>
-        <p class="tip">Entering submits this car's setup, not its trained brain. The server trains each setup once under the same conditions; your official result may differ from your local race.</p>
+        <p class="tip">Entering submits the setup, not the trained brain. The server trains it once, so the official result can differ from your race.</p>
         <div class="actions"><label class="entry-car" for="weeklyCar">Car to enter <select id="weeklyCar" aria-label="Car to enter in the Weekly Challenge"></select></label><button class="btn primary" id="weeklyGo">Submit selected setup</button></div>
         <p class="msg" id="weeklyMsg"></p>
         <div class="jobs" id="weeklyJobs"></div>
@@ -412,7 +416,7 @@ document.querySelector('#app')!.innerHTML = `
         <div class="roads slim" role="group" aria-label="Which leaderboard"><button type="button" class="road on" id="onlineDry" aria-pressed="true"><i aria-hidden="true">${icon('sun')}</i><b>Dry road</b></button><button type="button" class="road wetroad" id="onlineWet" aria-pressed="false"><i aria-hidden="true">${icon('rain')}</i><b>Wet road</b></button></div>
         <ol class="rank" id="onlineRows"></ol>
         <p class="tip" id="onlineEmpty" hidden>First place is open: the first car entered takes it.</p>
-        <p class="tip" style="margin-top:4px">Every car on these boards was trained by the game itself: one run, the same way for everyone. Only your setup counts, not how often you retrain. An entry shows up within about 30 minutes.</p>
+        <p class="tip" style="margin-top:4px">The game trains every entered setup itself, one run each, so only your setup counts. Entries appear within about 30 minutes.</p>
         <p class="tip" id="onlineWho"></p>
         <div class="jobs" id="onlineJobs"></div>
         <div class="actions" id="onlineNameRow" hidden><input id="onlineName" maxlength="20" placeholder="Choose a unique username" aria-label="Profile username (unique and shown on leaderboards; separate from your car name)" autocomplete="off" /><button class="btn small primary" id="onlineNameSave">Save username</button><small class="tip" style="flex:1 0 100%;margin-top:0">Unique public username, separate from your car's name.</small></div>
@@ -578,6 +582,7 @@ function setTab(t: Tab) {
     btn.classList.toggle('on', btn.dataset.tab === t)
     btn.setAttribute('aria-selected', String(btn.dataset.tab === t))
   })
+  renderUnlocks()
   document.body.classList.toggle('full', t === 'skills' || t === 'profile') // these two have no use for the track screen
   document.body.classList.toggle('hubview', t === 'race' && raceSection === 'hub') // the race menu needs no track screen above it on a narrow window
   document.body.classList.toggle('buildview', t === 'race' && raceSection === 'build')
@@ -655,7 +660,7 @@ $('hubGp').addEventListener('click', () => setRaceSection('gp'))
 $('hubBuild').addEventListener('click', () => setRaceSection('build'))
 $('raceBack').addEventListener('click', () => setRaceSection('hub'))
 $('toPractice').addEventListener('click', () => setTab('practice'))
-$('toSkills').addEventListener('click', () => setTab('skills'))
+$('toSkills').addEventListener('click', () => setTab(skillsOpen() ? 'skills' : 'practice'))
 $('resetTree').addEventListener('click', () => resetTree())
 $('toGarage').addEventListener('click', () => setTab('garage'))
 
@@ -1054,6 +1059,7 @@ function stopTraining(text: string) {
 function finishTraining(f: Finish) {
   const r = run!
   lastRun = { spent: r.spent, generations: f.generations, budget: r.budget }
+  countStep('train')
   logEvent({ k: 'train', secs: r.secs ?? runSeconds(r), generations: f.generations, keep: r.keep, wet: r.build.weather === 'wet', rays: r.build.sensors.count, practice: practiceSlots(r.build) })
   if (car) rememberPrevious(car) // the car this run replaces, in case the new one is worse
   // the generations the brain has had in all: carrying on adds to the car's count (unknown if the old car's was)
@@ -1445,6 +1451,53 @@ const gpMedals = () =>
     const best = loadBest(gp)
     return best ? medalFor(best, gp) : null
   })
+// ---------- WHAT IS OPEN YET ----------
+// A new player sees the Garage, Practice and the Grand Prix. The skill tree opens with the first race, and the Daily
+// and Weekly Challenges and Build a track with the first medal (or after five races, or when the player asks), so the
+// first minutes are one loop and not a menu. Nothing that was open ever closes again.
+const SHOW_ALL = 'crashlab.showAll'
+const flagSet = (key: string) => {
+  try {
+    return !!localStorage.getItem(key)
+  } catch {
+    return false
+  }
+}
+const skillsOpen = () => hasRaced() || pointsUsed(b.parts) > 0 || !!(car && pointsUsed(car.build.parts)) || flagSet(SHOW_ALL)
+const racesOpen = () => flagSet(SHOW_ALL) || gpMedals().some((m) => m !== null) || counts().races >= 5
+let openSeen = { skills: skillsOpen(), races: racesOpen() }
+function renderUnlocks() {
+  const now = { skills: skillsOpen(), races: racesOpen() }
+  $('tab-skills').hidden = !now.skills
+  // the numbered tabs count the steps that are showing
+  let n = 0
+  document.querySelectorAll<HTMLElement>('.tabs .tab').forEach((t) => {
+    const num = t.querySelector('.tnum')
+    if (num && !t.hidden) num.textContent = String(++n)
+  })
+  document.querySelector<HTMLElement>('.tabs')!.style.setProperty('--tabs', String(document.querySelectorAll('.tabs .tab:not([hidden])').length))
+  $('toSkills').textContent = now.skills ? 'Next: Skill tree →' : 'Next: Practice →'
+  $('raceHub').toggleAttribute('data-early', !now.races)
+  $('hubMore').hidden = now.races
+  // say so once, when something opens while the player is here
+  if (now.skills && !openSeen.skills) showNotice('The skill tree is open: ' + POINT_BUDGET + ' points to spend on your car.', { label: 'Open it', run: () => setTab('skills') })
+  if (now.races && !openSeen.races) showNotice('More races are open: see All races on the Race tab.')
+  openSeen = now
+}
+$('hubShowAll').addEventListener('click', () => {
+  try {
+    localStorage.setItem(SHOW_ALL, '1')
+  } catch {
+    /* storage blocked: they show for this visit only */
+  }
+  openSeen = { skills: true, races: true } // asked for, so no notice
+  renderUnlocks()
+  if (!flagSet(SHOW_ALL)) {
+    $('raceHub').removeAttribute('data-early')
+    $('hubMore').hidden = true
+    $('tab-skills').hidden = false
+  }
+})
 // stars earned before the 8 Nov change keep counting, so nothing already unlocked locks again
 const starsBefore = legacyStars(loadMedals(), gpMedals())
 const starCount = () => Math.max(totalStars(loadMedals(), gpMedals()), starsBefore)
@@ -2375,6 +2428,8 @@ raceView = createRaceView({ onResult: (gpId, r) => {
   const fresh = key !== resultSeen
   resultSeen = key
   if (!r || !fresh) return
+  countStep('race')
+  renderUnlocks() // a first race opens the skill tree, a first medal the other races
   announceParts()
   if (nudge.hidden) nextNotice()
   // on a narrow window the result is far below the track: bring it into view
@@ -2582,7 +2637,7 @@ const cameSection = (() => {
   }
 })()
 // the Race tab starts on its menu (with no board server there is only the Grand Prix); after Use reloads the page it returns to where it was
-setRaceSection(API ? (cameSection === 'daily' || cameSection === 'weekly' ? 'hub' : cameSection ?? 'hub') : 'gp')
+setRaceSection(API && racesOpen() ? (cameSection === 'daily' || cameSection === 'weekly' ? 'hub' : cameSection ?? 'hub') : 'gp') // with only the Grand Prix open, a menu of one would be a wasted tap
 const plainVisit = !location.hash // no challenge or track link in the address
 takeChallenge()
 takeTrack()
@@ -2620,6 +2675,7 @@ if (plainVisit && !car && !challenge && !cameFrom && !hasRaced() && !openedBefor
     start.close()
     start.remove()
     if (!race) return
+    countStep('play')
     setTab('race')
     setRaceSection('gp')
     raceView!.selectGpId(GRAND_PRIXES[0].id)
@@ -2635,6 +2691,7 @@ if (plainVisit && !car && !challenge && !cameFrom && !hasRaced() && !openedBefor
   start.showModal()
 }
 window.addEventListener('hashchange', takeTrack) // a track link pasted into a page that is already open
+countVisit(!!car || hasRaced() || counts().trainings > 0 || openedBefore)
 const today = visit()
 refreshHot()
 raceView.render()

@@ -491,6 +491,39 @@ async function loadChallenge(req: Request, env: Env, code: string): Promise<Resp
   return row ? json(req, { car: row.car }) : json(req, { error: 'That challenge link is not known.' }, 404)
 }
 
+// ---------- ANONYMOUS STEP COUNTS ----------
+// How far new players get, as totals per day: the game sends a step's name once per browser (src/steps.ts) and this
+// adds one to that day's total. Nothing about who sent it is read or kept. The table is made on first use.
+const STEPS = ['open', 'play', 'train', 'race', 'back']
+let countTable = false
+async function ensureCounts(env: Env) {
+  if (countTable) return
+  await env.DB.prepare('CREATE TABLE IF NOT EXISTS counts (day INTEGER NOT NULL, step TEXT NOT NULL, n INTEGER NOT NULL, PRIMARY KEY (day, step))').run()
+  countTable = true
+}
+async function countStep(req: Request, env: Env): Promise<Response> {
+  const text = await req.text()
+  let step: unknown
+  try {
+    step = text.length <= 100 ? (JSON.parse(text) as { step?: unknown }).step : null
+  } catch {
+    step = null
+  }
+  if (typeof step !== 'string' || !STEPS.includes(step)) return json(req, { error: 'Unknown step.' }, 400)
+  await ensureCounts(env)
+  await env.DB.prepare('INSERT INTO counts (day, step, n) VALUES (?, ?, 1) ON CONFLICT (day, step) DO UPDATE SET n = n + 1').bind(Math.floor(Date.now() / 86_400_000), step).run()
+  return json(req, { ok: true })
+}
+// The totals for the last days, newest first: { day: 'YYYY-MM-DD', open, play, train, race, back }
+async function readCounts(req: Request, env: Env, days: number): Promise<Response> {
+  await ensureCounts(env)
+  const from = Math.floor(Date.now() / 86_400_000) - days + 1
+  const rows = (await env.DB.prepare('SELECT day, step, n FROM counts WHERE day >= ? ORDER BY day DESC').bind(from).all<{ day: number; step: string; n: number }>()).results
+  const byDay = new Map<number, Record<string, number>>()
+  for (const r of rows) byDay.set(r.day, { ...(byDay.get(r.day) ?? {}), [r.step]: r.n })
+  return json(req, [...byDay].map(([day, c]) => ({ day: new Date(day * 86_400_000).toISOString().slice(0, 10), ...Object.fromEntries(STEPS.map((s) => [s, c[s] ?? 0])) })))
+}
+
 export default {
   async fetch(req: Request, env: Env): Promise<Response> {
     if (req.method === 'OPTIONS') return new Response(null, { status: 204, headers: { ...cors(req), 'Access-Control-Allow-Methods': 'GET, POST, PUT' } })
@@ -499,6 +532,8 @@ export default {
     const auth = url.pathname.match(/^\/auth\/(google)(\/callback)?$/)
     const ch = url.pathname.match(/^\/challenges\/([A-Za-z0-9_-]+)$/)
     if (req.method === 'GET' && auth) return auth[2] ? finishSignIn(auth[1], url, env) : startSignIn(auth[1], url, env)
+    if (req.method === 'POST' && url.pathname === '/count') return countStep(req, env)
+    if (req.method === 'GET' && url.pathname === '/counts') return readCounts(req, env, Math.min(90, Math.max(1, Number(url.searchParams.get('days')) || 30)))
     if (req.method === 'POST' && url.pathname === '/challenges') return saveChallenge(req, env)
     if (req.method === 'GET' && ch) return CODE.test(ch[1]) ? loadChallenge(req, env, ch[1]) : json(req, { error: 'That challenge link is damaged.' }, 400)
     if (req.method === 'POST' && url.pathname === '/entries') return submit(req, env)
