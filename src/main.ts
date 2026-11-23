@@ -2586,8 +2586,9 @@ setRaceSection(API ? (cameSection === 'daily' || cameSection === 'weekly' ? 'hub
 const plainVisit = !location.hash // no challenge or track link in the address
 takeChallenge()
 takeTrack()
-// A first visit opens on a race, not on the Garage: the starter car races a rival straight away, and its result sends the
-// player to build their own. Once only: after that a player with no car lands in the Garage as before.
+// A first visit opens on a start screen: the game's name, what it is in one line, and a Play button. Play starts a short
+// race in the starter car, and its result sends the player to build their own; the other choice goes straight to the
+// Garage. Nothing drives until Play is pressed. Once only: after that a player with no car lands in the Garage as before.
 const OPENED = 'crashlab.opened'
 const openedBefore = (() => {
   try {
@@ -2597,15 +2598,41 @@ const openedBefore = (() => {
   }
 })()
 if (plainVisit && !car && !challenge && !cameFrom && !hasRaced() && !openedBefore) {
-  try {
-    localStorage.setItem(OPENED, '1')
-  } catch {
-    /* storage blocked: the next visit opens on the race again */
+  const start = document.createElement('dialog')
+  start.className = 'startscreen'
+  start.setAttribute('aria-labelledby', 'startTitle')
+  start.innerHTML = `
+    <div class="ss-in">
+      <div class="brand"><svg class="logo" viewBox="-1 -1 34 34" aria-hidden="true"><rect x="-1" y="-1" width="34" height="34" rx="8" fill="#ffb31a"/><path d="M28 16 15 10.5 4.5 12.5v7L15 21.5z" fill="#181204"/><ellipse cx="14" cy="16" rx="3.4" ry="1.9" fill="#ffb31a"/></svg><span class="word">CRASH<b>LAB</b></span></div>
+      <h1 id="startTitle">Build a car that drives itself. Then race it.</h1>
+      <p>You choose how the car is built. It learns to drive on its own, then races ${RACE_COUNT} tracks it has never seen.</p>
+      <button type="button" class="btn primary wide" id="startPlay">Play</button>
+      <p class="ss-note">Starts with a 20-second race in a starter car.</p>
+      <button type="button" class="textbtn" id="startSkip">Skip the race and build a car</button>
+    </div>`
+  document.body.appendChild(start)
+  const chosen = (race: boolean) => {
+    try {
+      localStorage.setItem(OPENED, '1')
+    } catch {
+      /* storage blocked: the next visit opens on the start screen again */
+    }
+    start.close()
+    start.remove()
+    if (!race) return
+    setTab('race')
+    setRaceSection('gp')
+    raceView!.selectGpId(GRAND_PRIXES[0].id)
+    raceView!.startNow()
+    reveal($('tower'))
   }
-  tab = 'race'
-  setRaceSection('gp')
-  raceView.selectGpId(GRAND_PRIXES[0].id)
-  raceView.startNow()
+  start.querySelector('#startPlay')!.addEventListener('click', () => chosen(true))
+  start.querySelector('#startSkip')!.addEventListener('click', () => chosen(false))
+  start.addEventListener('cancel', (e) => {
+    e.preventDefault() // Escape is the same as skipping the race
+    chosen(false)
+  })
+  start.showModal()
 }
 window.addEventListener('hashchange', takeTrack) // a track link pasted into a page that is already open
 const today = visit()

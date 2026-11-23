@@ -964,3 +964,16 @@ body:not([data-tab='race']) .gantry { display: none; }
 
 /* a race that was not the player's own car (the starter car, or a friend's car being watched) has no board entry to offer */
 #resultPanel[data-watched] #resultBoard { display: none; }
+
+/* The start screen on a first visit: the name, one line on what the game is, and Play. Asphalt, like the top bar. */
+.startscreen { width: 100vw; max-width: 100vw; height: 100dvh; max-height: 100dvh; margin: 0; padding: 24px 16px; border: 0; background: var(--asphalt); color: var(--on-asphalt); }
+.startscreen[open] { display: grid; place-items: center; }
+.startscreen::backdrop { background: var(--asphalt); }
+.startscreen .ss-in { width: min(100%, 460px); display: grid; gap: 14px; justify-items: start; }
+.startscreen .brand { font-size: 26px; }
+.startscreen .brand .logo { width: 36px; height: 36px; }
+.startscreen h1 { margin: 10px 0 0; font: 800 clamp(30px, 7vw, 44px)/1.05 var(--head); text-transform: uppercase; letter-spacing: 0.005em; text-wrap: balance; }
+.startscreen p { margin: 0; font-size: 16px; color: var(--on-asphalt-muted); max-width: 40ch; }
+.startscreen .btn.primary { margin-top: 10px; min-height: 56px; font-size: 20px; }
+.startscreen .ss-note { font-size: 13px; }
+.startscreen .textbtn { color: var(--on-asphalt); min-height: 44px; padding: 0; }
