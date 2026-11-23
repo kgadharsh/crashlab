@@ -1,6 +1,6 @@
 import './style.css'
 import { GOLD_TIME, GRAND_PRIXES, RACE_COUNT, medalFor, raceCar, type GrandPrix } from './race'
-import { STARTER, ladderList, ladderRaced, nextRival } from './rivals'
+import { STARTER, hasGrudge, ladderList, ladderRaced, nextRival, starterRaced } from './rivals'
 import { savedTrackCode, TRACK_PREFIX, createTrackBuilder } from './trackBuilder'
 import { SHORT_PREFIX, carFromChallenge, carFromShort, challengeCode, shortCode } from './challenge'
 import { DEFAULT_BUILD, CHASSIS, KEEP_TRAINING_SHARE, LIMITS, POPULATION, REPLAY_EVERY, TRAINING_BUDGET, buildProblem, cleanBuild, genomeLength, brainShape, specOf, levelOf, maxPractice, practiceSlots, maxRays, maxSpread, rivalOf, pointsUsed, POINT_BUDGET, type Build, type Parts } from './setup'
@@ -117,7 +117,7 @@ document.querySelector('#app')!.innerHTML = `
   <div class="brand"><svg class="logo" viewBox="-1 -1 34 34" aria-hidden="true"><rect x="-1" y="-1" width="34" height="34" rx="8" fill="#ffb31a"/><path d="M28 16 15 10.5 4.5 12.5v7L15 21.5z" fill="#181204"/><ellipse cx="14" cy="16" rx="3.4" ry="1.9" fill="#ffb31a"/></svg><span class="word">CRASH<b>LAB</b></span></div>
   <nav class="tabs" role="tablist">
     <button class="tab" data-tab="garage" id="tab-garage" role="tab" aria-controls="garage"><span class="tnum">1</span>Garage</button>
-    <button class="tab" data-tab="skills" id="tab-skills" role="tab" aria-controls="skills"><span class="tnum">2</span>Skill tree</button>
+    <button class="tab" data-tab="skills" id="tab-skills" role="tab" aria-controls="skills"><span class="tnum">2</span><span class="wide">Skill tree</span><span class="narrow">Skills</span></button>
     <button class="tab" data-tab="practice" id="tab-practice" role="tab" aria-controls="practice"><span class="tnum">3</span>Practice</button>
     <button class="tab" data-tab="race" id="tab-race" role="tab" aria-controls="race"><span class="tnum">4</span>Race</button>
     <button class="tab profile" data-tab="profile" id="tab-profile" role="tab" aria-controls="profile"><span class="pico" aria-hidden="true">${icon('user')}</span>Profile</button>
@@ -538,7 +538,15 @@ function hideNudge(showWaiting = false) {
   if (showWaiting) nextNotice()
 }
 $('nudgeGo').addEventListener('click', () => {
-  if (!nudgeAction) return setTab('race')
+  if (!nudgeAction) {
+    // the bar says Race, so it races: the Grand Prix starts, unless the player is in another race's screen
+    setTab('race')
+    if (raceSection === 'hub' || raceSection === 'build') setRaceSection('gp')
+    hideNudge()
+    raceView!.startNow()
+    reveal($('tower'))
+    return window.scrollTo(0, 0)
+  }
   const run = nudgeAction
   hideNudge(true)
   run()
@@ -994,6 +1002,11 @@ function changed() {
 function renderFirstRun() {
   $('firstRun').hidden = !!car
   $('jobPanel').hidden = !car
+  // after the starter car's race the target is the rival that beat it, which is also the first one the new car races
+  if (!car && hasGrudge()) {
+    $('firstTitle').textContent = 'Beat ' + STARTER.rival.name
+    $('firstLine').textContent = STARTER.rival.name + ' beat the starter car. Your car trains itself in a minute or two, then races it over all ' + RACE_COUNT + ' tracks.'
+  }
 }
 $('firstTrain').addEventListener('click', () => {
   document.querySelector<HTMLButtonElement>('.tab[data-tab="practice"]')!.click()
@@ -1007,7 +1020,7 @@ $('firstTune').addEventListener('click', () => {
 if (!car)
   fetchBoardEntries<{ display: string; finished: number; totalTime: number }>(API + '/board?gp=gp1')
     .then(([lead]) => {
-      if (!lead) return
+      if (!lead || hasGrudge()) return
       $('firstTitle').textContent = 'Beat ' + lead.display
       $('firstLine').textContent =
         lead.display + ' leads Grand Prix 1 with ' + (lead.finished === RACE_COUNT ? 'all ' + RACE_COUNT + ' secret tracks in ' + lead.totalTime.toFixed(1) + ' s' : lead.finished + ' of ' + RACE_COUNT + ' secret tracks') + '. Your car trains itself in a minute or two, then races the same tracks.'
@@ -1019,12 +1032,13 @@ function renderChip() {
   const chip = $('chip')
   chip.classList.toggle('stale', carIsStale())
   if (!car) {
-    chip.textContent = worker ? 'Training your first car…' : 'No car yet: build one in the Garage'
+    chip.textContent = worker ? 'Training…' : 'No car yet'
     return
   }
   const label = document.createElement('b')
   label.textContent = car.name
-  chip.replaceChildren('CAR ', label, worker ? ' · training a new car' : carIsStale() ? ' · setup changed, retrain' : ' · ready')
+  chip.replaceChildren(label, worker ? ' · training' : carIsStale() ? ' · retrain' : ' · ready')
+  chip.title = carIsStale() ? 'The setup has changed since this car was trained. Train again to use it.' : ''
 }
 
 // ---------- TRAINING ----------
@@ -2012,7 +2026,10 @@ function renderPractice() {
       ? lastRun.generations + ' rounds · done'
       : 'about ' + estGenerations(b) + ' rounds for a full run, ' + Math.max(1, Math.round(estGenerations(b) * KEEP_TRAINING_SHARE)) + ' for Keep training'
   $('trainState').textContent = training ? (run?.watching ? 'watching' : 'training') : 'ready'
-  $('train').textContent = training ? 'Stop' : car ? 'Train a new car' : 'Start training'
+  $('train').textContent = training ? 'Stop training' : car ? 'Train a new car' : 'Start training'
+  $('train').classList.toggle('primary', !training) // stopping is not the thing to press while a car trains
+  $('keep').hidden = training
+  $('shelveQuick').hidden = training
   $('skip').hidden = !(training && run?.watching)
   $<HTMLButtonElement>('keep').disabled = training || !canKeepTraining()
   $('keepHint').textContent = !car
@@ -2225,7 +2242,7 @@ function drawTrainingScreen(r: Run) {
   ctx.arc(cx, H / 2 - 128, 14, turn, turn + 4)
   ctx.stroke()
   hudText(r.judging ? 'PICKING YOUR CAR' : r.keep ? 'CARRYING ON FROM YOUR CAR' : 'TRAINING AT FULL SPEED', cx, H / 2 - 78, 24, COL.accent, 'center')
-  hudText('GEN ' + gen, cx, H / 2 - 4, 84, COL.text, 'center')
+  hudText('ROUND ' + gen, cx, H / 2 - 4, 84, COL.text, 'center')
   ctx.fillStyle = COL.road
   ctx.fillRect(cx - bar / 2, H / 2 + 26, bar, 10)
   ctx.fillStyle = COL.accent
@@ -2276,8 +2293,8 @@ function draw() {
     })
     drawMinimap(ctx, sw.track, cam, sw.cars[sw.lead], sw.cars.filter((_, i) => !sw.done[i] && i !== sw.lead))
     const alive = sw.done.filter((d) => !d).length
-    hudText('GEN ' + (sw.gen + 1), 16, 42, 36)
-    hudText('REPLAY ON ' + TRACK_NAMES[sw.trackId].toUpperCase() + ' · TRAINING IS ON GEN ' + run.history.length, 16, 64, 16, COL.muted)
+    hudText('ROUND ' + (sw.gen + 1), 16, 42, 36)
+    hudText('REPLAY ON ' + TRACK_NAMES[sw.trackId].toUpperCase() + ' · TRAINING IS ON ROUND ' + run.history.length, 16, 64, 16, COL.muted)
     hudText('SCORED ON ALL ' + practiceSlots(run.build) + ' PRACTICE TRACKS', 16, 82, 13, COL.muted)
     hudText('EACH ROUND IS BRED FROM THE BEST CARS OF THE ROUND BEFORE', 16, 100, 13, COL.muted)
     hudText(sw.cars.length === 1 ? 'BEST OF ' + sw.genomes.length + ' CARS' : alive + ' / ' + sw.cars.length + ' DRIVING', W - 16, H - 16, 18, COL.tele, 'right')
@@ -2473,10 +2490,14 @@ raceView = createRaceView({ onResult: (gpId, r) => {
   // on a narrow window the result is far below the track: bring it into view
   if (tab === 'race' && window.matchMedia('(max-width: 960px)').matches) $('resultPanel').scrollIntoView({ behavior: REDUCED_MOTION.matches ? 'auto' : 'smooth', block: 'start' })
   // a finished race is something to show off: ask then, once the player has had a moment with the result
-  if (r.finished > 0) setTimeout(() => tab === 'race' && resultSeen === key && showDare('raced', r), 4000)
+  // not after a first race: that result already comes with the skill tree opening and the board offer
+  if (r.finished > 0 && counts().races >= 2) setTimeout(() => tab === 'race' && resultSeen === key && showDare('raced', r), 4000)
 },  ctx, cam, getCar: () => car, isStale: carIsStale, getChallenge: () => challenge, ladder: { next: nextRival, raced: ladderRaced, list: ladderList }, starter: STARTER,
   // the starter car's result is the cue to build a car: on a narrow window it is far below the track, so bring it into view
   onStarterDone: () => {
+    starterRaced()
+    renderFirstRun()
+    renderHubRival()
     if (tab === 'race' && window.matchMedia('(max-width: 960px)').matches) $('resultPanel').scrollIntoView({ behavior: REDUCED_MOTION.matches ? 'auto' : 'smooth', block: 'start' })
   },
   getLook: () => look,

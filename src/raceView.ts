@@ -391,8 +391,8 @@ export function createRaceView(d: RaceDeps) {
         ? 'You have no car yet. Watch ' + rival.name + ' drive these tracks, then train a car in Practice to beat it.'
         : 'Train a car in Practice first.'
       : d.isStale()
-        ? 'Racing ' + car.name + ', as trained. Your latest garage changes are not in it yet.'
-        : 'Racing ' + car.name + '.'
+        ? car.name + ' races as trained. Your latest garage changes are not in it yet.'
+        : racing ? 'Racing ' + car.name + '.' : car.name + ' is ready to race.'
     const results = live?.results ?? []
     $('tower').replaceChildren(
       ...Array.from({ length: live?.count ?? RACE_COUNT }, (_, i) => {

@@ -625,7 +625,8 @@ select, .actions > input, #shareLink, #resultLink, #dareLink {
 .sc-row .sq { width: 22px; height: 22px; border-radius: 4px; }
 .sc-who { font: 800 12px var(--head); text-transform: uppercase; text-align: left; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .sc-t { font: 500 13px var(--mono); color: var(--on-asphalt-muted); text-align: right; }
-@media (max-width: 420px) { .sc-row { grid-template-columns: minmax(0, 1fr) repeat(8, 18px) 54px; gap: 3px; } .sc-row .sq { width: 18px; height: 18px; } }
+/* on a phone the name gets a line of its own above its squares, so it is not cut to three letters */
+@media (max-width: 420px) { .sc-row { grid-template-columns: repeat(8, 18px) minmax(0, 1fr); gap: 3px; } .sc-row .sq { width: 18px; height: 18px; } .sc-row .sc-who { grid-column: 1 / -1; } .sc-row .sc-t { text-align: right; } }
 #medal { display: none; } /* the share card carries the medal */
 
 /* ---------- the profile ---------- */
@@ -793,7 +794,7 @@ body.buildview .gantry { display: none; }
 .rbar .back:hover { border-color: rgba(255, 255, 255, 0.6); }
 .rbar .back:hover span { transform: translateX(-3px); }
 .rbar b { font: 800 17px/1 var(--head); text-transform: uppercase; }
-.rbar::after { content: ''; margin-left: auto; width: 22px; height: 22px; border-radius: 3px; background: var(--line-2); }
+.rbar[data-kind='daily']::after, .rbar[data-kind='weekly']::after { content: ''; margin-left: auto; width: 22px; height: 22px; border-radius: 3px; }
 .rbar[data-kind='daily']::after { background: var(--tele); }
 .rbar[data-kind='weekly']::after { background: var(--flag); }
 
@@ -885,12 +886,12 @@ body:not([data-tab='race']) .gantry { display: none; }
 /* ---------- THE RESULT'S HEADLINE ---------- */
 /* how close it was and where it would place: the lines that bring a player back for another race */
 .resultbig { margin: 10px 0 0; font: 800 19px/1.2 var(--head); color: var(--text); text-wrap: balance; }
-.resultbig + .resultbig { margin-top: 4px; font-size: 16px; color: var(--accent); }
+.resultbig + .resultbig { margin-top: 4px; font-size: 16px; color: var(--text); }
 .resultbig:empty { display: none; }
 
 /* ---------- TOP BAR BETWEEN PHONE AND WIDE ---------- */
 /* the bar no longer has room for everything on one line: the car's status takes a line of its own */
-@media (min-width: 961px) and (max-width: 1560px) { #topChallenge .long { display: none; } .tab { padding: 10px 11px; } .chip { flex: 0 1 auto; min-width: 0; } }
+@media (min-width: 961px) and (max-width: 1560px) { #topChallenge .long { display: none; } .tab { padding: 10px 11px; } .chip { flex: 0 1 auto; min-width: 9em; } }
 @media (min-width: 961px) and (max-width: 1240px) {
   .top { flex-wrap: wrap; gap: 8px 12px; }
   .shelfbtn { margin-left: auto; }
@@ -912,6 +913,8 @@ body:not([data-tab='race']) .gantry { display: none; }
   }
   .tab .tnum, .tab .pico { margin: 0; font-size: 14px; line-height: 1; }
   .tabs .tab { font-stretch: 100%; font-size: 12px; }
+  .tabs .tab .wide { display: none; }
+  .tabs .tab .narrow { display: inline; }
   body { padding-bottom: 61px; }
   body.has-nudge { padding-bottom: 141px; }
   .nudge { bottom: 60px; }
@@ -981,3 +984,7 @@ body:not([data-tab='race']) .gantry { display: none; }
 /* until the first medal the Race menu shows the Grand Prix only (main.ts renderUnlocks) */
 #raceHub[data-early] .hubcard.daily, #raceHub[data-early] .hubcard.weekly, #raceHub[data-early] #hubBuild { display: none; }
 .textbtn.inline { display: inline; min-height: 0; padding: 0; font: inherit; font-weight: 600; }
+
+.tab .narrow { display: none; } /* the short tab name is for the phone's bottom bar */
+/* the page behind an open dialog stays where it is */
+html:has(dialog[open]) { overflow: hidden; }

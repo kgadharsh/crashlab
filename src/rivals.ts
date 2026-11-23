@@ -17,7 +17,25 @@ export const RIVALS: Rival[] = RIVAL_CARS.map((r) => ({ car: { name: r.name, bui
 // only, so the race is over in about 20 seconds. Both crash on the first track, the starter car wins the second by a
 // fifth of a second, and it hits a block on the third while the rival finishes: 1 of 3 against 2 of 3. Losing with a
 // borrowed car is the reason to build one.
-export const STARTER: { car: CarFile; rival: CarFile; tracks: number } = { car: { ...RIVALS[1].car, name: 'Starter car' }, rival: RIVALS[3].car, tracks: 3 }
+const STARTER_RUNG = 3
+export const STARTER: { car: CarFile; rival: CarFile; tracks: number } = { car: { ...RIVALS[1].car, name: 'Starter car' }, rival: RIVALS[STARTER_RUNG].car, tracks: 3 }
+// The rival that beat the starter car is the one the player was told to come back for, so it stays the next rival
+// until a car of their own beats it, instead of the ladder starting again from the bottom with a stranger.
+const GRUDGE = 'crashlab.grudge'
+export const hasGrudge = () => {
+  try {
+    return !!localStorage.getItem(GRUDGE)
+  } catch {
+    return false
+  }
+}
+export function starterRaced() {
+  try {
+    localStorage.setItem(GRUDGE, '1')
+  } catch {
+    /* storage blocked: the ladder starts from the bottom */
+  }
+}
 
 const KEY = 'crashlab.ladder' // how many rivals have been beaten, counted from the bottom
 export function rivalsBeaten(): number {
@@ -31,7 +49,8 @@ export function rivalsBeaten(): number {
 // The rival to race next: the first one not yet beaten, and the top one again once all are
 export function nextRival(): { car: CarFile; index: number } | null {
   if (!RIVALS.length) return null
-  const index = Math.min(rivalsBeaten(), RIVALS.length - 1)
+  const beaten = rivalsBeaten()
+  const index = hasGrudge() && beaten <= STARTER_RUNG ? STARTER_RUNG : Math.min(beaten, RIVALS.length - 1)
   return { car: RIVALS[index].car, index }
 }
 // A Grand Prix 1 result against a rival: the ladder moves past every rival it beats, so a strong car does not have to
