@@ -1,12 +1,12 @@
 import './style.css'
 import { GOLD_TIME, GRAND_PRIXES, RACE_COUNT, medalFor, raceCar, type GrandPrix } from './race'
-import { ladderList, ladderRaced, nextRival } from './rivals'
-import { TRACK_PREFIX, createTrackBuilder } from './trackBuilder'
+import { STARTER, ladderList, ladderRaced, nextRival } from './rivals'
+import { savedTrackCode, TRACK_PREFIX, createTrackBuilder } from './trackBuilder'
 import { SHORT_PREFIX, carFromChallenge, carFromShort, challengeCode, shortCode } from './challenge'
-import { DEFAULT_BUILD, CHASSIS, KEEP_TRAINING_SHARE, LIMITS, POPULATION, REPLAY_EVERY, TRAINING_BUDGET, buildProblem, cleanBuild, genomeLength, brainShape, specOf, levelOf, maxPractice, maxRays, maxSpread, rivalOf, pointsUsed, POINT_BUDGET, type Build, type Parts } from './setup'
+import { DEFAULT_BUILD, CHASSIS, KEEP_TRAINING_SHARE, LIMITS, POPULATION, REPLAY_EVERY, TRAINING_BUDGET, buildProblem, cleanBuild, genomeLength, brainShape, specOf, levelOf, maxPractice, practiceSlots, maxRays, maxSpread, rivalOf, pointsUsed, POINT_BUDGET, type Build, type Parts } from './setup'
 import { CHECKPOINTS, NITRO_STEPS, STALL_STEPS, createCar, drive, getInputs, step, type Brain, type Car } from './sim'
 import { think } from './brain'
-import { PRACTICE, PRACTICE_COUNT, practiceOnRoad, practiceTrack, trackFeatures, trackStats, type Track } from './track'
+import { PRACTICE, PRACTICE_COUNT, customTrack, practiceOnRoad, practiceTrack, trackFeatures, trackStats, type Track } from './track'
 import { genomeToBrain } from './genome'
 import { carFromJson, carToJson, type CarFile } from './carFile'
 import { API, createLeaderboard } from './leaderboard'
@@ -205,6 +205,8 @@ document.querySelector('#app')!.innerHTML = `
         <div class="actions" style="margin-top:2px"><label class="check"><input type="checkbox" id="condNight" /> Night</label><label class="check"><input type="checkbox" id="condIce" /> Ice patches</label></div>
         <p class="tip" style="margin-top:2px">Grand Prix 2 is raced on a wet road. A car practised only on dry roads loses most of its grip there, so practise on wet roads to prepare for it.</p>
         <div class="tracks" id="tracks"></div>
+        <p class="tip" id="ownTip"></p>
+        <div class="actions"><button type="button" class="btn small" id="drawOwn">Draw your own track →</button></div>
         <p class="tip">Race day uses tracks you have never seen. More practice tracks prepare the car better, but each round uses more of the run's practice budget, so you get fewer rounds.</p>
       </div>
       <button class="btn primary wide" id="toSkills">Next: Skill tree →</button>
@@ -352,7 +354,7 @@ document.querySelector('#app')!.innerHTML = `
         <div class="actions"><button class="btn primary wide" id="buildGo">Race your car on it</button></div>
         <p class="resultbig" id="buildResult" hidden></p>
         <div class="actions"><button class="btn small" id="buildMore">Add a point</button><button class="btn small" id="buildLess">Remove a point</button><button class="btn small" id="buildReset">Start again</button></div>
-        <div class="actions"><button class="btn small hot" id="buildShare">Share this track</button></div>
+        <div class="actions"><button class="btn small hot" id="buildShare">Share this track</button><button class="btn small" id="buildPractise">Practise on this track →</button></div>
         <p class="msg good" id="buildMsg" role="status"></p>
         <input id="buildLink" readonly hidden aria-label="Track link" style="width:100%;margin-top:6px" />
         <p class="tip">Drag the white points on the track to bend the road. The yellow point is the start line. A track you build is for fun and for friends: it does not count for medals or the leaderboards, which use tracks nobody has seen.</p>
@@ -566,7 +568,10 @@ function setTab(t: Tab) {
   document.body.dataset.tab = t // the stylesheet shows the pit lane and the start lights by tab
   syncTrainView()
   if (t === 'race') hideNudge()
-  if (t === 'garage') renderLooks()
+  if (t === 'garage') {
+    renderLooks()
+    renderGarage() // the player's drawing may have changed on the Race tab
+  }
   if (t === 'skills') renderParts()
   if (t === 'profile') showProfile()
   document.querySelectorAll<HTMLButtonElement>('.tab[data-tab]').forEach((btn) => {
@@ -615,7 +620,7 @@ function renderHubRival() {
     ? ''
     : beaten === rungs.length
       ? 'All ' + rungs.length + ' rivals beaten.'
-      : 'Next rival: ' + next.car.name + ' (' + rungs[next.index].score + ') · ' + beaten + ' of ' + rungs.length + ' beaten' + (car ? '' : '. Watch it race now.')
+      : 'Next rival: ' + next.car.name + ' (' + rungs[next.index].score + ') · ' + beaten + ' of ' + rungs.length + ' beaten' + (car ? '' : '. Race a starter car now.')
 }
 function setRaceSection(v: RaceSection) {
   if (v !== raceSection) {
@@ -748,13 +753,69 @@ for (let id = 0; id < PRACTICE_COUNT; id++) {
     garageView = 'track'
     if (picked >= 0) {
       if (b.practice.length > LIMITS.practice[0]) b.practice.splice(picked, 1)
-    } else if (b.practice.length < maxPractice(b)) {
+    } else if (practiceSlots(b) < maxPractice(b)) {
       b.practice.push(id)
       b.practice.sort((x, y) => x - y)
     }
     changed()
   })
   trackGrid.appendChild(btn)
+}
+// One more tile: the player's own drawing (Race tab, Build a track). Ticked, the car practises on it like any other
+// track. A build keeps the drawing as it was when it was ticked, so a later change to the drawing has to be taken up.
+const ownBtn = document.createElement('button')
+ownBtn.className = 'track own'
+ownBtn.type = 'button'
+const ownThumb = Object.assign(document.createElement('canvas'), { width: 160, height: 100 })
+ownBtn.append(ownThumb, Object.assign(document.createElement('span'), { className: 'tn', textContent: 'Your track' }), Object.assign(document.createElement('span'), { className: 'tt' }))
+trackGrid.appendChild(ownBtn)
+const openBuilder = () => {
+  setTab('race')
+  setRaceSection('build')
+  window.scrollTo(0, 0)
+}
+function pickOwn() {
+  const code = savedTrackCode()
+  if (!code) return openBuilder() // nothing drawn yet (or it cannot be driven): draw it first
+  if (b.custom === code) delete b.custom
+  else if (b.custom || practiceSlots(b) < maxPractice(b)) b.custom = code // ticked, or the changed drawing taken up
+  changed()
+}
+ownBtn.addEventListener('click', pickOwn)
+$('drawOwn').addEventListener('click', openBuilder)
+$('buildPractise').addEventListener('click', () => {
+  const code = builder!.code()
+  if (!code) return void ($('buildMsg').textContent = 'This track cannot be driven yet. Fix it first.')
+  if (b.custom !== code && !b.custom && practiceSlots(b) >= maxPractice(b)) return void ($('buildMsg').textContent = 'Your practice tracks are full. Untick one in the Garage first.')
+  b.custom = code
+  changed()
+  setTab('garage')
+  window.scrollTo(0, 0)
+  $('buildMsg').textContent = ''
+  showNotice('Your track is now a practice track. Train the car to use it.')
+})
+let ownThumbFor = ''
+function renderOwn() {
+  const code = savedTrackCode()
+  const shown = b.custom ?? code
+  if (shown && shown !== ownThumbFor) {
+    const t = customTrack(shown)
+    if (t) drawThumb(ownThumb, t)
+    ownThumbFor = shown
+  }
+  const on = !!b.custom
+  const changedSince = on && !!code && code !== b.custom
+  ownBtn.classList.toggle('on', on)
+  ownBtn.setAttribute('aria-pressed', String(on))
+  ownBtn.querySelector('.tt')!.textContent = on ? (changedSince ? 'older drawing' : 'drawn by you') : code ? 'drawn by you' : 'not drawn yet'
+  $('ownTip').textContent = changedSince
+    ? 'You have changed your drawing since you ticked Your track. Tap it to practise on the new shape.'
+    : on
+      ? 'Your car also practises on the track you drew.'
+      : code
+        ? 'Tick Your track to practise on the track you drew.'
+        : 'You can also draw a track of your own and practise on it.'
+  $('drawOwn').textContent = code ? 'Change your track →' : 'Draw your own track →'
 }
 // Tracks take a moment to build, so the thumbnails fill in one per frame
 const thumbsLeft = Array.from({ length: PRACTICE_COUNT }, (_, i) => i)
@@ -769,7 +830,7 @@ function buildOneThumb() {
 // Roughly how many generations the budget buys. Measured 4 Nov 2026: an attempt lasts about
 // 700 steps on average over a run (early cars crash fast, later ones drive the full 40 s).
 const AVERAGE_ATTEMPT = 700
-const estGenerations = (build: Build) => Math.round(TRAINING_BUDGET / (POPULATION * build.practice.length * AVERAGE_ATTEMPT) / 5) * 5
+const estGenerations = (build: Build) => Math.round(TRAINING_BUDGET / (POPULATION * practiceSlots(build) * AVERAGE_ATTEMPT) / 5) * 5
 
 function renderGarage() {
   const spec = specOf(b)
@@ -784,7 +845,8 @@ function renderGarage() {
   $('gripOut').textContent = kmh(spec.gripSpeed)
   $('speedBar').style.width = ((spec.maxSpeed - 4.5) / 3) * 100 + '%'
   $('gripBar').style.width = ((spec.gripSpeed - 2) / 2) * 100 + '%'
-  $('pickCount').textContent = b.practice.length + ' picked · up to ' + maxPractice(b)
+  $('pickCount').textContent = practiceSlots(b) + ' picked · up to ' + maxPractice(b)
+  renderOwn()
   input('condNight').checked = !!b.cond?.night
   input('condIce').checked = !!b.cond?.ice
   weatherSel.value = b.weather === 'wet' ? 'wet' : 'dry'
@@ -795,7 +857,7 @@ function renderGarage() {
   renderParts()
   renderChassis()
   renderPit()
-  trackGrid.querySelectorAll<HTMLButtonElement>('.track').forEach((btn) => {
+  trackGrid.querySelectorAll<HTMLButtonElement>('.track:not(.own)').forEach((btn) => {
     const id = Number(btn.dataset.id)
     const on = b.practice.includes(id)
     btn.classList.toggle('on', on)
@@ -811,7 +873,7 @@ const PIT_BOXES: { name: string; holds: string; value: () => string }[] = [
   { name: 'Car design', holds: 'looks', value: () => LOOKS[look].name },
   { name: 'Sensors', holds: 'count', value: () => b.sensors.count + ' rays · ' + b.sensors.spread + '°' },
   { name: 'Car setup', holds: 'balance', value: () => 'Top speed ' + kmh(specOf(b).maxSpeed) },
-  { name: 'Practice tracks', holds: 'tracks', value: () => b.practice.length + ' picked · ' + (b.weather === 'wet' ? 'wet' : 'dry') },
+  { name: 'Practice tracks', holds: 'tracks', value: () => practiceSlots(b) + ' picked · ' + (b.weather === 'wet' ? 'wet' : 'dry') },
 ]
 const pitButtons = PIT_BOXES.map((box, i) => {
   const btn = Object.assign(document.createElement('button'), { type: 'button', className: 'pitbox' })
@@ -915,7 +977,7 @@ function renderChip() {
   const chip = $('chip')
   chip.classList.toggle('stale', carIsStale())
   if (!car) {
-    chip.textContent = worker ? 'Training your first car…' : 'No car yet: train one in Practice'
+    chip.textContent = worker ? 'Training your first car…' : 'No car yet: build one in the Garage'
     return
   }
   const label = document.createElement('b')
@@ -992,7 +1054,7 @@ function stopTraining(text: string) {
 function finishTraining(f: Finish) {
   const r = run!
   lastRun = { spent: r.spent, generations: f.generations, budget: r.budget }
-  logEvent({ k: 'train', secs: r.secs ?? runSeconds(r), generations: f.generations, keep: r.keep, wet: r.build.weather === 'wet', rays: r.build.sensors.count, practice: r.build.practice.length })
+  logEvent({ k: 'train', secs: r.secs ?? runSeconds(r), generations: f.generations, keep: r.keep, wet: r.build.weather === 'wet', rays: r.build.sensors.count, practice: practiceSlots(r.build) })
   if (car) rememberPrevious(car) // the car this run replaces, in case the new one is worse
   // the generations the brain has had in all: carrying on adds to the car's count (unknown if the old car's was)
   const total = r.keep ? (car?.generations !== undefined ? car.generations + f.generations : undefined) : f.generations
@@ -1409,16 +1471,21 @@ function setLevel(id: PartId, level: number) {
   if (pointsUsed(parts)) b.parts = parts
   else delete b.parts
   // the extra practice track goes when the slot does
-  if (b.practice.length > maxPractice(b)) b.practice.length = maxPractice(b)
+  trimPractice()
   // so do the extra eyes and wide-angle lens nodes
   if (b.sensors.count > maxRays(b.parts)) b.sensors.count = maxRays(b.parts)
   if (b.sensors.spread > maxSpread(b.parts)) b.sensors.spread = maxSpread(b.parts)
   changed()
 }
+// With fewer places for practice tracks, the last ready-made ones picked go first and the player's own drawing stays
+function trimPractice() {
+  const room = maxPractice(b) - (b.custom ? 1 : 0)
+  if (b.practice.length > room) b.practice.length = room
+}
 // Take every node off at once
 function resetTree() {
   delete b.parts
-  if (b.practice.length > maxPractice(b)) b.practice.length = maxPractice(b)
+  trimPractice()
   b.sensors.count = Math.min(b.sensors.count, maxRays(b.parts))
   b.sensors.spread = Math.min(b.sensors.spread, maxSpread(b.parts))
   changed()
@@ -1875,7 +1942,7 @@ function renderPractice() {
     ['Sensors', b.sensors.count + ' rays over a ' + b.sensors.spread + '° view'],
     ['Brain', genomeLength(brainShape(b)) + ' connections'],
     ['Top speed · cornering', kmh(spec.maxSpeed) + ' · ' + kmh(spec.gripSpeed)],
-    ['Practice', b.practice.map((id) => TRACK_NAMES[id]).join(', ')],
+    ['Practice', [...b.practice.map((id) => TRACK_NAMES[id]), ...(b.custom ? ['Your track'] : [])].join(', ')],
     ['Road', (b.weather === 'wet' ? 'Wet' : 'Dry') + (b.cond?.night ? ' · night' : '') + (b.cond?.ice ? ' · ice patches' : '')],
     ['Skill tree', PARTS.filter((p) => levelOf(b.parts, p.id)).map((p) => p.name + (p.max > 1 ? ' ' + levelOf(b.parts, p.id) : '')).join(', ') || 'Nothing fitted'],
   ]
@@ -1912,7 +1979,7 @@ function renderPractice() {
 // The best car's laps are only meaningful against something, so two references outlive a run: the best the game has ever seen
 // on this set of practice tracks and this weather (a faint dashed line), and the previous run's whole curve (a faint line behind
 // the new one). Both are kept per set of practice tracks and weather, because laps on different tracks cannot be compared.
-const refKey = (bd: Build) => [...bd.practice].sort((x, y) => x - y).join(',') + '|' + (bd.weather === 'wet' ? 'wet' : 'dry')
+const refKey = (bd: Build) => [...bd.practice].sort((x, y) => x - y).join(',') + (bd.custom ? ',' + bd.custom : '') + '|' + (bd.weather === 'wet' ? 'wet' : 'dry')
 const savedBests = load<Record<string, number>>(KEYS.bestLaps)
 const bestLaps: Record<string, number> = savedBests && typeof savedBests === 'object' ? savedBests : {}
 const savedCurves = load<Record<string, number[]>>(KEYS.lastCurve)
@@ -2120,7 +2187,7 @@ function draw() {
     const alive = sw.done.filter((d) => !d).length
     hudText('GEN ' + (sw.gen + 1), 16, 42, 36)
     hudText('REPLAY ON ' + TRACK_NAMES[sw.trackId].toUpperCase() + ' · TRAINING IS ON GEN ' + run.history.length, 16, 64, 16, COL.muted)
-    hudText('SCORED ON ALL ' + run.build.practice.length + ' PRACTICE TRACKS', 16, 82, 13, COL.muted)
+    hudText('SCORED ON ALL ' + practiceSlots(run.build) + ' PRACTICE TRACKS', 16, 82, 13, COL.muted)
     hudText('EACH ROUND IS BRED FROM THE BEST CARS OF THE ROUND BEFORE', 16, 100, 13, COL.muted)
     hudText(sw.cars.length === 1 ? 'BEST OF ' + sw.genomes.length + ' CARS' : alive + ' / ' + sw.cars.length + ' DRIVING', W - 16, H - 16, 18, COL.tele, 'right')
     const status = run.judging
@@ -2241,7 +2308,7 @@ function draw() {
   setStrip([
     ['Brain', genomeLength(brainShape(b)) + '<small> connections</small>'],
     ['Top speed', kmh(specOf(b).maxSpeed)],
-    ['Practice', b.practice.length + '<small> tracks</small>'],
+    ['Practice', practiceSlots(b) + '<small> tracks</small>'],
     ['Rounds', '~' + estGenerations(b)],
   ])
 }
@@ -2314,7 +2381,17 @@ raceView = createRaceView({ onResult: (gpId, r) => {
   if (tab === 'race' && window.matchMedia('(max-width: 960px)').matches) $('resultPanel').scrollIntoView({ behavior: REDUCED_MOTION.matches ? 'auto' : 'smooth', block: 'start' })
   // a finished race is something to show off: ask then, once the player has had a moment with the result
   if (r.finished > 0) setTimeout(() => tab === 'race' && resultSeen === key && showDare('raced', r), 4000)
-},  ctx, cam, getCar: () => car, isStale: carIsStale, getChallenge: () => challenge, ladder: { next: nextRival, raced: ladderRaced, list: ladderList }, getLook: () => look, goTo: setTab, hudText, setStrip })
+},  ctx, cam, getCar: () => car, isStale: carIsStale, getChallenge: () => challenge, ladder: { next: nextRival, raced: ladderRaced, list: ladderList }, starter: STARTER,
+  // the starter car's result is the cue to build a car: on a narrow window it is far below the track, so bring it into view
+  onStarterDone: () => {
+    if (tab === 'race' && window.matchMedia('(max-width: 960px)').matches) $('resultPanel').scrollIntoView({ behavior: REDUCED_MOTION.matches ? 'auto' : 'smooth', block: 'start' })
+  },
+  getLook: () => look,
+  goTo: (t) => {
+    setTab(t)
+    window.scrollTo(0, 0) // the result's buttons sit far down the Race tab on a phone
+  },
+  hudText, setStrip })
 
 
 // ---------- DARE A FRIEND ----------
@@ -2506,8 +2583,30 @@ const cameSection = (() => {
 })()
 // the Race tab starts on its menu (with no board server there is only the Grand Prix); after Use reloads the page it returns to where it was
 setRaceSection(API ? (cameSection === 'daily' || cameSection === 'weekly' ? 'hub' : cameSection ?? 'hub') : 'gp')
+const plainVisit = !location.hash // no challenge or track link in the address
 takeChallenge()
 takeTrack()
+// A first visit opens on a race, not on the Garage: the starter car races a rival straight away, and its result sends the
+// player to build their own. Once only: after that a player with no car lands in the Garage as before.
+const OPENED = 'crashlab.opened'
+const openedBefore = (() => {
+  try {
+    return !!localStorage.getItem(OPENED)
+  } catch {
+    return false
+  }
+})()
+if (plainVisit && !car && !challenge && !cameFrom && !hasRaced() && !openedBefore) {
+  try {
+    localStorage.setItem(OPENED, '1')
+  } catch {
+    /* storage blocked: the next visit opens on the race again */
+  }
+  tab = 'race'
+  setRaceSection('gp')
+  raceView.selectGpId(GRAND_PRIXES[0].id)
+  raceView.startNow()
+}
 window.addEventListener('hashchange', takeTrack) // a track link pasted into a page that is already open
 const today = visit()
 refreshHot()

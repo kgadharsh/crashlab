@@ -26,6 +26,9 @@ export type RaceDeps = {
   getChallenge: () => Challenge | null
   // the rival ladder (rivals.ts): the next ready-made car to beat in Grand Prix 1, and what to do when it is beaten
   ladder: { next: () => { car: CarFile; index: number } | null; raced: (result: RaceResult) => void; list: () => { name: string; score: string; beaten: boolean }[] }
+  // the car lent to a player with none, and the rival it races (rivals.ts)
+  starter: { car: CarFile; rival: CarFile; tracks: number }
+  onStarterDone?: () => void // the starter car's race is over
   getLook: () => number
   goTo: (tab: 'garage' | 'practice') => void
   hudText: (text: string, x: number, y: number, size: number, colour?: string, align?: CanvasTextAlign) => void
@@ -49,6 +52,8 @@ type Live = {
   lights: number // steps left in the start lights: they come on one at a time, then go out and the race starts
   opp: Opponent | null // the car this race is against, fixed when the race starts: beating a rival moves the ladder on
   watching: boolean // no car of your own: the friend's car is the one racing, and nothing is recorded
+  loan: boolean // no car of your own and no friend's: the starter car races a rival, and nothing is recorded either
+  count: number // how many tracks this race has: all of them, except the starter car's short race
 }
 // The car a race is run against: a friend's from a challenge link, or else the next rival on the ladder (rung: which one)
 type Opponent = { car: CarFile; results: RaceResult[]; rung?: number }
@@ -92,7 +97,7 @@ const time = (s: number | null) => (s === null ? '--.--' : s.toFixed(2))
 const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T
 
 // A race's score in a few characters: the time when all 8 finished, else how many did
-const scoreOf = (r: RaceResult) => (r.finished === RACE_COUNT ? r.totalTime.toFixed(1) + ' s' : r.finished + '/' + RACE_COUNT)
+const scoreOf = (r: RaceResult, of = RACE_COUNT) => (r.finished === of ? r.totalTime.toFixed(1) + ' s' : r.finished + '/' + of)
 // How far the winner was ahead: tracks finished count first, then time
 function lead(win: RaceResult, lose: RaceResult): string {
   if (win.finished !== lose.finished) {
@@ -188,6 +193,8 @@ export function createRaceView(d: RaceDeps) {
     return o
   }
   const rivalCar = () => opponent()?.car ?? null
+  // With no car and no friend's challenge, Grand Prix 1 lends the starter car, so there is a race to run straight away
+  const loanNow = () => (!d.getCar() && !d.getChallenge() && gp() === GRAND_PRIXES[0] ? d.starter : null)
   function makeGhost(rival: CarFile, track: ReturnType<typeof gpTrack>): Ghost {
     const spec = specOf(rival.build)
     return { car: rival, brain: genomeToBrain(rival.genome, brainShape(rival.build)), spec, lap: createCar(track, spec), done: false }
@@ -204,12 +211,16 @@ export function createRaceView(d: RaceDeps) {
     ;[...gantry.children].forEach((lamp, i) => lamp.classList.toggle('lit', i < lit))
   }
 
+  // the starter car's race is over: the next step is the Garage, so the big button leads there
+  const lentOver = () => !!live?.loan && !!live.summary && !d.getCar()
   function start() {
+    if (lentOver()) return d.goTo('garage')
     const own = d.getCar()
-    const opp = opponent()
+    const loan = loanNow()
+    const opp: Opponent | null = loan ? { car: loan.rival, results: [] } : opponent()
     const rival = opp?.car ?? null
-    // with no car of your own, a challenge link's car can still be watched
-    const car = own ?? rival
+    // with no car of your own, the starter car races, or a challenge link's car can be watched
+    const car = own ?? loan?.car ?? rival
     if (!car) return
     const spec = specOf(car.build)
     live = {
@@ -223,11 +234,13 @@ export function createRaceView(d: RaceDeps) {
       hold: 0,
       summary: null,
       newBest: false,
-      ghost: own && rival ? makeGhost(rival, gpTrack(gp(), 0)) : null,
+      ghost: (own || loan) && rival ? makeGhost(rival, gpTrack(gp(), 0)) : null,
       wait: 0,
       opp,
       lights: REDUCED.matches ? 0 : LIGHTS,
       watching: !own,
+      loan: !!loan,
+      count: loan ? loan.tracks : RACE_COUNT,
     }
     follow(d.cam, live.lap, true)
     render()
@@ -241,7 +254,7 @@ export function createRaceView(d: RaceDeps) {
 
   function nextTrack(r: Live) {
     r.index++
-    if (r.index >= RACE_COUNT) return finish(r)
+    if (r.index >= r.count) return finish(r)
     r.lap = createCar(gpTrack(r.gp, r.index), r.spec)
     if (r.ghost) r.ghost = makeGhost(r.ghost.car, gpTrack(r.gp, r.index))
     r.wait = 0
@@ -249,10 +262,14 @@ export function createRaceView(d: RaceDeps) {
   }
 
   function finish(r: Live) {
-    r.index = RACE_COUNT - 1
+    r.index = r.count - 1
     r.summary = summarise(r.results)
     // watching a friend's car records nothing: it is not your race
-    if (r.watching) return render()
+    if (r.watching) {
+      render()
+      if (r.loan) d.onStarterDone?.()
+      return
+    }
     // a race against a friend's car from a challenge link counts as won or lost
     // and one against a ladder rival moves the ladder past every rival this result beats
     const won = !!r.opp && better(r.summary, rivalResult(r.opp, r.gp))
@@ -269,6 +286,14 @@ export function createRaceView(d: RaceDeps) {
     render()
   }
 
+  // The big word after the starter car's race: whether it beat the rival it was lent to race
+  const lentHeadline = (r: Live) => (better(r.summary!, oppResult(r)) ? 'STARTER CAR WON' : 'STARTER CAR LOST')
+  // The opponent's result over the tracks this race had: the starter car's short race counts only its own tracks
+  const oppResult = (r: Live): RaceResult => {
+    const whole = rivalResult(r.opp!, r.gp)
+    return r.count === RACE_COUNT ? whole : summarise(whole.tracks.slice(0, r.count))
+  }
+
   // Drive the rest of the race without showing it
   function skip() {
     const r = live
@@ -278,7 +303,7 @@ export function createRaceView(d: RaceDeps) {
       while (!lapIsOver(r.lap)) drive(r.lap, r.brain)
       r.results.push(finishLap(r.lap))
     }
-    while (r.results.length < RACE_COUNT) {
+    while (r.results.length < r.count) {
       const lap = createCar(gpTrack(r.gp, r.results.length), r.spec)
       while (!lapIsOver(lap)) drive(lap, r.brain)
       r.lap = lap
@@ -322,18 +347,24 @@ export function createRaceView(d: RaceDeps) {
 
   // ---------- THE SIDE PANEL ----------
   function render() {
-    showLights(live)
     const car = d.getCar()
+    if (car && live?.loan && live.summary) live = null // a car of your own now: the starter car's result is put away
+    showLights(live)
     const racing = !!live && !live.summary
-    const rival = rivalCar()
+    const loan = loanNow()
+    const rival = loan ? null : rivalCar()
     const go = $<HTMLButtonElement>('raceGo')
-    go.disabled = (!car && !rival) || racing
-    // with no car of your own, a friend's challenge car can be watched straight away
-    go.textContent = !car && rival ? 'Watch ' + rival.name + ' race' : live?.summary ? 'Race again' : 'Race your car'
+    go.disabled = (!car && !rival && !loan) || racing
+    // with no car of your own, the starter car can be raced, or a friend's challenge car watched, straight away
+    go.textContent = loan ? (lentOver() ? 'Build your own car →' : 'Race a starter car') : !car && rival ? 'Watch ' + rival.name + ' race' : live?.summary ? 'Race again' : 'Race your car'
     $<HTMLButtonElement>('raceSkip').disabled = !racing
     choices().forEach((_, i) => ($<HTMLButtonElement>('gp' + i).disabled = racing)) // the Grand Prix cannot change mid-race
     $('raceSpeed').textContent = 'Speed ' + speed + '×'
-    $('raceMsg').textContent = !car
+    $('raceMsg').textContent = loan
+      ? lentOver()
+        ? 'That was a starter car. Build your own in the Garage and come back to beat ' + loan.rival.name + '.'
+        : 'You have no car yet, so here is a starter car. Race it against ' + loan.rival.name + ' over ' + loan.tracks + ' tracks, then build your own.'
+      : !car
       ? rival
         ? 'You have no car yet. Watch ' + rival.name + ' drive these tracks, then train a car in Practice to beat it.'
         : 'Train a car in Practice first.'
@@ -342,7 +373,7 @@ export function createRaceView(d: RaceDeps) {
         : 'Racing ' + car.name + '.'
     const results = live?.results ?? []
     $('tower').replaceChildren(
-      ...Array.from({ length: RACE_COUNT }, (_, i) => {
+      ...Array.from({ length: live?.count ?? RACE_COUNT }, (_, i) => {
         const li = document.createElement('li')
         const r = results[i]
         const n = document.createElement('span')
@@ -383,13 +414,17 @@ export function createRaceView(d: RaceDeps) {
     if (s) {
       const medal = medalFor(s, live!.gp)
       const m = $('medal')
-      m.textContent = medal ? medal.toUpperCase() : headline(s, live!.gp)
+      m.textContent = live!.loan ? lentHeadline(live!) : medal ? medal.toUpperCase() : headline(s, live!.gp)
       m.style.color = medal ? MEDAL_COLOUR[medal] : isSecretGp(live!.gp) ? COL.text : COL.muted
       const gens = live!.car.generations
       const watched = live!.watching
-      $('resultLine').textContent = (watched ? 'That was ' + live!.car.name + "'s car: " : '') + s.finished + ' of ' + RACE_COUNT + ' finished · ' + s.totalTime.toFixed(1) + ' s total' + (gens && !watched ? ' · trained for ' + gens + ' rounds' : '')
-      $('advice').textContent = watched ? 'Now build and train your own car in the Garage and Practice, then race it here to beat it.' : adviceFor(s, live!.gp, live!.car.build.weather === 'wet')
+      const lent = live!.loan
+      $('resultLine').textContent = (lent ? 'The starter car: ' : watched ? 'That was ' + live!.car.name + "'s car: " : '') + s.finished + ' of ' + live!.count + ' finished · ' + s.totalTime.toFixed(1) + ' s total' + (gens && !watched ? ' · trained for ' + gens + ' rounds' : '')
+      $('advice').textContent = lent
+        ? 'That was a short race of ' + live!.count + ' tracks; a Grand Prix has ' + RACE_COUNT + '. The starter car has had only 4% of a full training. Train your own, which takes a minute or two, and come back to beat ' + live!.opp!.car.name + '.'
+        : watched ? 'Now build and train your own car in the Garage and Practice, then race it here to beat it.' : adviceFor(s, live!.gp, live!.car.build.weather === 'wet')
       $('resultShare').hidden = watched
+      $('resultPanel').toggleAttribute('data-watched', watched) // not your car's race: nothing to put on a board (style.css)
       // the one line that says how close this was: the gap to gold, or what the next medal takes
       const left = RACE_COUNT - s.finished
       const tracks = (n: number) => n + ' more ' + (n === 1 ? 'track' : 'tracks')
@@ -410,7 +445,7 @@ export function createRaceView(d: RaceDeps) {
       const squares = (res: RaceResult) => res.tracks.map((t) => Object.assign(document.createElement('i'), { className: 'sq ' + (t.time === null ? 'bad' : t.time <= quick ? 'fast' : 'ok') }))
       $('scGp').textContent = live!.gp.name.toUpperCase()
       const oppNow = live!.opp
-      const duel = oppNow && !watched ? { name: oppNow.car.name, res: rivalResult(oppNow, live!.gp) } : null
+      const duel = oppNow && (!watched || lent) ? { name: oppNow.car.name, res: oppResult(live!) } : null
       $('scGrid').classList.toggle('duel', !!duel)
       if (duel) {
         // head to head: a row of squares for each car, and who won by how much
@@ -418,7 +453,7 @@ export function createRaceView(d: RaceDeps) {
         const lost = better(duel.res, s)
         const row = (who: string, res: RaceResult) => {
           const div = Object.assign(document.createElement('div'), { className: 'sc-row' })
-          div.append(Object.assign(document.createElement('span'), { className: 'sc-who', textContent: who }), ...squares(res), Object.assign(document.createElement('span'), { className: 'sc-t', textContent: scoreOf(res) }))
+          div.append(Object.assign(document.createElement('span'), { className: 'sc-who', textContent: who }), ...squares(res), Object.assign(document.createElement('span'), { className: 'sc-t', textContent: scoreOf(res, live!.count) }))
           return div
         }
         $('scGrid').replaceChildren(row(live!.car.name, s), row(duel.name, duel.res))
@@ -427,7 +462,7 @@ export function createRaceView(d: RaceDeps) {
         $('scMedal').style.color = won ? COL.good : lost ? COL.bad : COL.text
         $('scLine').textContent = won ? 'Beat ' + duel.name + lead(s, duel.res) : lost ? duel.name + ' won' + lead(duel.res, s) : 'Exactly level with ' + duel.name
         $('resultPractice').textContent = lost ? 'Retrain and rematch →' : 'Go to Practice →'
-        $('resultPractice').className = lost ? 'btn small primary' : 'btn small'
+        $('resultPractice').className = lost && !lent ? 'btn small primary' : 'btn small'
       } else {
         $('scGrid').replaceChildren(...squares(s))
         $('scName').textContent = live!.car.name
@@ -437,6 +472,10 @@ export function createRaceView(d: RaceDeps) {
         $('resultPractice').textContent = 'Go to Practice →'
         $('resultPractice').className = 'btn small'
       }
+      // after the starter car's race there is one way on: the Garage, to build a car of your own
+      $('resultPractice').hidden = lent
+      $('resultGarage').textContent = lent ? 'Build your own car →' : 'Edit setup in Garage →'
+      $('resultGarage').className = lent ? 'btn primary' : 'btn small'
     }
     $('shareCard').hidden = !s
     // a friend's challenge, and how your latest race compares with it
@@ -480,7 +519,9 @@ export function createRaceView(d: RaceDeps) {
             ? 'Every rival beaten. ' + next.car.name + ' still drives beside you as a ghost.'
             : car
               ? next.car.name + ' drives beside your car as a ghost. Beat its result to move up.'
-              : 'Watch ' + next.car.name + ' race now, then train a car in Practice to beat it.'
+              : loan
+                ? 'Race the starter car now, then build your own car to climb the ladder.'
+                : 'Watch ' + next.car.name + ' race now, then train a car in Practice to beat it.'
     const fewest = loadFewest(gp().id)
     const fewestText = (['gold', 'silver', 'bronze'] as const).filter((m) => fewest[m] !== undefined).map((m) => m + ' in ' + fewest[m]).join(' · ')
     $('pb').textContent =
@@ -503,7 +544,7 @@ export function createRaceView(d: RaceDeps) {
     if (!r) {
       hudText(gp().name.toUpperCase(), W / 2, H / 2 - 20, 56, COL.text, 'center')
       hudText(gp().day !== undefined ? RACE_COUNT + ' OPEN TRACKS · RACE THEM AS OFTEN AS YOU LIKE' : RACE_COUNT + ' TRACKS YOUR CAR HAS NEVER SEEN', W / 2, H / 2 + 14, 18, COL.muted, 'center')
-      hudText(d.getCar() ? 'PRESS RACE YOUR CAR' : 'TRAIN A CAR IN PRACTICE FIRST', W / 2, H / 2 + 50, 16, COL.accent, 'center')
+      hudText(d.getCar() ? 'PRESS RACE YOUR CAR' : loanNow() ? 'PRESS RACE A STARTER CAR' : 'TRAIN A CAR IN PRACTICE FIRST', W / 2, H / 2 + 50, 16, COL.accent, 'center')
       d.setStrip([['Tracks', String(RACE_COUNT)], ['Finished', '–'], ['Total time', '–'], ['Personal best', best ? best.finished + '/' + RACE_COUNT : '–']])
       return
     }
@@ -521,7 +562,7 @@ export function createRaceView(d: RaceDeps) {
       }
       if (!lap.dead) {
         if (!result) drawRays(ctx, lap)
-        if (r.watching) drawCar(ctx, lap, 34, 18, COL.tele, 0) // the friend's car is not yours, so not in your paint
+        if (r.watching && !r.loan) drawCar(ctx, lap, 34, 18, COL.tele, 0) // the friend's car is not yours, so not in your paint
         else drawMine(ctx, lap, 34, 18, d.getLook())
       }
     })
@@ -532,18 +573,19 @@ export function createRaceView(d: RaceDeps) {
       const medal = medalFor(r.summary, r.gp)
       ctx.fillStyle = 'rgba(7,9,12,0.72)'
       ctx.fillRect(0, 0, W, H)
-      hudText(medal ? medal.toUpperCase() : headline(r.summary, r.gp), W / 2, H / 2 - 16, 64, medal ? MEDAL_COLOUR[medal] : isSecretGp(r.gp) ? COL.text : COL.muted, 'center')
-      hudText(r.summary.finished + ' / ' + RACE_COUNT + ' FINISHED  ·  ' + r.summary.totalTime.toFixed(1) + ' S', W / 2, H / 2 + 22, 22, COL.text, 'center')
+      hudText(r.loan ? lentHeadline(r) : medal ? medal.toUpperCase() : headline(r.summary, r.gp), W / 2, H / 2 - 16, 64, r.loan ? COL.text : medal ? MEDAL_COLOUR[medal] : isSecretGp(r.gp) ? COL.text : COL.muted, 'center')
+      hudText(r.summary.finished + ' / ' + r.count + ' FINISHED  ·  ' + r.summary.totalTime.toFixed(1) + ' S', W / 2, H / 2 + 22, 22, COL.text, 'center')
       if (r.newBest) hudText('NEW PERSONAL BEST', W / 2, H / 2 + 54, 18, COL.accent, 'center')
-      if (r.opp && !r.watching) hudText(versus(r.summary, rivalResult(r.opp, r.gp), r.opp.car.name).toUpperCase(), W / 2, H / 2 + 86, 18, COL.text, 'center')
+      if (r.loan) hudText('BUILD YOUR OWN CAR TO BEAT ' + r.opp!.car.name.toUpperCase(), W / 2, H / 2 + 54, 18, COL.accent, 'center')
+      else if (r.opp && !r.watching) hudText(versus(r.summary, rivalResult(r.opp, r.gp), r.opp.car.name).toUpperCase(), W / 2, H / 2 + 86, 18, COL.text, 'center')
     } else {
-      hudText('TRACK ' + (r.index + 1) + ' / ' + RACE_COUNT, 16, 42, 34)
+      hudText('TRACK ' + (r.index + 1) + ' / ' + r.count, 16, 42, 34)
       const road = [r.gp.wet ? 'WET ROAD' : '', r.gp.night ? 'NIGHT' : '', r.gp.ice ? 'ICE PATCHES' : ''].filter(Boolean).join(' · ')
       if (road) hudText(road, W - 16, 42, 24, COL.tele, 'right')
       hudText(time(result?.time ?? lap.steps / 60), 16, 74, 30, result ? (result.time !== null ? COL.good : COL.bad) : COL.text)
       if (result) hudText(result.time !== null ? 'FINISHED' : CAUSE_LABEL[result.cause!].toUpperCase(), W / 2, 60, 30, result.time !== null ? COL.good : COL.bad, 'center')
       hudText(speed + '× SPEED', W - 16, H - 16, 16, COL.muted, 'right')
-      if (r.watching) hudText('WATCHING ' + r.car.name.toUpperCase(), W / 2, H - 16, 16, COL.tele, 'center')
+      if (r.watching) hudText(r.loan ? 'STARTER CAR · BUILD YOUR OWN AFTER THIS RACE' : 'WATCHING ' + r.car.name.toUpperCase(), W / 2, H - 16, 16, COL.tele, 'center')
       const g = r.ghost
       if (g) {
         const gt = g.done ? (g.lap.passed >= CHECKPOINTS ? time(g.lap.steps / 60) : 'CRASHED') : time(g.lap.steps / 60)
@@ -551,7 +593,7 @@ export function createRaceView(d: RaceDeps) {
       }
     }
     d.setStrip([
-      ['Track', Math.min(r.index + 1, RACE_COUNT) + '<small>/' + RACE_COUNT + '</small>'],
+      ['Track', Math.min(r.index + 1, r.count) + '<small>/' + r.count + '</small>'],
       ['Finished', sum.finished + '<small>/' + r.results.length + '</small>'],
       ['Total time', sum.totalTime.toFixed(1) + '<small> s</small>'],
       // something to race against on every track: how far the finished tracks are ahead of or behind the time that wins the gold medal

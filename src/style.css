@@ -961,3 +961,6 @@ body:not([data-tab='race']) .gantry { display: none; }
   .sq { animation: none; }
   *, *::before, *::after { transition-duration: 0.01ms !important; scroll-behavior: auto !important; }
 }
+
+/* a race that was not the player's own car (the starter car, or a friend's car being watched) has no board entry to offer */
+#resultPanel[data-watched] #resultBoard { display: none; }

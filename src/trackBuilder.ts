@@ -6,7 +6,7 @@ import type { CarFile } from './carFile'
 import { genomeToBrain } from './genome'
 import { createCar, drive, type Brain, type Car } from './sim'
 import { brainShape, specOf } from './setup'
-import { HALF_WIDTH, WORLD, trackFeatures, trackFromPoints, type Track } from './track'
+import { DRAWN_EDGE, DRAWN_POINTS, HALF_WIDTH, WORLD, customTrack, decodePoints, encodePoints, trackFeatures, trackFromPoints, type Track } from './track'
 import { CAUSE_LABEL, finishLap, lapIsOver, type TrackResult } from './race'
 import { drawMine } from './perks'
 import { icon } from './icons'
@@ -27,9 +27,9 @@ export type BuilderDeps = {
 
 const KEY = 'crashlab.mytrack'
 export const TRACK_PREFIX = '#track='
-const MIN_POINTS = 5
-const MAX_POINTS = 14
-const EDGE = HALF_WIDTH + 30 // a point is kept this far inside the world, so the road has room for its walls
+const MIN_POINTS = DRAWN_POINTS[0]
+const MAX_POINTS = DRAWN_POINTS[1]
+const EDGE = DRAWN_EDGE // a point is kept this far inside the world, so the road has room for its walls
 const SPEED = 2 // steps a tick while a lap is shown
 
 const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T
@@ -44,14 +44,18 @@ const starter = (): Point[] =>
     return { x: Math.round((WORLD.w / 2 + Math.cos(a) * 900 * r) / 4) * 4, y: Math.round((WORLD.h / 2 + Math.sin(a) * 520 * r) / 4) * 4 }
   })
 
-// A track as text for a link: each point is two numbers on a grid of 4, each written as two base-36 digits
-const encode = (pts: Point[]) => pts.map((p) => [p.x, p.y].map((v) => Math.round(v / 4).toString(36).padStart(2, '0')).join('')).join('')
-function decode(code: string): Point[] | null {
-  if (!/^[0-9a-z]+$/.test(code) || code.length % 4 !== 0) return null
-  const pts: Point[] = []
-  for (let i = 0; i < code.length; i += 4) pts.push({ x: parseInt(code.slice(i, i + 2), 36) * 4, y: parseInt(code.slice(i + 2, i + 4), 36) * 4 })
-  if (pts.length < MIN_POINTS || pts.length > MAX_POINTS) return null
-  return pts.every((p) => p.x >= EDGE && p.x <= WORLD.w - EDGE && p.y >= EDGE && p.y <= WORLD.h - EDGE) ? pts : null
+// A track as text for a link (track.ts keeps the format, because a build can carry a drawn track too)
+const encode = encodePoints
+const decode = decodePoints
+// The player's drawing as it stands, as text, for the Garage's practice tracks: null when nothing has been drawn yet
+// or the drawing cannot be driven
+export function savedTrackCode(): string | null {
+  try {
+    const code = localStorage.getItem(KEY)
+    return code && customTrack(code) ? code : null
+  } catch {
+    return null
+  }
 }
 
 // Why a shape cannot be driven, and what to do about it (trackProblem gives the short reason)
@@ -312,5 +316,17 @@ export function createTrackBuilder(d: BuilderDeps) {
     const text = best !== null ? 'CRASHLAB · I built a track. "' + name + '" lapped it in ' + best.toFixed(2) + ' s. Can your car beat that?\n' + link : 'CRASHLAB · I built a track. Can your car get round it?\n' + link
     return { link, text }
   }
-  return { draw, tick, render, load, share }
+  // The drawing as text for a build to practise on (null while it cannot be driven). It is saved too, so the Garage's
+  // tile shows this very shape even when no point has been moved from the oval a new track starts as.
+  function code(): string | null {
+    if (built.problem) return null
+    const text = encode(control)
+    try {
+      localStorage.setItem(KEY, text)
+    } catch {
+      /* storage blocked: the build still gets the track */
+    }
+    return text
+  }
+  return { draw, tick, render, load, share, code }
 }

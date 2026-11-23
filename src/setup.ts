@@ -1,5 +1,6 @@
 // Everything a player chooses in the garage, and what those choices mean for the car.
 // A Build is plain data, so it can be saved, sent to a server and checked there.
+import { customTrack } from './track'
 
 export type Sensors = {
   count: number // how many rays
@@ -93,6 +94,7 @@ export type Build = {
   balance: number // car setup: 0 = all grip, 1 = all top speed
   reward: Reward
   practice: number[] // ids of the practice tracks to train on
+  custom?: string // one more practice track, drawn by the player (track.ts customTrack). Left out means none
   weather?: Weather // left out means dry, so every earlier car and build stays valid
   parts?: Parts // left out means none, so every earlier car and build stays valid
   cond?: { night?: true; ice?: true } // practice conditions besides the road: night (short rays without headlights) and ice patches
@@ -106,6 +108,8 @@ export const LIMITS = {
   practice: [1, 6],
 } as const
 // the practice slot node allows one more
+// how many practice tracks a build trains on: the ready-made ones it picked, and its own drawing if it has one
+export const practiceSlots = (b: Build) => b.practice.length + (b.custom ? 1 : 0)
 export const maxPractice = (b: Build) => LIMITS.practice[1] + levelOf(b.parts, 'slot') + levelOf(b.parts, 'slot2')
 // the extra eyes node allows two more rays
 export const LENS_RAYS = 2
@@ -312,7 +316,8 @@ export function buildProblem(b: unknown, practiceCount: number): string | null {
     for (const [a, c] of EXCLUSIVE) if (levelOf(d.parts, a) && levelOf(d.parts, c)) return 'it fits both ' + a + ' and ' + c + ', which cannot go together'
   }
   const p = d.practice
-  if (p.length < LIMITS.practice[0] || p.length > maxPractice(d)) return 'wrong number of practice tracks'
+  if (d.custom !== undefined && !customTrack(d.custom)) return 'its hand-drawn practice track cannot be driven'
+  if (p.length < LIMITS.practice[0] || practiceSlots(d) > maxPractice(d)) return 'wrong number of practice tracks'
   if (new Set(p).size !== p.length || p.some((id) => !Number.isInteger(id) || id < 0 || id >= practiceCount)) return 'unknown practice track'
   if (d.chassis !== undefined && !chassisOf(d.chassis)) return 'unknown frame'
   if (d.weather !== undefined && !WEATHERS.includes(d.weather)) return 'unknown weather'
@@ -329,6 +334,7 @@ export function cleanBuild(b: Build): Build {
     balance: b.balance,
     reward: { pace: b.reward.pace, safety: b.reward.safety, smooth: b.reward.smooth },
     practice: [...b.practice],
+    ...(b.custom ? { custom: b.custom } : {}),
     // dry is written as nothing, so a dry build looks the same as one saved before weather existed.
     // ("both" was only an experiment and is not a garage choice, so a build that has it is read as dry)
     ...(b.weather === 'wet' ? { weather: 'wet' as const } : {}),

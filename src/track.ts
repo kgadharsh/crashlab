@@ -434,7 +434,8 @@ export function trackVariants(track: Track): Track[] {
 // ---------- A TRACK DRAWN BY HAND (trackBuilder.ts) ----------
 // The player drags a ring of points and the road is a smooth closed curve through them (Catmull-Rom), cut into POINTS
 // evenly spaced points like every other track, so it drives, scores and draws the same. problem is why it cannot be
-// driven, in the words trackProblem uses, or null. A hand-drawn track is never part of a build, a Grand Prix or a board.
+// driven, in the words trackProblem uses, or null. A hand-drawn track is never part of a Grand Prix or a board's tracks;
+// a build may carry one as an extra practice track (customTrack below).
 export const BUILDER_BLOCKS = 4
 export function trackFromPoints(control: Point[], blocks = BUILDER_BLOCKS): { track: Track; problem: string | null } {
   const n = control.length
@@ -467,4 +468,32 @@ export function trackFromPoints(control: Point[], blocks = BUILDER_BLOCKS): { tr
   const track = buildTrack(pts)
   const problem = trackProblem(track)
   return { track: problem ? track : addBlocks(track, gentlestPoints(track, blocks)), problem }
+}
+
+// A hand-drawn track as text, for a link or a build: each point is two numbers on a grid of 4, each written as two
+// base-36 digits. Points stay DRAWN_EDGE inside the world, so the road has room for its walls.
+export const DRAWN_POINTS = [5, 14] as const
+export const DRAWN_EDGE = HALF_WIDTH + 30
+export const encodePoints = (pts: Point[]) => pts.map((p) => [p.x, p.y].map((v) => Math.round(v / 4).toString(36).padStart(2, '0')).join('')).join('')
+export function decodePoints(code: string): Point[] | null {
+  if (!/^[0-9a-z]+$/.test(code) || code.length % 4 !== 0) return null
+  const pts: Point[] = []
+  for (let i = 0; i < code.length; i += 4) pts.push({ x: parseInt(code.slice(i, i + 2), 36) * 4, y: parseInt(code.slice(i + 2, i + 4), 36) * 4 })
+  if (pts.length < DRAWN_POINTS[0] || pts.length > DRAWN_POINTS[1]) return null
+  return pts.every((p) => p.x >= DRAWN_EDGE && p.x <= WORLD.w - DRAWN_EDGE && p.y >= DRAWN_EDGE && p.y <= WORLD.h - DRAWN_EDGE) ? pts : null
+}
+// The track a build practises on besides the ready-made ones: the player's own drawing, from its text. null when the
+// text is not a track or the track cannot be driven, so a build that carries one is checked the same way everywhere.
+const drawn = new Map<string, Track | null>()
+export function customTrack(code: unknown): Track | null {
+  if (typeof code !== 'string' || code.length > DRAWN_POINTS[1] * 4) return null
+  let t = drawn.get(code)
+  if (t === undefined) {
+    const pts = decodePoints(code)
+    const made = pts ? trackFromPoints(pts) : null
+    t = made && !made.problem ? made.track : null
+    if (drawn.size > 50) drawn.clear()
+    drawn.set(code, t)
+  }
+  return t
 }

@@ -12,6 +12,13 @@ export type Rival = { car: CarFile; finished: number; totalTime: number }
 // weakest first. finished and totalTime are each car's Grand Prix 1 result (scripts/rivalCars.ts check keeps them true)
 export const RIVALS: Rival[] = RIVAL_CARS.map((r) => ({ car: { name: r.name, build: r.build ?? DEFAULT_BUILD, genome: r.genome }, finished: r.finished, totalTime: r.totalTime }))
 
+// The starter car: lent to a player who has no car yet, so their first minute is a race and not a setup screen. It is the
+// second rival's brain (4% of a full training), and it races the fourth rival over the first 3 tracks of Grand Prix 1
+// only, so the race is over in about 20 seconds. Both crash on the first track, the starter car wins the second by a
+// fifth of a second, and it hits a block on the third while the rival finishes: 1 of 3 against 2 of 3. Losing with a
+// borrowed car is the reason to build one.
+export const STARTER: { car: CarFile; rival: CarFile; tracks: number } = { car: { ...RIVALS[1].car, name: 'Starter car' }, rival: RIVALS[3].car, tracks: 3 }
+
 const KEY = 'crashlab.ladder' // how many rivals have been beaten, counted from the bottom
 export function rivalsBeaten(): number {
   try {
