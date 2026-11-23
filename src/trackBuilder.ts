@@ -23,6 +23,7 @@ export type BuilderDeps = {
   hudText: (text: string, x: number, y: number, size: number, colour?: string, align?: CanvasTextAlign) => void
   setStrip: (cells: [string, string][]) => void
   onShare: () => void
+  onDrawn?: () => void // the drawing has changed and is at rest (a point was dropped, added or removed)
 }
 
 const KEY = 'crashlab.mytrack'
@@ -93,6 +94,7 @@ export function createTrackBuilder(d: BuilderDeps) {
       /* storage blocked: the track only lasts this visit */
     }
     render()
+    if (dragging < 0) d.onDrawn?.() // while a point is being dragged, the drop says so once
   }
 
   // ---------- DRAGGING ----------
@@ -128,7 +130,11 @@ export function createTrackBuilder(d: BuilderDeps) {
     control[dragging] = { x: Math.round(Math.max(EDGE, Math.min(WORLD.w - EDGE, at.x)) / 4) * 4, y: Math.round(Math.max(EDGE, Math.min(WORLD.h - EDGE, at.y)) / 4) * 4 }
     changed()
   })
-  const drop = () => (dragging = -1)
+  const drop = () => {
+    if (dragging < 0) return
+    dragging = -1
+    d.onDrawn?.()
+  }
   d.canvas.addEventListener('pointerup', drop)
   d.canvas.addEventListener('pointercancel', drop)
 
@@ -224,7 +230,8 @@ export function createTrackBuilder(d: BuilderDeps) {
   }
 
   // ---------- THE BIG SCREEN ----------
-  function draw() {
+  // ready: the words under YOUR TRACK when it can be driven (the Garage draws on it to practise, not to race)
+  function draw(ready = 'READY TO RACE') {
     const { ctx, cam, hudText } = d
     clear(ctx)
     const r = run
@@ -278,7 +285,7 @@ export function createTrackBuilder(d: BuilderDeps) {
         })
       })
       hudText('YOUR TRACK', 16, 38, 26)
-      hudText(built.problem ? 'CANNOT BE DRIVEN YET' : 'READY TO RACE', 16, 58, 14, built.problem ? COL.bad : COL.accent)
+      hudText(built.problem ? 'CANNOT BE DRIVEN YET' : ready, 16, 58, 14, built.problem ? COL.bad : COL.accent)
       hudText('DRAG A POINT TO BEND THE ROAD · YELLOW IS THE START', W - 16, H - 16, 13, COL.muted, 'right')
     }
     d.setStrip([
@@ -328,5 +335,14 @@ export function createTrackBuilder(d: BuilderDeps) {
     }
     return text
   }
-  return { draw, tick, render, load, share, code }
+  // For the Garage, which draws the same track on its own screen: what is wrong with the drawing in plain words (null
+  // when it can be driven), whether a point can be added or removed, and a way to put a finished lap away
+  const state = () => ({ problem: built.problem ? plain(built.problem) : null, points: control.length, canAdd: control.length < MAX_POINTS, canRemove: control.length > MIN_POINTS })
+  const stopRun = () => {
+    if (!run) return
+    run = null
+    fit(d.cam, true)
+    render()
+  }
+  return { draw, tick, render, load, share, code, state, stopRun }
 }

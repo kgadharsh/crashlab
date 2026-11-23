@@ -206,7 +206,7 @@ document.querySelector('#app')!.innerHTML = `
         <p class="tip" style="margin-top:2px">Grand Prix 2 is wet: practise on a wet road for it.</p>
         <div class="tracks" id="tracks"></div>
         <p class="tip" id="ownTip"></p>
-        <div class="actions"><button type="button" class="btn small" id="drawOwn">Draw your own track →</button></div>
+        <div class="actions" id="ownTools" hidden><button type="button" class="btn small" id="ownMore">Add a point</button><button type="button" class="btn small" id="ownLess">Remove a point</button><button type="button" class="btn small" id="ownReset">Start again</button><button type="button" class="btn small primary" id="ownDone">Done</button></div>
         <p class="tip">More tracks prepare the car better, but leave fewer rounds of training.</p>
       </div>
       <button class="btn primary wide" id="toSkills">Next: Skill tree →</button>
@@ -585,7 +585,7 @@ function setTab(t: Tab) {
   renderUnlocks()
   document.body.classList.toggle('full', t === 'skills' || t === 'profile') // these two have no use for the track screen
   document.body.classList.toggle('hubview', t === 'race' && raceSection === 'hub') // the race menu needs no track screen above it on a narrow window
-  document.body.classList.toggle('buildview', t === 'race' && raceSection === 'build')
+  syncBuildView()
   $('garage').hidden = t !== 'garage'
   $('skills').hidden = t !== 'skills'
   $('profile').hidden = t !== 'profile'
@@ -634,7 +634,7 @@ function setRaceSection(v: RaceSection) {
   }
   raceSection = v
   document.body.classList.toggle('hubview', tab === 'race' && v === 'hub')
-  document.body.classList.toggle('buildview', tab === 'race' && v === 'build') // the track screen takes drags there
+  syncBuildView() // the track screen takes drags there
   $('race').dataset.view = v
   $('raceBarTitle').textContent = SECTION_TITLE[v]
   $('raceBar').dataset.kind = v
@@ -701,7 +701,7 @@ function bindSlider(id: string, get: () => number, set: (v: number) => void, sca
 }
 bindSlider('count', () => b.sensors.count, (v) => (b.sensors.count = v))
 bindSlider('spread', () => b.sensors.spread, (v) => (b.sensors.spread = v))
-for (const id of ['count', 'spread']) input(id).addEventListener('input', () => (garageView = 'car'))
+for (const id of ['count', 'spread']) input(id).addEventListener('input', () => setGarageView('car'))
 bindSlider('balance', () => b.balance, (v) => (b.balance = v), 100)
 // The road the practice tracks are driven on (a wet road is what Grand Prix 2 is raced on)
 const weatherSel = $<HTMLSelectElement>('weather')
@@ -736,7 +736,15 @@ const thumbs: HTMLCanvasElement[] = []
 let focusTrack = b.practice[0] ?? 0 // the track shown on the big screen in the garage
 // The garage screen zooms in on the car's sensors (to choose rays and view width), and shows the whole
 // track when a track card is clicked (to choose practice tracks). Moving a sensor slider zooms back in.
-let garageView: 'car' | 'track' = 'car'
+// 'own' is the player's drawing, with its points to drag: the track builder, on the Garage's own screen.
+let garageView: 'car' | 'track' | 'own' = 'car'
+const drawingOwn = () => tab === 'garage' && garageView === 'own'
+// the track screen takes drags while a track is being drawn, on the Race tab or here
+const syncBuildView = () => document.body.classList.toggle('buildview', (tab === 'race' && raceSection === 'build') || drawingOwn())
+function setGarageView(v: typeof garageView) {
+  garageView = v
+  syncBuildView()
+}
 for (let id = 0; id < PRACTICE_COUNT; id++) {
   const btn = document.createElement('button')
   btn.className = 'track'
@@ -755,7 +763,7 @@ for (let id = 0; id < PRACTICE_COUNT; id++) {
   btn.addEventListener('click', () => {
     const picked = b.practice.indexOf(id)
     focusTrack = id
-    garageView = 'track'
+    setGarageView('track')
     if (picked >= 0) {
       if (b.practice.length > LIMITS.practice[0]) b.practice.splice(picked, 1)
     } else if (practiceSlots(b) < maxPractice(b)) {
@@ -774,20 +782,43 @@ ownBtn.type = 'button'
 const ownThumb = Object.assign(document.createElement('canvas'), { width: 160, height: 100 })
 ownBtn.append(ownThumb, Object.assign(document.createElement('span'), { className: 'tn', textContent: 'Your track' }), Object.assign(document.createElement('span'), { className: 'tt' }))
 trackGrid.appendChild(ownBtn)
-const openBuilder = () => {
-  setTab('race')
-  setRaceSection('build')
-  window.scrollTo(0, 0)
-}
+// Tapping the tile opens the drawing on the Garage's own screen, with its points to drag, and ticks it when there is
+// room. Tapping it again while it is open takes it off. A ticked Your track always follows the drawing: every change
+// that leaves a track that can be driven becomes the track the build practises on.
 function pickOwn() {
-  const code = savedTrackCode()
-  if (!code) return openBuilder() // nothing drawn yet (or it cannot be driven): draw it first
-  if (b.custom === code) delete b.custom
-  else if (b.custom || practiceSlots(b) < maxPractice(b)) b.custom = code // ticked, or the changed drawing taken up
+  if (garageView === 'own' && b.custom) {
+    delete b.custom
+    setGarageView('car')
+    return changed()
+  }
+  builder?.stopRun()
+  setGarageView('own')
+  if (!ownDrawn()) changed()
+  // on a narrow window the track screen is far above the tiles: bring it into view to draw on
+  if (window.matchMedia('(max-width: 960px)').matches) canvas.scrollIntoView({ behavior: REDUCED_MOTION.matches ? 'auto' : 'smooth', block: 'start' })
+}
+// The drawing changed (or was opened): a ticked track takes the new shape, and an open one is ticked if there is room.
+// True when the build changed.
+function ownDrawn(): boolean {
+  const code = builder?.code() ?? null
+  const wanted = !!b.custom || drawingOwn()
+  if (!code || !wanted || b.custom === code || (!b.custom && practiceSlots(b) >= maxPractice(b))) {
+    renderOwn()
+    return false
+  }
+  b.custom = code
   changed()
+  return true
 }
 ownBtn.addEventListener('click', pickOwn)
-$('drawOwn').addEventListener('click', openBuilder)
+// the builder's own buttons live on the Race tab; these press them, so there is one way a point is added or removed
+$('ownMore').addEventListener('click', () => $('buildMore').click())
+$('ownLess').addEventListener('click', () => $('buildLess').click())
+$('ownReset').addEventListener('click', () => $('buildReset').click())
+$('ownDone').addEventListener('click', () => {
+  setGarageView('car')
+  renderOwn()
+})
 $('buildPractise').addEventListener('click', () => {
   const code = builder!.code()
   if (!code) return void ($('buildMsg').textContent = 'This track cannot be driven yet. Fix it first.')
@@ -801,26 +832,32 @@ $('buildPractise').addEventListener('click', () => {
 })
 let ownThumbFor = ''
 function renderOwn() {
-  const code = savedTrackCode()
-  const shown = b.custom ?? code
+  const shown = b.custom ?? savedTrackCode()
   if (shown && shown !== ownThumbFor) {
     const t = customTrack(shown)
     if (t) drawThumb(ownThumb, t)
     ownThumbFor = shown
   }
   const on = !!b.custom
-  const changedSince = on && !!code && code !== b.custom
+  const open = garageView === 'own'
+  const st = builder?.state()
   ownBtn.classList.toggle('on', on)
   ownBtn.setAttribute('aria-pressed', String(on))
-  ownBtn.querySelector('.tt')!.textContent = on ? (changedSince ? 'older drawing' : 'drawn by you') : code ? 'drawn by you' : 'not drawn yet'
-  $('ownTip').textContent = changedSince
-    ? 'You have changed your drawing since you ticked Your track. Tap it to practise on the new shape.'
+  ownBtn.querySelector('.tt')!.textContent = on ? 'drawn by you' : 'tap to draw'
+  const tip = $('ownTip')
+  tip.classList.toggle('warn', open && !!st?.problem)
+  tip.textContent = open
+    ? st?.problem
+      ? st.problem
+      : on
+        ? 'Drag the white points on the track to shape it. Your car practises on it. Tap Your track again to take it off.'
+        : 'Your practice tracks are full, so this one is not practised on. Untick another track first.'
     : on
-      ? 'Your car also practises on the track you drew.'
-      : code
-        ? 'Tick Your track to practise on the track you drew.'
-        : 'You can also draw a track of your own and practise on it.'
-  $('drawOwn').textContent = code ? 'Change your track →' : 'Draw your own track →'
+      ? 'Your car also practises on the track you drew. Tap Your track to change it.'
+      : 'Tap Your track to draw a track of your own and practise on it.'
+  $('ownTools').hidden = !open
+  $<HTMLButtonElement>('ownMore').disabled = !st?.canAdd
+  $<HTMLButtonElement>('ownLess').disabled = !st?.canRemove
 }
 // Tracks take a moment to build, so the thumbnails fill in one per frame
 const thumbsLeft = Array.from({ length: PRACTICE_COUNT }, (_, i) => i)
@@ -2206,6 +2243,7 @@ function drawTrainingScreen(r: Run) {
 
 function draw() {
   if (tab === 'race' && raceSection === 'build' && builder) return builder.draw()
+  if (drawingOwn() && builder) return builder.draw('YOUR CAR PRACTISES ON THIS')
   if (tab === 'race' && raceView) return raceView.draw()
   clear(ctx)
   const target = focusCar()
@@ -2504,7 +2542,7 @@ async function shareTrack() {
     $('buildMsg').textContent = 'Copy this link and send it. Anyone who opens it can race their own car on your track.'
   }
 }
-builder = createTrackBuilder({ ctx, canvas, cam, getCar: () => car, getLook: () => look, isOpen: () => tab === 'race' && raceSection === 'build', hudText, setStrip, onShare: shareTrack })
+builder = createTrackBuilder({ ctx, canvas, cam, getCar: () => car, getLook: () => look, isOpen: () => (tab === 'race' && raceSection === 'build') || drawingOwn(), hudText, setStrip, onShare: shareTrack, onDrawn: ownDrawn })
 // A friend's track from a link opens straight in the builder
 function takeTrack() {
   if (!location.hash.startsWith(TRACK_PREFIX)) return
